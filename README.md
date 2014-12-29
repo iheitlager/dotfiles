@@ -6,7 +6,6 @@ Your dotfiles are how you personalize your system. These are mine.
 
 I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
 I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although this is more bash centric.
-You might also want to start [this github page on the subject](https://dotfiles.github.io/).
 
 ## install
 
@@ -35,6 +34,7 @@ There's a few special files in the hierarchy.
 
 - **bin/**: `bin/` will get added to your `$PATH` and anything in there will be made available everywhere.
 - **topic/aliases.sh**: Any file named `aliases.sh` is loaded by .bash_profile and available in your shell
+- **topic/completion.sh**: Any file named `completion.sh` is loaded by .bash_profile, is supposed to contain completion statements and is available in your shell
 - **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`
 - **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
   your `$HOME`. This is so you can keep all of those versioned in your dotfiles
