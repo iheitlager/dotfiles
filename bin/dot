@@ -1,0 +1,5 @@
+# Upgrade homebrew
+brew update
+
+# Install homebrew packages
+$DOTFILES/brew/install.sh 2>&1

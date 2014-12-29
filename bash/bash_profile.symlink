@@ -1,5 +1,5 @@
 #!/bin/bash
-DOTFILES=$HOME/.dotfiles
+export DOTFILES=$HOME/.dotfiles
 
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
@@ -25,3 +25,4 @@ then
 fi
 
 source_files "aliases.sh"
+source_files "completion.sh"
