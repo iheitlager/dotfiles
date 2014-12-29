@@ -2,6 +2,6 @@
 
 if [ ! -f ~/.localrc ];
 then
-    echo "  Creating an empyt ~/.localrc, put super secret stuff here!"
+    echo "  Creating an empty ~/.localrc, put super secret stuff here!"
     echo > ~/.localrc
 fi
