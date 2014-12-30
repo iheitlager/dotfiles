@@ -29,5 +29,5 @@ then
   source ~/.localrc
 fi
 
-source_files "aliases.sh"
-source_files "completion.sh"
+source_files "bash_aliases"
+source_files "bash_completion"
