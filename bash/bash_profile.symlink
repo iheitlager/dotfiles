@@ -26,7 +26,7 @@ export EDITOR=`which vim`
 export HISTCONTROL=ignoredups
 export HISTSIZE=5000
 export HISTFILESIZE=1000
-export HISTIGNORE="&:ls:ll:la:l.:h:a:pwd:exit:c:x:clear"
+export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
 export HISTTIMEFORMAT="[%DT%T] " 
 
 shopt -s cdspell #fix spelling
