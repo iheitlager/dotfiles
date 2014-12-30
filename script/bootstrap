@@ -28,6 +28,22 @@ fail () {
   exit
 }
 
+# git gitconfig generator, drop the file to generate a new one
+setup_gitconfig () {
+  if ! [ -f git/gitconfig.symlink ]
+  then
+    info 'setup gitconfig'
+
+    user ' - What is your github author name?'
+    read -e git_authorname
+    user ' - What is your github author email?'
+    read -e git_authoremail
+
+    sed -e "s/AUTHORNAME/$git_authorname/g" -e "s/AUTHOREMAIL/$git_authoremail/g" git/gitconfig.symlink.example > git/gitconfig.symlink
+
+    success 'gitconfig'
+  fi
+}
 
 # create the actual symlink for a dotfile
 link_file () {
@@ -148,6 +164,6 @@ run_installers() {
   success "All installers done"
 }
 
-# setup_gitconfig
+setup_gitconfig
 install_dotfiles
 run_installers
