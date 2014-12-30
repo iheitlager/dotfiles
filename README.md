@@ -4,8 +4,9 @@
 
 Your dotfiles are how you personalize your system. These are mine specific for working on OSX.
 
-I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
+I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
 I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although this is more bash centric.
+It is basic scripting with some topical modularization, no fancy agent based conversioni config management.
 
 ## install
 
@@ -16,7 +17,7 @@ git clone https://github.com/iheitlager/dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
 script/bootstrap
 ```
-
+after that do not forget to run `vimstall` to install the vim bundles. Did not find a way to do this nicely scripted.
 
 ## topical
 
