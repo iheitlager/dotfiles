@@ -47,3 +47,4 @@ There's a few special files in the hierarchy.
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
 - Read about the dotfile philosophy here: https://dotfiles.github.io/
+- Get more inspiration here: http://www.dotfiles.org/
