@@ -21,14 +21,14 @@ after that do not forget to run `vimstall` to install the vim bundles. Did not f
 
 ## topical
 
-Everything is configured and tweaked within `~/.dotfiles`.
-This should remain on your system, and offers one place for versioning of your dotfiles.
+Everything is configured and tweaked within `~/.dotfiles`. The actual dotfiles are symlinked from this folder during the bootstrap.
+This should remain on your system, and offers one place for versioning of your dotfiles, and for example allows .ssh to be excluded.
 Everything's built around topic areas. If you're adding a new area to your
 forked dotfiles — say, "Java" — you can simply add a `java` directory and put files in there. 
-The complete dotfiles system consists out of three main parts:
+The complete dotfiles system consists of three main parts:
 - symlinks to dotfiles
 - topical installers during `script\bootstrap
-- topical extensions for `.bash_profile`.
+- topical extensions to be loaded by `.bash_profile`.
 
 
 ## components
@@ -36,13 +36,15 @@ The complete dotfiles system consists out of three main parts:
 There's a few special files in the hierarchy.
 
 - **bin/**: `bin/` will get added to your `$PATH` .bash_profile and anything in there will be made available everywhere.
-- **topic/aliases.sh**: Any file named `aliases.sh` is loaded by .bash_profile and available in your shell
-- **topic/completion.sh**: Any file named `completion.sh` is loaded by .bash_profile, is supposed to contain completion statements and is available in your shell
+- **topic/bash_aliases**: Any file named `bash_aliases` is loaded by .bash_profile and available in your shell
+- **topic/bash_completion**: Any file named `bash_completion` is loaded by .bash_profile, is supposed to contain completion statements and is available in your shell
 - **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`, this provided a way to create topical installers, including HomeBrew commands
 - **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
   your `$HOME`. This is so you can keep all of those versioned in your dotfiles
   but still keep those autoloaded files in your home directory. These get
   symlinked in when you run `script/bootstrap`.
+
+Do not forget to never checkin secrets in any of these files, use ~/.localrc for this (sourced by `.bash_profile`)
 
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
