@@ -1,5 +1,14 @@
-alias more='less'
+#!/usr/bin/env bash
 
+alias more='less'
+alias grep='grep --color=auto -i'
+export GREP_COLOR="1;31"
+
+alias go='pushd'
+alias b='popd'
+alias t='tail -n 50'
+alias tf='tail -f'
+alias x='exit'
 alias ll='ls -FGlAhp'
 alias ls='ls -G'
 alias a='alias'
@@ -16,3 +25,24 @@ alias ...='cd ../..'
 alias cd..='cd ../'
 alias ~='cd ~'
 
+# extract archives -- usage: extract
+extract () {
+  if [ -f $1 ] ; then
+    case $1 in
+      *.tar.bz2) tar xjvpf $1 ;;
+      *.tar.gz) tar xzvpf $1 ;;
+      *.bz2) bunzip2 $1 ;;
+      *.rar) unrar e $1 ;;
+      *.gz) gunzip $1 ;;
+      *.tar) tar xvpf $1 ;;
+      *.tbz2) tar xjvpf $1 ;;
+      *.tgz) tar xzvpf $1 ;;
+      *.zip) unzip "$1" ;;
+      *.Z) uncompress $1 ;;
+      *.7z) 7z x $1 ;;
+      *) echo "'$1' cannot be extracted via extract()" ;;
+    esac
+  else
+    echo "'$1' is not a valid file"
+  fi
+}
