@@ -5,8 +5,8 @@
 Your dotfiles are how you personalize your system. These are mine specific for working on OSX.
 
 I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
-I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although this is more bash centric.
-It is basic scripting with some topical modularization, no fancy agent based conversioni config management.
+I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although this is bash centric instead of zsh.
+This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management.
 
 ## install
 
