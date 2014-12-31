@@ -16,7 +16,6 @@ alias f='open -a Finder ./'
 
 alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'"
 alias path='echo -e ${PATH//:/\\n}'
-alias today='date +"%A, %B %d, %Y"'
 
 alias ll='ls -FGlAhp'
 alias ls='ls -G'
