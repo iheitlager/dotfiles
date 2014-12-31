@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 export DOTFILES=$HOME/.dotfiles
 
 export LC_ALL=en_US.UTF-8
@@ -62,4 +62,5 @@ then
 fi
 
 source_files "bash_aliases"
+source_files "bash_env"
 source_files "bash_completion"

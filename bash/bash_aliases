@@ -3,13 +3,12 @@
 alias more='less'
 alias grep='grep --color=auto -i'
 export GREP_COLOR="1;31"
+alias env='env | sort'
 
 alias b='cd $OLDPWD'
 alias t='tail -n 50'
 alias tf='tail -f'
 alias x='exit'
-alias ll='ls -FGlAhp'
-alias ls='ls -G'
 alias a='alias'
 alias h='history'
 alias c='clear'
@@ -17,13 +16,19 @@ alias f='open -a Finder ./'
 
 alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'"
 alias path='echo -e ${PATH//:/\\n}'
-alias recent="ls -lAt | head"
 alias today='date +"%A, %B %d, %Y"'
 
+alias ll='ls -FGlAhp'
+alias ls='ls -G'
+alias recent="ls -lAt | head"
+
+alias e.='cd $DOTFILES'
 alias ..='cd ../'
 alias ...='cd ../..'
 alias cd..='cd ../'
 alias ~='cd ~'
+
+junk() { mv "$@" ~/.Trash/; }
 
 # extract archives -- usage: extract
 extract () {

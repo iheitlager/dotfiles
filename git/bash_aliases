@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 alias gall='git add --all'
 alias gc='git commit'
 alias gca='git commit -a'
