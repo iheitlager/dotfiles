@@ -28,6 +28,8 @@ alias cd..='cd ../'
 alias ~='cd ~'
 
 junk() { mv "$@" ~/.Trash/; }
+search() { grep "$@" -R --exclude-dir .git . ; }
+alias s='search'
 
 # extract archives -- usage: extract
 extract () {
