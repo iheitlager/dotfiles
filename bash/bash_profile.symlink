@@ -23,7 +23,7 @@ export PS1="\u[${yellow}\w${reset}]${red}\$(parse_git_branch)${reset}$ "
 export PAGER=`which less`
 export EDITOR=`which vim`
 
-export HISTCONTROL=ignoredups
+export HISTCONTROL=ignoreboth:erasedups
 export HISTSIZE=5000
 export HISTFILESIZE=1000
 export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
