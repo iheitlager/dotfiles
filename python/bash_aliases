@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 
-function workon {
-    source $WORKON_DIR/$1/bin/activate
-}
+workon () { source $WORKON_DIR/$1/bin/activate ; }
 
 function deactivate {
     local venv=basename $VIRTUAL_ENV
@@ -10,6 +8,7 @@ function deactivate {
     export PATH=${PATH#$VIRTUAL_ENV}
     unset VIRTUAL_ENV
 }    
-function mkenv {
-    virtualenv --no-site-packages $WORKON_DIR/$1
-}
+
+mkenv () { virtualenv --no-site-packages $WORKON_DIR/$1 ; }
+
+showenv () { ls $WORKON_DIR ; }
