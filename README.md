@@ -36,12 +36,13 @@ The complete dotfiles system consists of three main parts:
 There's a few special files in the hierarchy.
 
 - **bin/**: `bin/` will get added to your `$PATH` .bash_profile and anything in there will be made available everywhere.
-- **topic/bash_aliases**: Any file named `bash_aliases` is loaded by .bash_profile and available in your shell
+- **topic/bash_aliases**: Any file named `bash_aliases` is loaded by .bash_profile and provides aliases available in your shell
+- **topic/bash_env**: Any file named `bash_env` is loaded by .bash_profile and provides environment variables available in your shell
 - **topic/bash_completion**: Any file named `bash_completion` is loaded by .bash_profile, is supposed to contain completion statements and is available in your shell
-- **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`, this provided a way to create topical installers, including HomeBrew commands
+- **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`, this provides a way to create topical installers, including HomeBrew commands
 - **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
-  your `$HOME`. This is so you can keep all of those versioned in your dotfiles
-  but still keep those autoloaded files in your home directory. These get
+  your `$HOME`. This is such that you can keep all of those versioned in your dotfiles directory, 
+  but still keep those autoloaded files in your home directory. These files get
   symlinked in when you run `script/bootstrap`.
 
 Do not forget to never checkin secrets in any of these files, use ~/.localrc for this (sourced by `.bash_profile`)
