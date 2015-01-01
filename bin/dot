@@ -1,5 +1,18 @@
-# Upgrade homebrew
-brew update
-
+#!/usr/bin/env bash
 # Install homebrew packages
-$DOTFILES/brew/install.sh 2>&1
+
+if [[ -z $DOTFILES ]]  
+then
+    echo "DOTFILES variable not set, exiting"
+    exit 1
+fi
+
+# start with brew itself
+source $DOTFILES/brew/brew_install.sh 2>&1
+
+# now process all topical brew packages
+for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
+do
+    echo "  Processing installer: $src"
+    source "${src}" 2>&1
+done

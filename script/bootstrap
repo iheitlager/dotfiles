@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# bootstrap installs things.
+# bootstrap prepares the environment with dotfiles
 # taken from https://github.com/holman/dotfiles
 
 cd "$(dirname "$0")/.."
-DOTFILES_ROOT=$(pwd)
+DOTFILES=$(pwd)
 
 set -e
 
@@ -126,14 +126,14 @@ install_dotfiles () {
 
   local overwrite_all=false backup_all=false skip_all=false
 
-  for src in $(find "$DOTFILES_ROOT" -maxdepth 2 -name '*.symlink')
+  for src in $(find "$DOTFILES" -maxdepth 2 -name '*.symlink')
   do
     dst="$HOME/.$(basename "${src%.*}")"
     link_file "$src" "$dst"
   done
 }
 
-install_dependencies() {
+install_brew_packages () {
 # If we're on a Mac, let's install and setup homebrew.
   if [ "$(uname -s)" == "Darwin" ]
   then
@@ -150,9 +150,9 @@ install_dependencies() {
   echo '  All installed!'
 }
 
-run_installers() {
+run_installers () {
   info "run installers for topic packages"
-  for src in $(find "$DOTFILES_ROOT" -maxdepth 2 -name 'install.sh')
+  for src in $(find "$DOTFILES" -maxdepth 2 -name 'install.sh')
   do
     if sh -c "${src}"
     then
@@ -166,4 +166,5 @@ run_installers() {
 
 setup_gitconfig
 install_dotfiles
+install_brew_packages
 run_installers

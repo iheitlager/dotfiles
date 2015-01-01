@@ -29,9 +29,14 @@ alias ...='cd ../..'
 alias cd..='cd ../'
 alias ~='cd ~'
 
+mkd () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
 junk () { mv "$@" ~/.Trash/; } # move file to trash
 alias j='junk'
-search () { grep "$@" -R --exclude-dir .git . ; } # search for pattern
+search () { 
+    if [ -n "$1" ] ; then
+        grep "$@" -R --exclude-dir .git . ;
+    fi
+} # search for pattern
 alias s='search'
 finder () {
     if [ -z "$1" ] ; then

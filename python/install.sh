@@ -6,3 +6,6 @@ if [ ! -d $WORKON_DIR ] ; then
     echo "  Creating an empty Virtual env directory"
     mkdir $WORKON_DIR
 fi
+
+
+pip install evernote

@@ -33,6 +33,7 @@ shopt -s cdspell #fix spelling
 shopt -s histappend # Append to history rather than overwrite
 shopt -s checkwinsize   # Check window after each command
 shopt -s dotglob    # files beginning with . to be returned in the results of path-name expansion.
+shopt -s extglob # turn on extended globbing
 
 # Tab complete for sudo
 complete -cf sudo
@@ -45,9 +46,11 @@ set -o ignoreeof
 
 REMOTE_PROMPT="\e[0;31m[\u@\h \W]\$ \e[m "
 
-export PATH=$DOTFILES/bin:$PATH
+# set path, make /usr/local/bin preference
+export PATH=`echo ":$PATH:" | sed -e "s#:/usr/local/bin:#:#g" -e "s/^://" -e "s/:$//"`
+export PATH=$DOTFILES/bin:/usr/local/bin:$PATH
 
-function source_files() {
+source_files () {
     local alias_file
     for alias_file in $DOTFILES/**/$1; do
         source "$alias_file"
@@ -56,11 +59,12 @@ function source_files() {
 
 # use .localrc for SUPER SECRET CRAP that you don't
 # want in your public, versioned repo.
-if [ -e ~/.localrc ]
-then
+if [ -e ~/.localrc ] ; then
   source ~/.localrc
 fi
 
 source_files "bash_aliases"
 source_files "bash_env"
 source_files "bash_completion"
+
+unset source_files
