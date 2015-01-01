@@ -11,10 +11,10 @@ PACKAGES=( brew-cask bash-completion )
 if test ! $(which brew)
 then
   echo "  Installing Homebrew"
-  # ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+  ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
 else
   echo "  Updating Homebrew"
-  # brew update
+  brew update
 fi
 
 # Install homebrew packages
