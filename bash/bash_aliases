@@ -1,35 +1,48 @@
 #!/usr/bin/env bash
 
-alias more='less'
-alias grep='grep --color=auto -i'
+alias more=$PAGER # bypass more to default $PAGER
+alias grep='grep --color=auto -i' # auto color grep
 export GREP_COLOR="1;31"
-alias env='env | sort'
+alias env='env | sort' # make sure env is always sorted
 
-alias b='cd $OLDPWD'
+alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'"
+alias path='echo -e ${PATH//:/\\n}' # show path nicely
+alias show='open -t' # open file in default texteditor (or TextEdit)
+
+alias b='cd $OLDPWD' # back to previous dir
+alias l=$PAGER
 alias t='tail -n 50'
 alias tf='tail -f'
 alias x='exit'
 alias a='alias'
 alias h='history'
 alias c='clear'
-alias f='open -a Finder ./'
-
-alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'"
-alias path='echo -e ${PATH//:/\\n}'
+alias o='show'
 
 alias ll='ls -FGlAhp'
-alias ls='ls -G'
+alias ls='ls -G' #default color ls
 alias recent="ls -lAt | head"
 
-alias e.='cd $DOTFILES'
+alias e.='cd $DOTFILES' # go straight to dotfiles folder
 alias ..='cd ../'
 alias ...='cd ../..'
 alias cd..='cd ../'
 alias ~='cd ~'
 
-junk() { mv "$@" ~/.Trash/; }
-search() { grep "$@" -R --exclude-dir .git . ; }
+junk () { mv "$@" ~/.Trash/; } # move file to trash
+alias j='junk'
+search () { grep "$@" -R --exclude-dir .git . ; } # search for pattern
 alias s='search'
+finder () {
+    if [ -z "$1" ] ; then
+        open -a Finder ./
+    elif [ -f "$1" ] ; then
+        open -R "$1"
+    elif [ -d "$1" ] ; then
+        open -a Finder "$1"
+    fi
+}
+alias f='finder'
 
 # extract archives -- usage: extract
 extract () {
