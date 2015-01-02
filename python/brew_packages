@@ -5,10 +5,7 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-if ! brew install python
-then
-    brew upgrade python
-fi
+brew install python || brew upgrade python
 
 pip install --upgrade setuptools
 pip install --upgrade pip

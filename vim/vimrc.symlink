@@ -8,9 +8,14 @@ set history=500 "Sets undo history size
 set ruler "Sets up status bar
 set laststatus=2 "Always keeps the status bar active
 set number "Turns on line numbering
+set textwidth=80 " Make it obvious where 80 characters is
+set colorcolumn=+1
 set t_Co=256 "Sets Vim to use 256 colors
 colorscheme elflord
 set pastetoggle=<F2> "Have a hotkey to allow simple pasting
+nnoremap <F2> :set invpaste paste?<CR>
+set showmode
+set mouse=a
 
 
 " Indentation settings
@@ -19,12 +24,8 @@ set shiftwidth=4 "Sets indentation width
 set autoindent "Turns on auto-indenting
 set smartindent "Remembers previous indent when creating new lines
 set expandtab "make sure tabs will be spaces
-"
-"Choose between tabs and spaces for indentation by uncommenting one of
-"these two. Expand for spaces, noexpand for tabs:"
-"set noexpandtab
-"set expandtab
- 
+set list listchars=tab:»·,trail:·,nbsp:·
+
 
 " Search settings
 set hlsearch "Highlights search terms
@@ -36,6 +37,13 @@ set smartcase "Unless you put some caps in your search term
 " Key mappings
 "Use jj instead of escape in insert mode
 inoremap jj <Esc>`^
+
+
+" Pane handling
+nnoremap <C-J> <C-W><C-J>
+nnoremap <C-K> <C-W><C-K>
+nnoremap <C-L> <C-W><C-L>
+nnoremap <C-H> <C-W><C-H>
 
 
 "Setup vundle

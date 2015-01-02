@@ -71,8 +71,10 @@
 	<true/>
 	<key>UseBrightBold</key>
 	<true/>
+	<key>columnCount</key>
+	<integer>85</integer>
 	<key>name</key>
-	<string>Basic</string>
+	<string>Workstation</string>
 	<key>shellExitAction</key>
 	<integer>0</integer>
 	<key>type</key>

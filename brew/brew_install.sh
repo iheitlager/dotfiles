@@ -17,11 +17,12 @@ else
   brew update
 fi
 
+if ! brew doctor; then
+  echo "\`brew doctor\` failed. Please resolve issues before continuing."
+  exit 1
+fi
+
 # Install homebrew packages
-# brew install grc coreutils spark
-for package in ${PACKAGES[@]}; do
-    if ! brew install  $package
-    then 
-        brew upgrade $package
-    fi
+for package in "${PACKAGES[@]}"; do
+    brew install  $package || brew upgrade $package
 done

@@ -34,7 +34,7 @@ junk () { mv "$@" ~/.Trash/; } # move file to trash
 alias j='junk'
 search () { 
     if [ -n "$1" ] ; then
-        grep "$@" -R --exclude-dir .git . ;
+        grep "$@" -nR --exclude-dir .git . ;
     fi
 } # search for pattern
 alias s='search'
