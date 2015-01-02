@@ -6,12 +6,13 @@ alias cdw='workdir'
 bu () { cp $1 ~/tmp/`basename $1`-`date +%Y%m%d%H%M`.backup ; }
 
 # Change working directory to the top-most Finder window location
-function cdf() { # short for `cdfinder`
+cdfinder () {
     cd "$(osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)')";
 }
+alias cdf='cdfinder'
 
 # Determine size of a file or total size of a directory
-function fs() {
+fs () {
     if du -b /dev/null > /dev/null 2>&1; then
         local arg=-sbh;
     else
