@@ -1,0 +1,52 @@
+# change prefix to Ctrl-a (like in gnu-screen)
+unbind C-b
+set-option -g prefix C-a
+bind-key C-a send-prefix
+
+# screen mode
+#set -g default-terminal "screen"
+set -g default-terminal "screen-256color"
+
+
+# start with window 1 (instead of 0)
+set -g base-index 1
+
+
+# # start with pane 1
+set -g pane-base-index 1
+
+
+# source config file
+bind r source-file ~/.tmux.conf
+
+
+# history
+set -g history-limit 5000
+
+
+# allow terminal scrolling
+set-option -g terminal-overrides 'xterm*:smcup@:rmcup@'
+
+
+# copy mode
+#unbind [
+#bind Escape copy-mode
+#unbind ]
+bind ] paste-buffer
+
+
+# splitting
+unbind %
+bind h split-window -h
+unbind '"'
+bind v split-window -v
+
+# status line
+set -g status-utf8 on
+set -g status-justify left
+set -g status-bg default
+set -g status-fg colour12
+set -g status-interval 2
+# remove administrative debris (session name, hostname, time) in status bar
+# set -g status-left ''
+set -g status-right ''
