@@ -51,3 +51,4 @@ Do not forget to never checkin secrets in any of these files, use ~/.localrc for
 - Main inspiration comes from https://github.com/holman/dotfiles
 - Read about the dotfile philosophy here: https://dotfiles.github.io/
 - Get more inspiration here: http://www.dotfiles.org/
+- Solarized theme from http://ethanschoonover.com/solarized

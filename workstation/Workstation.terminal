@@ -75,6 +75,8 @@
 	<integer>85</integer>
 	<key>name</key>
 	<string>Workstation</string>
+	<key>rowCount</key>
+	<integer>27</integer>
 	<key>shellExitAction</key>
 	<integer>0</integer>
 	<key>type</key>

@@ -18,8 +18,8 @@ fi
 ############################################################################
 # Terminal & iTerm2
 ############################################################################
-
-TERM_PROFILE='Workstation';
+# Use solarized from https://github.com/tomislav/osx-terminal.app-colors-solarized
+TERM_PROFILE='Solarized Dark';
 CURRENT_PROFILE="$(defaults read com.apple.terminal 'Default Window Settings')";
 if [ "${CURRENT_PROFILE}" != "${TERM_PROFILE}" ]; then
     open "$(dirname "$0")/${TERM_PROFILE}.terminal";
