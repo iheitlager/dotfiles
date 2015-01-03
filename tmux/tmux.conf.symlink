@@ -50,3 +50,6 @@ set -g status-interval 2
 # remove administrative debris (session name, hostname, time) in status bar
 set -g status-left ''
 set -g status-right ''
+
+
+setw -g aggressive-resize on

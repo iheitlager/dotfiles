@@ -137,10 +137,10 @@ install_brew_packages () {
 # If we're on a Mac, let's install and setup homebrew.
   if [ "$(uname -s)" == "Darwin" ]
   then
-    info "installing dependencies"
+    info "installing brew dependencies"
     if source bin/dot > /tmp/dotfiles-dot 2>&1
     then
-      success "dependencies installed"
+      success "brew dependencies installed"
     else
       fail "error installing dependencies"
     fi
