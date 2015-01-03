@@ -3,6 +3,7 @@
 ## dotfiles
 
 Your dotfiles are how you personalize your system. These are mine specific for working on OSX.
+My workflow is all about bash, terminal, vim and tmux.
 
 I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
 I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although this is bash centric instead of zsh. Furthermore I stayed with Terminals instead of iTerm2.
@@ -52,6 +53,7 @@ Do not forget to never checkin secrets in any of these files, use ~/.localrc for
 
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
-- Read about the dotfile philosophy here: https://dotfiles.github.io/
+- Read about the dotfile philosophy: https://dotfiles.github.io/
 - Get more inspiration here: http://www.dotfiles.org/
+- TMUX basics: http://mutelight.org/practical-tmux
 - Solarized theme from http://ethanschoonover.com/solarized
