@@ -7,8 +7,8 @@ PATH=/usr/local/bin:$PATH
 
 brew install python || brew upgrade python
 
-pip install --upgrade setuptools
-pip install --upgrade pip
+sudo pip install --upgrade setuptools
+sudo pip install --upgrade pip
 
 brew linkapps python
 

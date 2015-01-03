@@ -26,3 +26,5 @@ fi
 for package in "${PACKAGES[@]}"; do
     brew install  $package || brew upgrade $package
 done
+
+brew cleanup && brew cask cleanup
