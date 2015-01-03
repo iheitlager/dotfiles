@@ -1389,12 +1389,18 @@
 	AHAAhQCMALcA4QDjAOUA5wDsAPIA9AD2APsBAw1PDVENVg1hDWoNeA18DYMNjA2RDZ4N
 	oQ2uDbMNuw2+DdAN0w3YAAAAAAAAAgEAAAAAAAAALQAAAAAAAAAAAAAAAAAADdo=
 	</data>
-	<key>ShowCommandKeyInTitle</key>
-	<false/>
-	<key>ShowDimensionsInTitle</key>
-	<false/>
-	<key>ShowShellCommandInTitle</key>
+	<key>ShowActiveProcessInTitle</key>
 	<true/>
+	<key>ShowCommandKeyInTitle</key>
+	<true/>
+	<key>ShowDimensionsInTitle</key>
+	<true/>
+	<key>ShowShellCommandInTitle</key>
+	<false/>
+	<key>ShowTTYNameInTitle</key>
+	<false/>
+	<key>ShowWindowSettingsNameInTitle</key>
+	<false/>
 	<key>TerminalType</key>
 	<string>xterm-256color</string>
 	<key>TextBoldColor</key>
