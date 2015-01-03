@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+alias show='open -t' # open file in default texteditor (or TextEdit)
+alias o='show'
+
+alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'" 
+
 workdir () { cd $WORK_DIR/$1 ; }
 alias cdw='workdir'
 
@@ -36,3 +41,49 @@ function gitio() {
 
 # Lock the screen (when going AFK)
 alias afk="/System/Library/CoreServices/Menu\ Extras/User.menu/Contents/Resources/CGSession -suspend"
+
+junk () { mv "$@" ~/.Trash/; } # move file to trash
+alias j='junk'
+search () { 
+    if [ -n "$1" ] ; then
+        grep "$@" -nR --exclude-dir .git . ;
+    fi
+} # search for pattern
+alias s='search'
+finder () {
+    if [ -z "$1" ] ; then
+        open -a Finder ./
+    elif [ -f "$1" ] ; then
+        open -R "$1"
+    elif [ -d "$1" ] ; then
+        open -a Finder "$1"
+    fi
+}
+alias f='finder'
+
+# extract archives -- usage: extract
+extract () {
+  if [ ! -f $1 ] ; then
+    FF=~/Downloads/$1
+  else
+    FF=$1
+  fi
+  if [ -f $FF ] ; then
+    case $FF in
+      *.tar.bz2) tar xjvpf $FF ;;
+      *.tar.gz) tar xzvpf $FF ;;
+      *.bz2) bunzip2 $FF ;;
+      *.rar) unrar e $FF ;;
+      *.gz) gunzip $FF ;;
+      *.tar) tar xvpf $FF ;;
+      *.tbz2) tar xjvpf $FF ;;
+      *.tgz) tar xzvpf $FF ;;
+      *.zip) unzip "$FF" ;;
+      *.Z) uncompress $FF ;;
+      *.7z) 7z x $FF ;;
+      *) echo "'$FF' cannot be extracted via extract()" ;;
+    esac
+  else
+    echo "'$FF' is not a valid file"
+  fi
+}

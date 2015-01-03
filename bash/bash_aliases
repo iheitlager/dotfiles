@@ -5,9 +5,7 @@ alias grep='grep --color=auto -i' # auto color grep
 export GREP_COLOR="1;31"
 alias env='env | sort' # make sure env is always sorted
 
-alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'"
 alias path='echo -e ${PATH//:/\\n}' # show path nicely
-alias show='open -t' # open file in default texteditor (or TextEdit)
 
 alias b='cd $OLDPWD' # back to previous dir
 alias l=$PAGER
@@ -17,7 +15,6 @@ alias x='exit'
 alias a='alias'
 alias h='history'
 alias c='clear'
-alias o='show'
 
 alias ll='ls -FGlAhp'
 alias ls='ls -G' #default color ls
@@ -30,43 +27,3 @@ alias cd..='cd ../'
 alias ~='cd ~'
 
 mkd () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
-junk () { mv "$@" ~/.Trash/; } # move file to trash
-alias j='junk'
-search () { 
-    if [ -n "$1" ] ; then
-        grep "$@" -nR --exclude-dir .git . ;
-    fi
-} # search for pattern
-alias s='search'
-finder () {
-    if [ -z "$1" ] ; then
-        open -a Finder ./
-    elif [ -f "$1" ] ; then
-        open -R "$1"
-    elif [ -d "$1" ] ; then
-        open -a Finder "$1"
-    fi
-}
-alias f='finder'
-
-# extract archives -- usage: extract
-extract () {
-  if [ -f $1 ] ; then
-    case $1 in
-      *.tar.bz2) tar xjvpf $1 ;;
-      *.tar.gz) tar xzvpf $1 ;;
-      *.bz2) bunzip2 $1 ;;
-      *.rar) unrar e $1 ;;
-      *.gz) gunzip $1 ;;
-      *.tar) tar xvpf $1 ;;
-      *.tbz2) tar xjvpf $1 ;;
-      *.tgz) tar xzvpf $1 ;;
-      *.zip) unzip "$1" ;;
-      *.Z) uncompress $1 ;;
-      *.7z) 7z x $1 ;;
-      *) echo "'$1' cannot be extracted via extract()" ;;
-    esac
-  else
-    echo "'$1' is not a valid file"
-  fi
-}
