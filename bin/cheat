@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+# A poormans cheatsheet
+
 print_help () {
    printf "  \033[0;33m$1\033[0m: $2\n"
 }
