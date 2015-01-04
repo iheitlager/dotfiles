@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+# https://github.com/ggreer/the_silver_searcher
+brew install the_silver_searcher || brew upgrade the_silver_searcher
+
+
+export PATH=$TMPPATH

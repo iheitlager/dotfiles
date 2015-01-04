@@ -61,3 +61,4 @@ Do not forget to never checkin secrets in any of these files, use ~/.localrc for
 - Get more inspiration here: http://www.dotfiles.org/
 - TMUX basics: http://mutelight.org/practical-tmux
 - Solarized theme from http://ethanschoonover.com/solarized
+- [The Silver Searcher](https://github.com/ggreer/the_silver_searcher)
