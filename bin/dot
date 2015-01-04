@@ -11,11 +11,11 @@ then
 fi
 
 # start with brew itself
-source $DOTFILES/brew/brew_install.sh 2>&1
+source $DOTFILES/brew/brew_install.sh 2>&1 || exit 1
 
 # now process all topical brew packages
 for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
 do
     echo "  Processing installer: $src"
-    source "${src}" 2>&1
+    source "${src}" 2>&1 || exit 1
 done

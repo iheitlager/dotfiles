@@ -3,6 +3,11 @@
 # bootstrap prepares the environment with dotfiles
 # taken from https://github.com/holman/dotfiles
 
+starttime=$(date +"%s")
+
+# make sure we get the sudo password at the start
+sudo -v
+
 cd "$(dirname "$0")/.."
 DOTFILES=$(pwd)
 
@@ -138,8 +143,7 @@ install_brew_packages () {
   if [ "$(uname -s)" == "Darwin" ]
   then
     info "installing brew dependencies"
-    if source bin/dot > /tmp/dotfiles-dot 2>&1
-    then
+    if bin/dot > /tmp/dotfiles-dot 2>&1 ; then
       success "brew dependencies installed"
     else
       fail "error installing dependencies"
@@ -168,3 +172,5 @@ setup_gitconfig
 install_dotfiles
 install_brew_packages
 run_installers
+
+echo seconds=$(($(date +"%s")-$starttime))
