@@ -7,6 +7,7 @@ PATH=/usr/local/bin:$PATH
 
 brew install node || brew upgrade node
 
-sudo npm install -g npm@latest
+# sudoing this kills chown of man pageS
+#sudo npm install -g npm@latest
 
 export PATH=$TMPPATH
