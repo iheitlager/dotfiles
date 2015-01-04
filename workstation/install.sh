@@ -26,6 +26,8 @@ if [ "${CURRENT_PROFILE}" != "${TERM_PROFILE}" ]; then
     sleep 1; # Wait a bit to make sure the theme is loaded
     defaults write com.apple.terminal 'Default Window Settings' -string "${TERM_PROFILE}";
     defaults write com.apple.terminal 'Startup Window Settings' -string "${TERM_PROFILE}";
+    # fix: https://github.com/mathiasbynens/dotfiles/pull/347/files
+    defaults import com.apple.Terminal "$HOME/Library/Preferences/com.apple.Terminal.plist"
 fi;
 
 defaults write com.googlecode.iterm2 PromptOnQuit -bool false

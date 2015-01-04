@@ -3,6 +3,7 @@
 alias gall='git add --all'
 alias gc='git commit'
 alias gca='git commit -a'
+alias gcpa='git commit -a "$@" && git push origin master'
 alias gp='git push origin'
 alias gf='git fetch origin'
 alias gpl='git pull origin'

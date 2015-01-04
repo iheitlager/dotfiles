@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Add tab completion for SSH hostnames based on ~/.ssh/config, ignoring wildcards
-[ -e "$HOME/.ssh/known_hosts" ] && complete -o "default" -o "nospace" -W "$(cat $HOME/.ssh/known_hosts | awk '{print $1}' | awk -F, '{print $1}')" scp sftp ssh;
 # tab completion for $WORK_DIR folders
-complete -o "default" -o "nospace" -W"$(ls $WORK_DIR)" cdw
+[[ $(ls -A $WORK_DIR) ]] && complete -o "default" -o "nospace" -W"$(ls $WORK_DIR)" cdw
 

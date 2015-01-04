@@ -142,30 +142,30 @@ install_brew_packages () {
 # If we're on a Mac, let's install and setup homebrew.
   if [ "$(uname -s)" == "Darwin" ]
   then
-    info "installing brew dependencies"
+    info "installing homebrew dependencies"
     if bin/dot > /tmp/dotfiles-dot 2>&1 ; then
-      success "brew dependencies installed"
+      success "all homebrew dependencies installed"
     else
-      fail "error installing dependencies"
+      fail "error installing homebrew dependencies"
+      tail -n 5 /tmp/dotfiles-dot
     fi
   fi
-
-  echo ''
-  echo '  All installed!'
 }
 
 run_installers () {
   info "run installers for topic packages"
+  echo -n "" > /tmp/dotfiles-install
   for src in $(find "$DOTFILES" -maxdepth 2 -name 'install.sh')
   do
-    if sh -c "${src}"
+    if sh -c "${src}" >> /tmp/dotfiles-install 2>&1
     then
       success "executed $src"
     else
       fail "error running installer"
+      tail -n 5 /tmp/dotfiles-install
     fi
   done
-  success "All installers done"
+  success "all installers done"
 }
 
 setup_gitconfig
@@ -173,4 +173,5 @@ install_dotfiles
 install_brew_packages
 run_installers
 
-echo seconds=$(($(date +"%s")-$starttime))
+endtime=$(($(date +"%s")-$starttime))
+success "all done in $endtime seconds"
