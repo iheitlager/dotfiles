@@ -19,8 +19,9 @@ cd ~/.dotfiles
 script/bootstrap
 ```
 
-There are two commands to run everynow and then `dot` to upgrade brew and
-`vimstall` to do Vundle based vim packages
+There are two commands to run every now and then:
+* `dot` to upgrade brewd
+* `vimstall` to do Vundle based vim packages
 
 ## topical
 
