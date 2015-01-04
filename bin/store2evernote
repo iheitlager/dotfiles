@@ -1,5 +1,11 @@
 #!/usr/bin/env python 
 
+#This scripts store a textfile straight into evernote
+#It used a evernote dev token taken from an env var
+#for authentication
+#
+# Author: 2015-01-02 - Ilja Heitlager
+
 import os
 import sys
 import argparse
