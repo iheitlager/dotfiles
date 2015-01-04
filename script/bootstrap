@@ -30,7 +30,6 @@ success () {
 fail () {
   printf "\r\033[2K  [\033[0;31mFAIL\033[0m] $1\n"
   echo ''
-  exit
 }
 
 # git gitconfig generator, drop the file to generate a new one
@@ -146,8 +145,9 @@ install_brew_packages () {
     if bin/dot > /tmp/dotfiles-dot 2>&1 ; then
       success "all homebrew dependencies installed"
     else
-      fail "error installing homebrew dependencies"
+      fail "error installing homebrew dependencies, check /tmp/dotfiles-dot"
       tail -n 5 /tmp/dotfiles-dot
+      exit 1
     fi
   fi
 }
@@ -161,8 +161,9 @@ run_installers () {
     then
       success "executed $src"
     else
-      fail "error running installer"
+      fail "error running installer, check /tmp/dotfiles-install"
       tail -n 5 /tmp/dotfiles-install
+      exit 1
     fi
   done
   success "all installers done"

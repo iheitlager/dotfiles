@@ -20,8 +20,10 @@ script/bootstrap
 ```
 
 There are two commands to run every now and then:
-* `dot` to upgrade brewd
+* `dot` to upgrade homebrew
 * `vimstall` to do Vundle based vim packages
+
+You have to run your npm, pip, etc updates yourself
 
 ## topical
 
@@ -29,10 +31,11 @@ Everything is configured and tweaked within `~/.dotfiles`. The actual dotfiles a
 This should remain on your system, and offers one place for versioning of your dotfiles, and for example allows .ssh to be excluded.
 Everything's built around topic areas. If you're adding a new area to your
 forked dotfiles — say, "Java" — you can simply add a `java` directory and put files in there. 
-The complete dotfiles system consists of three main parts:
+The complete dotfiles system consists of install time and runtime parts, in total four parts:
 - symlinks to dotfiles
-- topical installers during `script\bootstrap
-- topical extensions to be loaded by `.bash_profile`.
+- topical extensions to be loaded by `.bash_profile`
+- topical brew based installers during `script\bootstrap` (run these with `dot`)
+- topical installers during `script\bootstrap`
 
 
 ## components
