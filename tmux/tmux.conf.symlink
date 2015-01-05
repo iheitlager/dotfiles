@@ -3,6 +3,9 @@ unbind C-b
 set-option -g prefix C-a
 bind-key C-a send-prefix
 
+# rebind create new-window to cd into current dir
+bind c new-window -c "#{pane_current_path}"
+
 # Let tmux recognize quickly
 set -s escape-time 0
 
@@ -40,9 +43,9 @@ bind ] paste-buffer
 
 # splitting
 unbind %
-bind h split-window -h
+bind h split-window -h -c "#{pane_current_path}"
 unbind '"'
-bind v split-window -v
+bind v split-window -v -c "#{pane_current_path}"
 
 # status line
 set -g status-utf8 on
