@@ -9,6 +9,9 @@ print_help () {
 printf "VIM\n---\n"
 print_help 'ALT + mouse click' 'Put cursor at mouse position'
 print_help ':vsp  :sp' 'split vertical and horizontal'
+print_help 'CTRL+B' 'page up'
+print_help 'CTRL+F' 'page down'
+print_help 'CTRL+W |' 'max current split'
 print_help 'CTRL+W |' 'max current split'
 print_help 'CTRL+W =' 'normalize all split sizes'
 print_help 'CTRL+W R' 'swap top/bottom or left/right split'
