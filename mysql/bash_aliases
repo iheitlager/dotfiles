@@ -1,0 +1,2 @@
+alias mysqlworkbench='open $HOME/Applications/MySQLWorkbench.app'
+

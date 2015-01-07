@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+# http://dev.mysql.com/downloads/utilities/
+# http://blog.joefallon.net/2013/10/install-mysql-on-mac-osx-using-homebrew/
+# http://apple.stackexchange.com/questions/130324/howto-install-mysql-utilities-using-brew-or-brew-cask
+# http://dev.mysql.com/doc/workbench/en/wb-mac.html
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew cask install mysqlworkbench
+
+export PATH=$TMPPATH

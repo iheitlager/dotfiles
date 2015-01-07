@@ -1,0 +1,2 @@
+alias pgadmin='open $HOME/Applications/pgAdmin3.app'
+
