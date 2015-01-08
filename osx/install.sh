@@ -21,6 +21,8 @@ fi
 # http://osxdaily.com/2007/03/14/how-to-completely-disable-dashboard/
 defaults write com.apple.dashboard mcx-disabled -boolean YES
 
+# Disable Notification Center and remove the menu bar icon
+launchctl unload -w /System/Library/LaunchAgents/com.apple.notificationcenterui.plist > /dev/null 2>&1
 ############################################################################
 # Terminal & iTerm2
 ############################################################################
