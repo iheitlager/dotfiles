@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install git || brew upgrade git
+
+export PATH=$TMPPATH
