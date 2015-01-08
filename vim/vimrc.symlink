@@ -23,6 +23,7 @@ nnoremap <F2> :set invpaste paste?<CR>
 set showmode
 
 set mouse=a
+set ttymouse=xterm2
 
 
 " Indentation settings

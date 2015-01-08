@@ -6,6 +6,8 @@ PATH=/usr/local/bin:$PATH
 
 # https://github.com/ggreer/the_silver_searcher
 brew install the_silver_searcher || brew upgrade the_silver_searcher
+# Ok, we fell for the mouse integrtion, iterm2 it is
+brew cask install iterm2
 
 
 export PATH=$TMPPATH

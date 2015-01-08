@@ -8,6 +8,7 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
+brew install mysql || brew upgrade mysql
 brew cask install mysqlworkbench
 
 export PATH=$TMPPATH

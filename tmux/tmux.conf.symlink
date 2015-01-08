@@ -31,8 +31,10 @@ set -g history-limit 5000
 
 
 # allow terminal scrolling
-set-option -g terminal-overrides 'screen*:xterm*:smcup@:rmcup@'
-
+set-option -g terminal-overrides 'xterm*:smcup@:rmcup@'
+set-option -g mouse-select-pane on
+set-option -g mouse-select-window on
+set-window-option -g mode-mouse on
 
 # copy mode
 #unbind [
@@ -63,6 +65,3 @@ set -g visual-activity on
 
 setw -g aggressive-resize on
 
-# Allows us to use C-a a <command> to send commands to a TMUX session inside 
-# another TMUX session
-bind-key a send-prefix
