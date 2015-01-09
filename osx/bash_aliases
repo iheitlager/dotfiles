@@ -10,6 +10,9 @@ alias cdw='workdir'
 
 bu () { cp $1 ~/tmp/`basename $1`-`date +%Y%m%d%H%M`.backup ; }
 
+alias ff='open $HOME/Applications/Firefox.app'
+alias chrome='open "$HOME/Applications/Google Chrome.app"'
+
 # Change working directory to the top-most Finder window location
 cdfinder () {
     cd "$(osascript -e 'tell app "Finder" to POSIX path of (insertion location as alias)')";

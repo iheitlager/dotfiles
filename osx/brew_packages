@@ -9,5 +9,11 @@ brew install the_silver_searcher || brew upgrade the_silver_searcher
 # Ok, we fell for the mouse integrtion, iterm2 it is
 brew cask install iterm2
 
+# browsers
+brew cask install google-chrome
+brew cask install firefox
+
+# cannot live without it
+brew cask install dashlane
 
 export PATH=$TMPPATH
