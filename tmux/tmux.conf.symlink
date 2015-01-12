@@ -36,11 +36,27 @@ set-option -g mouse-select-pane on
 set-option -g mouse-select-window on
 set-window-option -g mode-mouse on
 
-# copy mode
-#unbind [
+# Copy-paste integration
+# #unbind [
 #bind Escape copy-mode
 #unbind ]
-bind ] paste-buffer
+# bind ] paste-buffer
+
+set-option -g default-command "reattach-to-user-namespace -l bash"
+
+# Use vim keybindings in copy mode
+ setw -g mode-keys vi
+
+# Setup 'v' to begin selection as in Vim
+ bind-key -t vi-copy v begin-selection
+ bind-key -t vi-copy y copy-pipe "reattach-to-user-namespace pbcopy"
+
+# Update default binding of `Enter` to also use copy-pipe
+unbind -t vi-copy Enter
+bind-key -t vi-copy Enter copy-pipe "reattach-to-user-namespace pbcopy"
+
+# Bind ']' to use pbpaste
+bind ] run "reattach-to-user-namespace pbpaste | tmux load-buffer - && tmux paste-buffer"
 
 
 # splitting

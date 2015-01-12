@@ -59,8 +59,9 @@ Do not forget to never checkin secrets in any of these files, use ~/.localrc for
 
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
-- Read about the dotfile philosophy: https://dotfiles.github.io/
+- More about the dotfile stuff: https://dotfiles.github.io/
 - Get more inspiration here: http://www.dotfiles.org/
 - TMUX basics: http://mutelight.org/practical-tmux
+- Got copy/paste to work: http://evertpot.com/osx-tmux-vim-copy-paste-clipboard/
 - Solarized theme from http://ethanschoonover.com/solarized
 - [The Silver Searcher](https://github.com/ggreer/the_silver_searcher)

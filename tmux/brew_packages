@@ -6,5 +6,6 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install tmux || brew upgrade tmux
+brew install reattach-to-user-namespace || brew upgrade reattach-to-user-namespace
 
 export PATH=$TMPPATH

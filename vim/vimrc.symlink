@@ -25,6 +25,8 @@ set showmode
 set mouse=a
 set ttymouse=xterm2
 
+set clipboard=unnamed
+
 
 " Indentation settings
 set tabstop=4 "Sets display width of tabs
