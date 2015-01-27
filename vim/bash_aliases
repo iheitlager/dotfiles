@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
 alias vimstall="vim +PluginInstall +qall" # command to install Vundle packages
+alias noswp="rm -f *.swp"
