@@ -20,6 +20,7 @@ set colorcolumn=+1
 " http://vim.wikia.com/wiki/Toggle_auto-indenting_for_code_paste
 set pastetoggle=<F2> "Have a hotkey to allow simple pasting
 nnoremap <F2> :set invpaste paste?<CR>
+set paste "default on
 set showmode
 
 set mouse=a
@@ -59,6 +60,10 @@ nnoremap <C-H> <C-W><C-H>
 " https://gist.github.com/iheitlager/46cb7cb3d7e0d30fc98b
 map <F4> :silent !osascript -e 'tell application "Google Chrome" to reload active tab of window 1' > /dev/null;<CR><CR> :redraw!<CR>
 
+
+" Filetype commands
+" http://ku1ik.com/2011/09/08/formatting-xml-in-vim-with-indent-command.html
+au FileType xml setlocal equalprg=xmllint\ --format\ --recover\ -\ 2>/dev/null
 
 "Setup vundle
 filetype off    " Required
