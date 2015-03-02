@@ -93,3 +93,7 @@ extract () {
     echo "'$FF' is not a valid file"
   fi
 }
+
+server() {
+  python -m SimpleHTTPServer $1
+}
