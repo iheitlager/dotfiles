@@ -5,7 +5,7 @@
 # This installs some of the common dependencies needed (or at least desired)
 # using Homebrew.
 
-PACKAGES=( brew-cask bash-completion )
+PACKAGES=( caskroom/cask/brew-cask bash-completion )
 
 # Check for Homebrew
 if test ! $(which brew)

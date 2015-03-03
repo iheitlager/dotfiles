@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install homebrew packages
 
-# makse sure we get the password early
+# make sure we get the password early
 sudo -v
 
 if [[ -z $DOTFILES ]]  

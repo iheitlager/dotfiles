@@ -9,7 +9,8 @@ starttime=$(date +"%s")
 sudo -v
 
 cd "$(dirname "$0")/.."
-DOTFILES=$(pwd)
+export DOTFILES=$(pwd)
+export PATH=/usr/local/bin:$PATH
 
 set -e
 
@@ -170,8 +171,8 @@ run_installers () {
 }
 
 setup_gitconfig
-install_dotfiles
 install_brew_packages
+install_dotfiles
 run_installers
 
 endtime=$(($(date +"%s")-$starttime))
