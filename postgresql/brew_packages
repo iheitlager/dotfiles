@@ -5,6 +5,8 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
+brew install postgres
+brew install freetds
 brew cask install pgadmin3
 
 export PATH=$TMPPATH
