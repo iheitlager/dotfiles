@@ -8,5 +8,5 @@ if [ ! -d $WORKON_DIR ] ; then
 fi
 
 
-pip install virtualenv
-pip install evernote
+sudo pip install virtualenv
+sudo pip install evernote
