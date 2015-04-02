@@ -6,6 +6,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install python || brew upgrade python
+brew install ansible || brew upgrade ansible
 
 pip install --upgrade setuptools
 pip install --upgrade pip
