@@ -6,6 +6,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install node || brew upgrade node
+brew install -g grunt-cli
 
 # sudoing this kills chown of man pageS
 #sudo npm install -g npm@latest
