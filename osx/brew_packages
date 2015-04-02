@@ -13,9 +13,6 @@ brew cask install iterm2
 brew cask install google-chrome
 brew cask install firefox
 
-ln -hFs /opt/homebrew-cask/Caskroom/google-chrome/latest/Google\ Chrome.app/
-Applications/Google\ Chrome.app
-
 # cannot live without it
 brew cask install dashlane
 
