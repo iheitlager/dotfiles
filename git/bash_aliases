@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 alias gall='git add --all'
+alias gcl='git clean -n -d -x'
 alias gc='git commit'
 alias gca='git commit -a'
 alias gcpa='git commit -a "$@" && git push origin master'

@@ -27,3 +27,6 @@ alias cd..='cd ../'
 alias ~='cd ~'
 
 mkd () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
+
+lkill () { ps | grep -v grep | grep "$@" | awk '{print $1}' | xargs kill; }
+

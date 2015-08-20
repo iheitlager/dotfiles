@@ -10,3 +10,4 @@ fi
 
 sudo pip install virtualenv
 sudo pip install evernote
+sudo pip install autopep8
