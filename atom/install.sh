@@ -3,3 +3,4 @@ apm install jslint
 apm install linter-eslint
 apm install minimap
 apm install autopep8
+apm install linter-pylint
