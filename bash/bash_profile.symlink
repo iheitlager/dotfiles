@@ -19,7 +19,7 @@ yellow='\[\e[0;33m\]'
 reset='\[\e[0m\]'
 
 parse_git_branch(){ git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/(\1)/'; }
-export PS1="\u[${yellow}\w${reset}]${red}\$(parse_git_branch)${reset}$ "
+export PS1="\u[${yellow}\W${reset}]${red}\$(parse_git_branch)${reset}$ "
 #export PS1="${red}\u@\h:${yellow}\W${red}$(parse_git_branch)${reset}$ "
 
 export PAGER=`which less`

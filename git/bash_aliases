@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+alias cb='git branch --merged master | grep -v "\* master" | xargs -n 1 git branch -d'
 alias gall='git add --all'
 alias gcl='git clean -n -d -x'
 alias gc='git commit'
