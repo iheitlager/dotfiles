@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
 
 alias cb='git branch --merged master | grep -v "\* master" | xargs -n 1 git branch -d'
-alias gall='git add --all'
-alias gcl='git clean -n -d -x'
-alias gc='git commit'
-alias gca='git commit -a'
-alias gcpa='git commit -a -m "$@" && git push origin master'
-alias gp='git push origin'
-alias gf='git fetch origin'
-alias gpl='git pull origin'
-alias gch='git checkout'
-alias gb='git branch'
+alias ga='git add --all'
+alias gp='git pull origin master'
 alias gs='git status -sb' # upgrade your git if -sb breaks for you. it's fun.

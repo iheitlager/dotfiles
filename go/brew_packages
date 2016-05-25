@@ -6,6 +6,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install go || brew upgrade go
+brew install --devel protobuf || brew upgrade --devel protobuf
 
 brew linkapps go
 

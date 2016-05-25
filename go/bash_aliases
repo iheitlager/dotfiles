@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+goclean () { ls $GOPATH/src | grep -v github.schubergphilis.com | xargs rm -rf; }

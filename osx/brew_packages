@@ -11,6 +11,7 @@ brew install irssi --with-perl=yes --with-proxy || brew upgrade irssi
 brew install the_silver_searcher || brew upgrade the_silver_searcher
 # Ok, we fell for the mouse integrtion, iterm2 it is
 brew cask install iterm2
+brew install jq || brew upgrade jq
 
 # browsers
 brew cask install google-chrome

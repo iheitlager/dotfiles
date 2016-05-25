@@ -69,4 +69,8 @@ source_files "bash_aliases"
 source_files "bash_env"
 source_files "bash_completion"
 
+if [ -f $(brew --prefix)/etc/bash_completion ]; then
+. $(brew --prefix)/etc/bash_completion
+fi
+
 unset source_files

@@ -27,4 +27,5 @@ for package in "${PACKAGES[@]}"; do
     brew install  $package || brew upgrade $package
 done
 
+brew tap homebrew/completions
 brew cleanup && brew cask cleanup
