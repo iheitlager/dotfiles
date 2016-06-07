@@ -2,6 +2,7 @@
 
 alias show='open -t' # open file in default texteditor (or TextEdit)
 alias o='show'
+alias uuid='python -c "import uuid;print str(uuid.uuid4())"'
 
 alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'" 
 
