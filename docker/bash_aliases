@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+alias dk="docker ps -qa | xargs docker rm --force"
+alias dc='docker rmi $(docker images | grep "^<none>" | awk "{print $3}")'
