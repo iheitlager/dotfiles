@@ -5,8 +5,6 @@
 # This installs some of the common dependencies needed (or at least desired)
 # using Homebrew.
 
-PACKAGES=( bash-completion )
-
 # Check for Homebrew
 if test ! $(which brew)
 then
@@ -22,10 +20,4 @@ if ! brew doctor; then
   exit 1
 fi
 
-# Install homebrew packages
-for package in "${PACKAGES[@]}"; do
-    brew install  $package || brew upgrade $package
-done
-
-brew tap homebrew/completions
 brew cleanup && brew cask cleanup

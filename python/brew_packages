@@ -8,7 +8,7 @@ PATH=/usr/local/bin:$PATH
 brew install python || brew upgrade python
 
 # NB: this installs under they regular python interpreter
-sud easy_install pip
+sudo easy_install pip
 sudo pip install --upgrade setuptools
 sudo pip install --upgrade pip
 pip install ansible

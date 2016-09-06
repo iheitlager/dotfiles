@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+# check: http://docs.python-guide.org/en/latest/starting/install/osx/
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install bash-completion || brew upgrade bash-completion
+brew tap homebrew/completions
+
+export PATH=$TMPPATH
