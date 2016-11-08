@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-export GOPATH=~/wc/go
+export GOPATH=~/go
 export PATH=$PATH:$GOPATH/bin
