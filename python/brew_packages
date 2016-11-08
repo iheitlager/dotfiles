@@ -6,14 +6,17 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install python || brew upgrade python
-brew install readline --universal || brew upgrade readline
+brew linkapps python
 
-# NB: this installs under they regular python interpreter
 sudo easy_install pip
 sudo pip install --upgrade setuptools
+sudo pip install --upgrade virtualenv
 sudo pip install --upgrade pip
+
+sudo pip install --upgrade autopep8
+brew install readline --universal || brew upgrade readline
+
 pip install ansible
 
-brew linkapps python
 
 export PATH=$TMPPATH

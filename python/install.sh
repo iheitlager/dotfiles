@@ -7,7 +7,3 @@ if [ ! -d $WORKON_DIR ] ; then
     mkdir $WORKON_DIR
 fi
 
-
-sudo pip install virtualenv
-sudo pip install evernote
-sudo pip install autopep8
