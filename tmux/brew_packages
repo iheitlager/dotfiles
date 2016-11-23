@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # brew installer helper, normally run this from 'dot'
-# check: http://docs.python-guide.org/en/latest/starting/install/osx/
+# https://robots.thoughtbot.com/tmux-copy-paste-on-os-x-a-better-future
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 

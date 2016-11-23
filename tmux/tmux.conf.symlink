@@ -1,3 +1,7 @@
+# some tips here:
+# http://www.hamvocke.com/blog/a-guide-to-customizing-your-tmux-conf/
+# https://robots.thoughtbot.com/tmux-copy-paste-on-os-x-a-better-future
+
 # change prefix to Ctrl-a (like in gnu-screen)
 unbind C-b
 set-option -g prefix C-a
@@ -38,6 +42,7 @@ set -g mouse on
 bind -n WheelUpPane if-shell -F -t = "#{mouse_any_flag}" "send-keys -M" "if -Ft= '#{pane_in_mode}' 'send-keys -M' 'select-pane -t=; copy-mode -e; send-keys -M'"
 bind -n WheelDownPane select-pane -t= \; send-keys -M
 
+# https://robots.thoughtbot.com/tmux-copy-paste-on-os-x-a-better-future
 # Copy-paste integration
 # #unbind [
 #bind Escape copy-mode
@@ -47,11 +52,11 @@ bind -n WheelDownPane select-pane -t= \; send-keys -M
 set-option -g default-command "reattach-to-user-namespace -l bash"
 
 # Use vim keybindings in copy mode
- setw -g mode-keys vi
+setw -g mode-keys vi
 
 # Setup 'v' to begin selection as in Vim
- bind-key -t vi-copy v begin-selection
- bind-key -t vi-copy y copy-pipe "reattach-to-user-namespace pbcopy"
+bind-key -t vi-copy v begin-selection
+bind-key -t vi-copy y copy-pipe "reattach-to-user-namespace pbcopy"
 
 # Update default binding of `Enter` to also use copy-pipe
 unbind -t vi-copy Enter
@@ -81,3 +86,6 @@ setw -g monitor-activity on
 set -g visual-activity on
 
 setw -g aggressive-resize on
+
+# don't rename windows automatically
+set-option -g allow-rename off
