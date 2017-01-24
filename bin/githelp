@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# a poormans git cheat sheet
+# a poor mans git cheat sheet
 
 print_help () {
    printf "  \033[0;33m$1\033[0m: $2\n"
@@ -11,6 +11,7 @@ print_help 'git reset --hard' 'rollback and discard all uncommitted changes'
 print_help 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
 print_help 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
 print_help 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
+print_help 'git rebase origin/master' 'rebase on current master'
 
 printf "\naliases\n-------\n"
 cat $DOTFILES/git/bash_aliases | grep --color=auto git

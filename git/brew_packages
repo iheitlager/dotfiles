@@ -5,5 +5,6 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install git || brew upgrade git
+brew install gitlab-ci-multi-runner || brew upgrade gitlab-ci-multi-runner
 
 export PATH=$TMPPATH

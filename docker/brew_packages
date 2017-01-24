@@ -5,7 +5,7 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-brew install kubernetes-cli
+brew install kubernetes-cli || brew upgrade kubernetes-cli
 curl -L https://raw.githubusercontent.com/docker/compose/$(docker-compose version --short)/contrib/completion/bash/docker-compose > /usr/local/etc/bash_completion.d/docker-compose
 
 export PATH=$TMPPATH

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
 # tab completion for kubernetes
-# read: https://blog.fabric8.io/enable-bash-completion-for-kubernetes-with-kubectl-506bc89fe79e#.kh4uuccdx
+# https://kubernetes.io/docs/user-guide/kubectl/kubectl_completion/
 source <(kubectl completion bash)
