@@ -15,9 +15,4 @@ else
   brew update
 fi
 
-if ! brew doctor; then
-  echo "\`brew doctor\` failed. Please resolve issues before continuing."
-  exit 1
-fi
-
 brew cleanup && brew cask cleanup
