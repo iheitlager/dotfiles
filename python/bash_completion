@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 
 complete -o "nospace" -W "python" killall;
+eval "`pip completion --bash`"
