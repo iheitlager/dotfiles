@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+# check: http://docs.python-guide.org/en/latest/starting/install/osx/
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install gpg || brew upgrade gpg
+
+export PATH=$TMPPATH
