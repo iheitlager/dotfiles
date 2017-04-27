@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 # brew installer helper, normally run this from 'dot'
-# http://postgresapp.com/documentation/gui-tools.html
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
