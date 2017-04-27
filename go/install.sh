@@ -2,8 +2,8 @@
 
 source "$(dirname "$0")/bash_env"
 
-if [ ! -d $GOPATH/go ] ; then
+if [ ! -d $GOPATH ] ; then
     echo "  Creating an empty go directory in $GOPATH"
-    mkdir $GOPATH/go
+    mkdir $GOPATH
 fi
 
