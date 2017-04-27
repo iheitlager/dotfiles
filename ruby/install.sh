@@ -11,3 +11,6 @@ source "$HOME/.rvm/scripts/rvm"
 
 # download ruby through rvm
 rvm install ruby-2.4.1
+rvm gemset use global
+
+gem install jekyll bundler
