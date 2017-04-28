@@ -11,6 +11,7 @@ function deactivate {
 }    
 
 mkenv () { virtualenv --no-site-packages $WORKON_DIR/$1 ; }
+mkenv3 () { virtualenv -p python3 --no-site-packages $WORKON_DIR/$1 ; }
 
 showenv () { ls $WORKON_DIR ; }
 alias se="showenv"

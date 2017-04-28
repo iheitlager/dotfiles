@@ -6,6 +6,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install python || brew upgrade python
+brew install python3 || brew upgrade python3
 brew linkapps python
 
 sudo easy_install pip
