@@ -64,6 +64,7 @@ path_munge() {
 # set path, make /usr/local/bin preference
 # export PATH=`echo ":$PATH:" | sed -e "s#:/usr/local/bin:#:#g" -e "s/^://" -e "s/:$//"`
 # export PATH=$DOTFILES/bin:/usr/local/bin:$PATH
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
 source_files () {
     local alias_file
