@@ -85,6 +85,8 @@ source_files "bash_env"
 path_munge "/usr/local/bin"
 path_munge "$DOTFILES/bin"
 
+ssh-add -A 2>/dev/null;
+
 if [ -f $(brew --prefix)/etc/bash_completion ]; then
 . $(brew --prefix)/etc/bash_completion
 fi
