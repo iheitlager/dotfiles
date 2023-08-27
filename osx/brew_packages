@@ -14,10 +14,10 @@ brew cask install iterm2
 brew install jq || brew upgrade jq
 
 # browsers
-brew cask install google-chrome
-brew cask install firefox
+#brew cask install google-chrome
+#brew cask install firefox
 
 # cannot live without it
-brew cask install dashlane
+#brew cask install dashlane
 
 export PATH=$TMPPATH
