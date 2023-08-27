@@ -10,14 +10,14 @@ brew unlink openssl && brew link --force openssl
 brew install irssi --with-perl=yes --with-proxy || brew upgrade irssi
 brew install the_silver_searcher || brew upgrade the_silver_searcher
 # Ok, we fell for the mouse integrtion, iterm2 it is
-brew cask install iterm2
+brew install --cask iterm2
 brew install jq || brew upgrade jq
 
 # browsers
-#brew cask install google-chrome
-#brew cask install firefox
+#brew install --cask google-chrome
+#brew install --cask firefox
 
 # cannot live without it
-#brew cask install dashlane
+#brew install --cask dashlane
 
 export PATH=$TMPPATH
