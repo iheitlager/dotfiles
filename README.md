@@ -18,6 +18,8 @@ Run this:
 ```sh
 # need to install homebrew on a clean laptop to make sure git is there
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+(echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/iheitlager/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
 
 git clone https://github.com/iheitlager/dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
