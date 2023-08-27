@@ -17,7 +17,7 @@ Run this:
 
 ```sh
 # need to install homebrew on a clean laptop to make sure git is there
-ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
 
 git clone https://github.com/iheitlager/dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
