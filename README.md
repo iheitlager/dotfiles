@@ -21,10 +21,12 @@ Run this:
 (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/iheitlager/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"
 
-git clone https://github.com/iheitlager/dotfiles.git ~/.dotfiles
+git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
 script/bootstrap
 ```
+
+NB: be sure to setup ssh and add your keys in your `.ssh/config`
 
 There are two commands to run every now and then:
 * `dot` to upgrade homebrew
