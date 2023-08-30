@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-# tab completion for kubernetes
-# https://kubernetes.io/docs/user-guide/kubectl/kubectl_completion/
-source <(kubectl completion bash)

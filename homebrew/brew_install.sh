@@ -15,4 +15,4 @@ else
   brew update
 fi
 
-brew cleanup && brew cask cleanup
+brew cleanup
