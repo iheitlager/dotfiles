@@ -81,7 +81,7 @@ if [ -e ~/.localrc ] ; then
 fi
 
 
-path_munge "/opt/homebrew/bin"
+# path_munge "/opt/homebrew/bin"
 path_munge "$DOTFILES/bin"
 eval "$(/opt/homebrew/bin/brew shellenv)"
 

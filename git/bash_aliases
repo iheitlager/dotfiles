@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 alias gh='githelp'
-alias cb='git branch --merged master | grep -v "\* master" | xargs -n 1 git branch -d' # clear all merged branches
+alias cb='git branch --merged master | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
 alias ga='git add --all' # short hand to add all changed files
-alias gp='git pull origin master' # pull master
+alias gp='git pull origin main' # pull main
 alias gc='git commit' # pull master
 alias pb='git push origin `git rev-parse --abbrev-ref HEAD` -f' # push active branc
 # upgrade your git if -sb breaks for you. it's fun.
