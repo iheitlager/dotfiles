@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+#brew install python || brew upgrade python
+brew install openjdk || brew upgrade openjdk
+brew link jdk --force
+
+export PATH=$TMPPATH
