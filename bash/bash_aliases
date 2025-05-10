@@ -30,3 +30,6 @@ mkd () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
 
 lkill () { ps | grep -v grep | grep "$@" | awk '{print $1}' | xargs kill; }
 
+alias first='head -n1'
+alias second="awk 'NR==2'"
+alias third="awk 'NR==3'"

@@ -65,7 +65,8 @@ path_munge() {
 # set path, make /usr/local/bin preference
 # export PATH=`echo ":$PATH:" | sed -e "s#:/usr/local/bin:#:#g" -e "s/^://" -e "s/:$//"`
 # export PATH=$DOTFILES/bin:/usr/local/bin:$PATH
-export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export PATH=/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH
 
 source_files () {
     local alias_file
@@ -113,3 +114,7 @@ export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 export MANPATH="/opt/local/share/man:$MANPATH"
 # Finished adapting your MANPATH environment variable for use with MacPorts.
 
+
+# Codon compiler path (added by install script)
+export PATH=/Users/iheitlager/.codon/bin:$PATH
+. "$HOME/.cargo/env"
