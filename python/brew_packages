@@ -15,6 +15,10 @@ sudo pip3 install --upgrade virtualenv
 
 sudo pip3 install --upgrade autopep8
 brew install readline --universal || brew upgrade readline
+brew install python-tk || brew upgrade python-tk
+
+# minio
+brew install minio/stable/mc || brew upgrade minio/stable/mc
 
 #pip install ansible
 

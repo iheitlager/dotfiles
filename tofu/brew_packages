@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+# only want the latest and greatest
+brew install opentofu || brew upgrade opentofu
+
+
+export PATH=$TMPPATH
