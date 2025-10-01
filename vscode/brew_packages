@@ -4,6 +4,6 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-brew install git || brew upgrade git
+brew install --cask visual-studio-code || brew upgrade visual-studio-code
 
 export PATH=$TMPPATH

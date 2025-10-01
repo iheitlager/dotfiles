@@ -11,7 +11,6 @@ alias cdw='workdir'
 
 bu () { cp $1 ~/tmp/`basename $1`-`date +%Y%m%d%H%M`.backup ; }
 
-alias ff='open $HOME/Applications/Firefox.app'
 alias chrome='open "$HOME/Applications/Google Chrome.app"'
 
 # Change working directory to the top-most Finder window location
@@ -35,15 +34,6 @@ fs () {
     else
         du $arg *;
     fi;
-}
-
-# Create a git.io short URL
-function gitio() {
-    if [ -z "${1}" -o -z "${2}" ]; then
-        echo "Usage: \`gitio slug url\`";
-        return 1;
-    fi;
-    curl -i http://git.io/ -F "url=${2}" -F "code=${1}";
 }
 
 # Lock the screen (when going AFK)
@@ -93,8 +83,4 @@ extract () {
   else
     echo "'$FF' is not a valid file"
   fi
-}
-
-server() {
-  python -m SimpleHTTPServer $1
 }
