@@ -6,7 +6,7 @@ Your dotfiles are how you personalize your system. These are mine specific for w
 My workflow is all about Homebrew, bash, iTerm2, vim and tmux.
 
 I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
-I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although this is bash centric instead of zsh. 
+I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although mine is bash centric instead of zsh. 
 This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management.
 While working with vim and tmux, I found that iTerm2 really is a better match
 due to better mouse handling.
@@ -17,13 +17,13 @@ Run this:
 
 ```sh
 # need to install homebrew on a clean laptop to make sure git is there
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-(echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/iheitlager/.zprofile
-eval "$(/opt/homebrew/bin/brew shellenv)"
+> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+> (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/iheitlager/.zprofile
+>eval "$(/opt/homebrew/bin/brew shellenv)"
 
-git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
-cd ~/.dotfiles
-script/bootstrap
+> git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
+> cd ~/.dotfiles
+> script/bootstrap
 ```
 
 NB: be sure to setup ssh and add your keys in your `.ssh/config`
