@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-j () { tmux set status-right $1; ssh $1 && tmux set status-right local; }

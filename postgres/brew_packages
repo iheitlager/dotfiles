@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-
-# brew installer helper, normally run this from 'dot'
-TMPPATH=$PATH
-PATH=/usr/local/bin:$PATH
-
-brew install pgcli --universal || brew upgrade pgcli
-
-export PATH=$TMPPATH
