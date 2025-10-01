@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install docker || brew upgrade docker
+brew install colima || brew upgrade colima
+
+export PATH=$TMPPATH
