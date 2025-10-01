@@ -11,7 +11,7 @@ print_help 'git reset --hard' 'rollback and discard all uncommitted changes'
 print_help 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
 print_help 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
 print_help 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
-print_help 'git rebase origin/master' 'rebase on current master'
+print_help 'git rebase origin/main' 'rebase on current main'
 
 printf "\naliases\n-------\n"
 cat $DOTFILES/git/bash_aliases | grep --color=auto git
