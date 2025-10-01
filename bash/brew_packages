@@ -7,6 +7,5 @@ PATH=/usr/local/bin:$PATH
 
 brew install bash-completion || brew upgrade bash-completion
 brew tap homebrew/completions
-brew install wakeonlan || brew upgrade wakeonlan
 
 export PATH=$TMPPATH
