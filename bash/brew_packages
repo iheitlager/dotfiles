@@ -5,7 +5,6 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-brew install bash-completion || brew upgrade bash-completion
-brew tap homebrew/completions
+brew install bash-completion@2 || brew upgrade bash-completion@2
 
 export PATH=$TMPPATH
