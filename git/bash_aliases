@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 alias gh='githelp'
-alias cb='git branch --merged master | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
+alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
 alias ga='git add --all' # short hand to add all changed files
 alias gp='git pull origin main' # pull main
 alias gc='git commit' # pull master
