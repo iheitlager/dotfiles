@@ -5,6 +5,8 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install docker || brew upgrade docker
+brew install docker-buildx  || brew upgrade docker-buildx
+brew install docker-completion || brew upgrade docker-completion
 brew install colima || brew upgrade colima
 
 export PATH=$TMPPATH
