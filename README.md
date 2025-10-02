@@ -17,13 +17,15 @@ Run this:
 
 ```sh
 # need to install homebrew on a clean laptop to make sure git is there
-> /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-> (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/iheitlager/.zprofile
->eval "$(/opt/homebrew/bin/brew shellenv)"
+$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+$ (echo; echo 'eval "$(/opt/homebrew/bin/brew shellenv)"') >> /Users/iheitlager/.zprofile
+$ eval "$(/opt/homebrew/bin/brew shellenv)"
 
-> git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
-> cd ~/.dotfiles
-> script/bootstrap
+$ git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
+$ chsh -s /bin/bash  # we love to run bash instead of zshell
+$ cd ~/.dotfiles
+$ script/bootstrap # run this once to configure dotfile
+$ dot              # run this to install or upgrade packages, run anytime/anywhere
 ```
 
 NB: be sure to setup ssh and add your keys in your `.ssh/config`
@@ -41,10 +43,11 @@ This should remain on your system, and offers one place for versioning of your d
 Everything's built around topic areas. If you're adding a new area to your
 forked dotfiles — say, "Java" — you can simply add a `java` directory and put files in there. 
 The complete dotfiles system consists of install time and runtime parts, in total four parts:
-- symlinks to dotfiles
-- topical extensions to be loaded by `.bash_profile`
-- topical brew based installers during `script\bootstrap` (run these with `dot`)
-- topical installers during `script\bootstrap`
+
+1. symlinks to dotfiles
+2. topical extensions to be loaded by `.bash_profile`
+3. topical brew based installers during `script\bootstrap` (run these with `dot`)
+4. topical installers during `script\bootstrap`
 
 
 ## components
@@ -58,17 +61,15 @@ There's a few special files in the hierarchy.
 - **topic/brew_packages**: Any file named `brew_packages` is executed when running `dot`, this provides a way to create HomeBrew based installers. It is adviced to also put your package managers in here (like `pip` for python and `npm` for node
 - **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`, this provides a way to create topical installers
 - **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
-  your `$HOME`. This is such that you can keep all of those versioned in your dotfiles directory, 
-  but still keep those autoloaded files in your home directory. These files get
-  symlinked in when you run `script/bootstrap`.
+  your `$HOME`. This is to keep your files versioned in your dotfiles., while keeping them where they belong in your home directory. 
+  These files get symlinked in when you run `script/bootstrap`.
 
 Do not forget to never checkin secrets in any of these files, use ~/.localrc for this (sourced by `.bash_profile`)
 
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
 - More about the dotfile stuff: https://dotfiles.github.io/
-- Get more inspiration here: http://www.dotfiles.org/
+- Get other inspiration here: http://www.dotfiles.org/
 - TMUX basics: http://mutelight.org/practical-tmux
 - Got copy/paste to work: http://evertpot.com/osx-tmux-vim-copy-paste-clipboard/
 - Solarized theme from http://ethanschoonover.com/solarized
-- [The Silver Searcher](https://github.com/ggreer/the_silver_searcher)
