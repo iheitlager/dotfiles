@@ -51,3 +51,15 @@ defaults write com.google.Chrome.canary AppleEnableSwipeNavigateWithScrolls -boo
 # Use the system-native print preview dialog
 defaults write com.google.Chrome DisablePrintPreview -bool true
 defaults write com.google.Chrome.canary DisablePrintPreview -bool true
+
+############################################################################
+# Local CA
+############################################################################
+# mkdir -p ~/.ssl-certs
+# chmod 700 ~/.ssl-certs
+# openssl genrsa -out ~/.ssl-certs/ca.key 2048
+# openssl req -new -x509 -days 365 -key ~/.ssl-certs/ca.key \
+#  -out ~/.ssl-certs/ca.crt \
+#  -subj "/CN=Development Local CA/O=Local Development"
+# @sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/.ssl-certs/ca.crt
+
