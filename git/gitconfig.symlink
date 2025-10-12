@@ -1,0 +1,26 @@
+[user]
+    name = iheitlager
+    email = ilja@heitlager.com
+[color]
+    diff = auto
+    status = auto
+    branch = auto
+    ui = true
+[core]
+    excludesfile = ~/.gitignore
+    editor = $EDITOR
+[push]
+    default = simple
+# Taken from https://victorzhou.com/blog/git-aliases/
+[alias]
+    s = status
+    a = add .
+    d = diff
+    co = checkout
+    br = branch
+    last = log -1 HEAD
+    cane = commit --amend --no-edit
+    lo = log --oneline -n 10
+    pr = pull --rebase
+    rh = reset --hard
+    cm = commit -m
