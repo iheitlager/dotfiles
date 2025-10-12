@@ -15,3 +15,16 @@ print_help 'git rebase origin/main' 'rebase on current main'
 
 printf "\naliases\n-------\n"
 cat $DOTFILES/git/bash_aliases | grep --color=auto git
+
+printf "\nshorthand\n---------\n"
+print_help 'g s' 'git status'
+print_help 'g a' 'git add .'
+print_help 'g cm' 'git commit -m'
+print_help 'g d' 'git diff'
+print_help 'g rh' 'git reset --hard'
+print_help 'g co' 'git checkout'
+print_help 'g br' 'git branch'
+print_help 'g last' 'git log -1 HEAD'
+print_help 'g cane' 'git commit --amend --no-edit'
+print_help 'g lo' 'git log --online -n 10'
+print_help 'g pr' 'git pull --rebase'
