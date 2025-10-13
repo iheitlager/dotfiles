@@ -25,5 +25,4 @@
     rh = reset --hard
     cm = commit -m
 # https://git-scm.com/book/ms/v2/Git-Basics-Git-Aliases
-    last = log -1 HEAD
     unstage = reset HEAD --
