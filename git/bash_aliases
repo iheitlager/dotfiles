@@ -138,7 +138,7 @@ _worktree_move() {
         # Check if .virtual_env exists
         local venv_dir=$(ls -d .[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f1)
 
-        if [ -n "$venv_dir" ]; then
+        if [ -d "$venv_dir" ]; then
             echo "✅ Virtual environment exists ($venv_dir/)"
         else
             echo "⚠️  No virtual environment found - create local env"
@@ -172,7 +172,7 @@ _list_worktrees() {
         # Check if .virtual_env exists in this worktree
         local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | rev | cut -d'/' -f3 | rev)
         local env_status=""
-        if [ -n "$path/$venv_dir" ]; then
+        if [ -d "$path/$venv_dir" ]; then
             env_status="[✅ $venv_dir]"
         else
             env_status="[❌ no env]"
