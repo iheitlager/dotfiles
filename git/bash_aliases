@@ -18,9 +18,6 @@ alias gs='git status -sb' # short git status
 #      make env # a standard job to run virtualenv .package
 # =======================================================================
 
-# WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-export WORKTREE_BASE="../git-worktree"
-
 # Helper function to get main worktree path
 _get_main_worktree() {
     git worktree list | head -1 | awk '{print $1}'
@@ -36,6 +33,10 @@ _get_worktree_root() {
 #        gw bugfix/issue-123
 alias gw='_git_worktree_create'
 _git_worktree_create() {
+    # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
+    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    WORKTREE_BASE="../$BASE-worktree"
+
     if [ -z "$1" ]; then
         echo "Usage: gw <branch-name>"
         echo "Example: gw feat/authentication"
@@ -66,6 +67,10 @@ _git_worktree_create() {
 # Usage: gwc feat/authentication
 alias gwc='_git_worktree_create_and_setup'
 _git_worktree_create_and_setup() {
+    # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
+    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    WORKTREE_BASE="../$BASE-worktree"
+
     if [ -z "$1" ]; then
         echo "Usage: gwc <branch-name>"
         echo "Example: gwc feat/authentication"
@@ -112,6 +117,10 @@ _git_worktree_create_and_setup() {
 #        wm bugfix-issue-123
 alias wm='_worktree_move'
 _worktree_move() {
+    # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
+    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    WORKTREE_BASE="../$BASE-worktree"
+
     if [ -z "$1" ]; then
         echo "Usage: wm <worktree-name>"
         echo "Available worktrees:"
@@ -224,6 +233,10 @@ _back_to_main() {
 # Usage: rw feat-authentication
 alias rw='_remove_worktree'
 _remove_worktree() {
+    # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
+    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    WORKTREE_BASE="../$BASE-worktree"
+
     if [ -z "$1" ]; then
         echo "Usage: rw <worktree-name>"
         echo "Available worktrees:"
