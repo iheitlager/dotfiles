@@ -52,7 +52,7 @@ _git_worktree_create() {
     echo "Branch: $branch_name"
 
     # Create worktree
-    if git worktree add "$worktree_path" "$branch_name"; then
+    if git worktree add "$worktree_path" -b "$branch_name"; then
         echo "✅ Worktree created successfully!"
         echo "To move there: wm $worktree_name"
         echo "To setup:      cd $worktree_path && make env && venv"   # virtualenv .env && source .venv/bin/activate
@@ -81,7 +81,7 @@ _git_worktree_create_and_setup() {
     echo "📋 Branch: $branch_name"
 
     # Create worktree
-    if git worktree add "$worktree_path" "$branch_name"; then
+    if git worktree add "$worktree_path" -b "$branch_name"; then
         echo "✅ Worktree created!"
 
         # Move to worktree
