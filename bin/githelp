@@ -14,7 +14,7 @@ print_help 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
 print_help 'git rebase origin/main' 'rebase on current main'
 
 printf "\naliases\n-------\n"
-cat $DOTFILES/git/bash_aliases | grep --color=auto git
+cat $DOTFILES/git/bash_aliases | grep alias | grep --color=auto git
 
 printf "\nshorthand\n---------\n"
 print_help 'g s' 'git status'

@@ -160,7 +160,6 @@ _list_worktrees() {
     git worktree list | while IFS= read -r line; do
         local path=$(echo "$line" | awk '{print $1}')
         local branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
-        local status=$(echo "$line" | cut -d' ' -f4-)
 
         # Check if this is the current worktree
         local current_path=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -189,7 +188,7 @@ _list_worktrees() {
         fi
 
         echo "${marker}${path}"
-        echo "   Branch: ${branch} ${env_status} ${status}"
+        echo "   Branch: ${branch} ${env_status}"
     done
 
     echo ""
@@ -232,7 +231,7 @@ _remove_worktree() {
         return 1
     fi
 
-    local worktree_name="$1"
+    local worktree_name=$(echo "$1" | sed 's/\//-/g')  # Replace / with -
     local worktree_path="${WORKTREE_BASE}/${worktree_name}"
 
     # Verify worktree exists
@@ -253,6 +252,7 @@ _remove_worktree() {
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         if git worktree remove "$worktree_path"; then
+            git branch -D $1
             echo "✅ Worktree removed: $worktree_path"
         else
             echo "❌ Failed to remove worktree"
