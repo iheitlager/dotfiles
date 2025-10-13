@@ -170,9 +170,19 @@ _list_worktrees() {
         fi
 
         # Check if .virtual_env exists in this worktree
-        local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | rev | cut -d'/' -f3 | rev)
+        # local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | rev | cut -d'/' -f3 | rev)
+        venv_dir=""
+        for potential_venv in "$path"/.*; do
+            if [ -d "$potential_venv" ] && [ "$(basename "$potential_venv")" != "." ] && [ "$(basename "$potential_venv")" != ".." ]; then
+                if [ -f "$potential_venv/bin/python" ]; then
+                    venv_dir=$(basename "$potential_venv")
+                    break
+                fi
+            fi
+        done
+
         local env_status=""
-        if [ -d "$path/$venv_dir" ]; then
+        if [ -n "$venv_dir" ]; then
             env_status="[✅ $venv_dir]"
         else
             env_status="[❌ no env]"
