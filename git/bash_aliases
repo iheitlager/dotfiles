@@ -122,8 +122,8 @@ _worktree_move() {
     # Check if we're currently in a worktree path and need to go back first
     local current_path=$(pwd)
     if [[ "$current_path" == *"/git-worktree/"* ]] || [[ "$current_path" == *"${WORKTREE_BASE}"* ]]; then
-        # We're in a worktree, navigate back to base level
-        cd ../.. || return 1
+        # We're in a worktree, navigate back one level
+        cd .. || return 1
         echo "📍 Navigated back from current worktree"
     fi
 
