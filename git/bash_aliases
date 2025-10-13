@@ -52,7 +52,7 @@ _git_worktree_create() {
     if git worktree add "$worktree_path" "$branch_name"; then
         echo "✅ Worktree created successfully!"
         echo "To move there: wm $worktree_name"
-        echo "To setup:      cd $worktree_path && make env && venv"
+        echo "To setup:      cd $worktree_path && make env && venv"   # virtualenv .env && source .venv/bin/activate
     else
         echo "❌ Failed to create worktree"
         return 1
@@ -66,7 +66,7 @@ _git_worktree_create_and_setup() {
     if [ -z "$1" ]; then
         echo "Usage: gwc <branch-name>"
         echo "Example: gwc feat/authentication"
-        echo "This creates the worktree AND runs 'make env && venv'"
+        echo "This creates the worktree AND runs 'make env && venv'" # virtualenv .env && source .venv/bin/activate
         return 1
     fi
 
@@ -159,7 +159,7 @@ _list_worktrees() {
         fi
 
         # Check if .virtual_env exists in this worktree
-        local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f2)
+        local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | rev | cut -d'/' -f3 | rev)
         local env_status=""
         if [ -n "$path/$venv_dir" ]; then
             env_status="[✅ $venv_dir]"
@@ -196,7 +196,7 @@ _back_to_main() {
     if [ -n "$venv_dir" ]; then
         echo "✅ Virtual environment exists ($venv_dir/)"
     else
-        echo "⚠️  No virtual environment found - create local env"
+        echo "⚠️  No virtual environment found - run 'make env'"  # virtualenv .env
     fi
 }
 
@@ -269,7 +269,7 @@ _print_worktree() {
         if [ -n "$VIRTUAL_ENV" ]; then
             echo "Active: ✅ $(basename $VIRTUAL_ENV)"
         else
-            echo "Active: ❌ (run: venv)"  #alias venv=source .*/bin/activate
+            echo "Active: ❌ (run: venv)"  # alias venv=source .*/bin/activate
         fi
     else
         echo "Env:    ❌ No .venv (run: virtualenv .PACKAGE)"
