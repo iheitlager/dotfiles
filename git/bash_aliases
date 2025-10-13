@@ -119,12 +119,11 @@ alias wm='_worktree_move'
 _worktree_move() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
     BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
-    WORKTREE_BASE="../$BASE-worktree"
+    WORKTREE_BASE="$BASE-worktree"
 
     if [ -z "$1" ]; then
         echo "Usage: wm <worktree-name>"
-        echo "Available worktrees:"
-        lw
+        _list_worktrees
         return 1
     fi
 
@@ -137,7 +136,7 @@ _worktree_move() {
     fi
 
     local worktree_name=$(echo "$1" | sed 's/\//-/g')
-    local worktree_path="${WORKTREE_BASE}/${worktree_name}"
+    local worktree_path="../${WORKTREE_BASE}/${worktree_name}"
 
     if [ -d "$worktree_path" ]; then
         cd "$worktree_path" || return 1
@@ -154,8 +153,7 @@ _worktree_move() {
         fi
     else
         echo "❌ Worktree not found: $worktree_path"
-        echo "Available worktrees:"
-        lw
+        _list_worktrees
         return 1
     fi
 }
@@ -332,7 +330,6 @@ _git_worktree_workflow() {
     echo "7. pw            - Print current worktree info"
     echo "8. cw            - Cleanup pruned worktrees"
     echo ""
-    echo "Current worktrees:"
     lw
 }
 
