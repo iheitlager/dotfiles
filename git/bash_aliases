@@ -11,12 +11,12 @@ alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f' # pull down acti
 # upgrade your git if -sb breaks for you. it's fun.
 alias gs='git status -sb' # short git status
 
-# ==========================================================================
+# =======================================================================
 # FRANK Git Worktree Aliases
-# ==========================================================================
+# =======================================================================
 
 # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-export WORKTREE_BASE="../worktree"
+export WORKTREE_BASE="../git-worktree"
 
 # Helper function to get main worktree path
 _get_main_worktree() {
@@ -161,7 +161,7 @@ _list_worktrees() {
         # Check if .virtual_env exists in this worktree
         local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f2)
         local env_status=""
-        if [ - "$path/.frank" ]; then
+        if [ -n "$path/$venv_dir" ]; then
             env_status="[✅ $venv_dir]"
         else
             env_status="[❌ no env]"
@@ -302,6 +302,6 @@ _git_worktree_workflow() {
     lw
 }
 
-# ============================================================================
+# ======================================================================
 # End FRANK Git Worktree Aliases
-# ============================================================================
+# ======================================================================
