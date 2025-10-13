@@ -16,7 +16,7 @@ alias gs='git status -sb' # short git status
 # ==========================================================================
 
 # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-export WORKTREE_BASE="../new-worktree"
+export WORKTREE_BASE="../worktree"
 
 # Helper function to get main worktree path
 _get_main_worktree() {
@@ -36,6 +36,8 @@ _git_worktree_create() {
     if [ -z "$1" ]; then
         echo "Usage: gw <branch-name>"
         echo "Example: gw feat/authentication"
+        echo "         gw spike/authentication"
+        echo "         gw fix/authentication"
         return 1
     fi
 
@@ -50,7 +52,7 @@ _git_worktree_create() {
     if git worktree add "$worktree_path" "$branch_name"; then
         echo "✅ Worktree created successfully!"
         echo "To move there: wm $worktree_name"
-        echo "To setup:      cd $worktree_path && make dev && venv"
+        echo "To setup:      cd $worktree_path && make env && venv"
     else
         echo "❌ Failed to create worktree"
         return 1
@@ -64,7 +66,7 @@ _git_worktree_create_and_setup() {
     if [ -z "$1" ]; then
         echo "Usage: gwc <branch-name>"
         echo "Example: gwc feat/authentication"
-        echo "This creates the worktree AND runs 'make dev && venv'"
+        echo "This creates the worktree AND runs 'make env && venv'"
         return 1
     fi
 
@@ -84,8 +86,8 @@ _git_worktree_create_and_setup() {
         echo "📂 Changed to: $(pwd)"
 
         # Setup environment
-        echo "🔧 Running 'make dev'..."
-        if make dev; then
+        echo "🔧 Running 'make env'..."
+        if make env; then
             echo "✅ Environment setup complete!"
             echo ""
             echo "🎯 Ready to work! Run 'venv' to activate environment"
@@ -93,7 +95,7 @@ _git_worktree_create_and_setup() {
             # Try to activate (may not work in some shells, but worth trying)
             source .*/bin/activate 2>/dev/null && echo "✅ Virtual environment activated!" || echo "Run: venv"
         else
-            echo "❌ 'make dev' failed - please check errors above"
+            echo "❌ 'make env' failed - please check errors above"
             return 1
         fi
     else
@@ -122,12 +124,13 @@ _worktree_move() {
         echo "📂 Moved to: $(pwd)"
         echo "🌳 Branch: $(git branch --show-current)"
 
-        # Check if .frank exists
-        if [ -d ".frank" ]; then
-            echo "✅ Virtual environment exists (.frank/)"
-            echo "Run: venv"
+        # Check if .virtual_env exists
+        local venv_dir=$(ls -d .[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f1)
+
+        if [ -n "$venv_dir" ]; then
+            echo "✅ Virtual environment exists ($venv_dir/)"
         else
-            echo "⚠️  No virtual environment found - run: make dev"
+            echo "⚠️  No virtual environment found - create local env"
         fi
     else
         echo "❌ Worktree not found: $worktree_path"
@@ -155,10 +158,11 @@ _list_worktrees() {
             marker="👉 "
         fi
 
-        # Check if .frank exists in this worktree
+        # Check if .virtual_env exists in this worktree
+        local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f2)
         local env_status=""
-        if [ -d "$path/.frank" ]; then
-            env_status="[✅ .frank]"
+        if [ - "$path/.frank" ]; then
+            env_status="[✅ $venv_dir]"
         else
             env_status="[❌ no env]"
         fi
@@ -186,12 +190,13 @@ _back_to_main() {
     echo "📂 Back to main: $(pwd)"
     echo "🌳 Branch: $(git branch --show-current)"
 
-    # Check if .frank exists
-    if [ -d ".frank" ]; then
-        echo "✅ Virtual environment exists (.frank/)"
-        echo "Run: venv"
+    # Check if .virtual_env exists
+    local venv_dir=$(ls -d .[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f1)
+
+    if [ -n "$venv_dir" ]; then
+        echo "✅ Virtual environment exists ($venv_dir/)"
     else
-        echo "⚠️  No virtual environment found - run: make dev"
+        echo "⚠️  No virtual environment found - create local env"
     fi
 }
 
@@ -257,15 +262,17 @@ _print_worktree() {
     echo "Branch: $branch"
     echo "Main:   $is_main"
 
-    if [ -d "$worktree_path/.frank" ]; then
-        echo "Env:    ✅ .frank exists"
+    # Check if .virtual_env exists in this worktree
+    local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f2)
+    if [ -n $venv_dir ]; then
+        echo "Env:    ✅ $venv_dir exists"
         if [ -n "$VIRTUAL_ENV" ]; then
             echo "Active: ✅ $(basename $VIRTUAL_ENV)"
         else
-            echo "Active: ❌ (run: venv)"
+            echo "Active: ❌ (run: venv)"  #alias venv=source .*/bin/activate
         fi
     else
-        echo "Env:    ❌ No .frank (run: make dev)"
+        echo "Env:    ❌ No .venv (run: virtualenv .PACKAGE)"
     fi
 }
 
