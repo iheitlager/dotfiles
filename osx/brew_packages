@@ -6,6 +6,7 @@ PATH=/usr/local/bin:$PATH
 
 brew install openssl || brew upgrade openssl
 brew unlink openssl && brew link --force openssl
+brew install gnupg || brew upgrade gnupg
 # Ok, we fell for the mouse integrtion, iterm2 it is
 brew install --cask iterm2
 brew install jq || brew upgrade jq
