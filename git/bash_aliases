@@ -34,7 +34,7 @@ _get_worktree_root() {
 alias gw='_git_worktree_create'
 _git_worktree_create() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    BASE=$(basename "$(_get_main_worktree)")
     WORKTREE_BASE="../$BASE-worktree"
 
     if [ -z "$1" ]; then
@@ -68,7 +68,7 @@ _git_worktree_create() {
 alias gwc='_git_worktree_create_and_setup'
 _git_worktree_create_and_setup() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    BASE=$(basename "$(_get_main_worktree)")
     WORKTREE_BASE="../$BASE-worktree"
 
     if [ -z "$1" ]; then
@@ -118,7 +118,7 @@ _git_worktree_create_and_setup() {
 alias wm='_worktree_move'
 _worktree_move() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    BASE=$(basename "$(_get_main_worktree)")
     WORKTREE_BASE="$BASE-worktree"
 
     if [ -z "$1" ]; then
@@ -232,7 +232,7 @@ _back_to_main() {
 alias rw='_remove_worktree'
 _remove_worktree() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(git worktree list | head -n 1 | awk '{print $1}')")
+    BASE=$(basename "$(_get_main_worktree)")
     WORKTREE_BASE="../$BASE-worktree"
 
     if [ -z "$1" ]; then
