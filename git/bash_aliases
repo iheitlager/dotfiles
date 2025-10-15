@@ -16,6 +16,7 @@ alias gs='git status -sb' # short git status
 # also see aliases
 #      venv=source .*/bin/activate
 #      make env # a standard job to run virtualenv .package
+# see https://github.com/LAB271/git-worktree
 # =======================================================================
 
 # Helper function to get main worktree path
