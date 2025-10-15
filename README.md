@@ -57,7 +57,7 @@ There's a few special files in the hierarchy.
 - **topic/bash_aliases**: Any file named `bash_aliases` is loaded by .bash_profile and provides aliases available in your shell
 - **topic/bash_env**: Any file named `bash_env` is loaded by .bash_profile and provides environment variables available in your shell
 - **topic/bash_completion**: Any file named `bash_completion` is loaded by .bash_profile, is supposed to contain completion statements and is available in your shell
-- **topic/brew_packages**: Any file named `brew_packages` is executed when running `dot`, this provides a way to create HomeBrew based installers. It is adviced to also put your package managers in here (like `pip` for python and `npm` for node
+- **topic/brew_packages**: Any file named `brew_packages` is executed when running `dot`, this provides a way to create HomeBrew based installers. It is adviced to also put your package managers in here (like `pip` for python and `npm` for node)
 - **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`, this provides a way to create topical installers
 - **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
   your `$HOME`. This is to keep your files versioned in your dotfiles., while keeping them where they belong in your home directory. 
@@ -68,7 +68,3 @@ Do not forget to never checkin secrets in any of these files, use ~/.localrc for
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
 - More about the dotfile stuff: https://dotfiles.github.io/
-- Get other inspiration here: http://www.dotfiles.org/
-- TMUX basics: http://mutelight.org/practical-tmux
-- Got copy/paste to work: http://evertpot.com/osx-tmux-vim-copy-paste-clipboard/
-- Solarized theme from http://ethanschoonover.com/solarized
