@@ -21,10 +21,10 @@ $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/
 $ eval "$(/opt/homebrew/bin/brew shellenv)"    # make sure homebrew is known
 
 $ git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
-$ chsh -s /bin/bash  # we love to run bash instead of zshell
+$ chsh -s /bin/bash                            # we love to run bash instead of zshell
 $ cd ~/.dotfiles
-$ script/bootstrap # run this once to configure dotfile
-$ dot              # run this to install or upgrade packages, run anytime/anywhere
+$ script/bootstrap                             # run this once to configure dotfile
+$ dot                                          # run anywhere to install or upgrade packages
 ```
 
 NB: be sure to setup ssh and add your keys in your `.ssh/config`
