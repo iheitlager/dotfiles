@@ -196,9 +196,9 @@ _list_worktrees() {
 
         echo "${marker}${path}"
         echo "   Branch: ${branch} ${env_status}"
+        echo ""
     done
 
-    echo ""
     echo "Use: wm <name> to move to worktree"
     echo "Use: bw to return to main"
 }
@@ -290,6 +290,7 @@ _print_worktree() {
 
     echo "Current Worktree:"
     echo "================="
+    echo ""
     echo "Path:   $worktree_path"
     echo "Branch: $branch"
     echo "Main:   $is_main"
@@ -319,8 +320,9 @@ _cleanup_worktrees() {
 # Combined alias for quick workflow
 alias gww='_git_worktree_workflow'
 _git_worktree_workflow() {
-    echo "Git Worktree Quick Workflow"
+    echo "Git Worktree Quick Workflow:"
     echo "============================"
+    echo ""
     echo "1. gw <branch>   - Create worktree"
     echo "2. gwc <branch>  - Create + setup (make dev + venv)"
     echo "3. wm <name>     - Move to worktree"
@@ -334,5 +336,5 @@ _git_worktree_workflow() {
 }
 
 # ======================================================================
-# End FRANK Git Worktree Aliases
+# End Git Worktree Aliases
 # ======================================================================
