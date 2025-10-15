@@ -3,7 +3,7 @@
 ## dotfiles
 
 Your dotfiles are how you personalize your system. These are mine specific for working on OSX.
-My workflow is all about Homebrew, bash, iTerm2, vim and tmux.
+My workflow is all about Homebrew, bash, iTerm2 and vim.
 
 I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
 I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although mine is bash centric instead of zsh. 
