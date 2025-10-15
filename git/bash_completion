@@ -3,3 +3,54 @@
 if [ -f ~/.git-completion.bash ]; then
   . ~/.git-completion.bash
 fi
+
+# Bash completion for Git Worktree aliases
+
+# Helper function to get worktree names
+_get_worktree_names() {
+    local BASE=$(basename "$(git worktree list | head -1 | awk '{print $1}')" 2>/dev/null)
+    
+    # Get all worktree directories, excluding the main worktree
+    git worktree list 2>/dev/null | tail -n +2 | awk '{print $1}' | while read -r path; do
+        basename "$path"
+    done
+}
+
+# Helper function to get branch suggestions
+_get_branch_suggestions() {
+    git branch -r 2>/dev/null | grep -v '\->' | sed 's/.*origin\///' | sed 's/^[[:space:]]*//'
+    echo "feat/"
+    echo "fix/"
+    echo "bugfix/"
+    echo "spike/"
+    echo "chore/"
+    echo "stage/"
+    echo "test/"
+}
+
+# Single completion function for worktree names (wm, rw)
+_worktree_name_completion() {
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local worktrees=$(_get_worktree_names)
+    
+    # Support both dash and slash formats
+    local all_options=""
+    for wt in $worktrees; do
+        all_options="$all_options $wt"
+        all_options="$all_options $(echo "$wt" | sed 's/-/\//g')"
+    done
+    
+    COMPREPLY=($(compgen -W "$all_options" -- "$cur"))
+}
+
+# Single completion function for branch names (gw, gwc)
+_branch_name_completion() {
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local suggestions=$(_get_branch_suggestions)
+    
+    COMPREPLY=($(compgen -W "$suggestions" -- "$cur"))
+}
+
+# Register the same completion function for multiple commands
+complete -F _worktree_name_completion wm rw
+complete -F _branch_name_completion gw gwc
