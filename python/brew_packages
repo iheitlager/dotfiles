@@ -7,6 +7,8 @@ PATH=/usr/local/bin:$PATH
 
 brew install virtualenv || brew upgrade virtualenv
 brew install uv || brew upgrade uv
+brew install python@3.13 || brew upgrade python@3.13
+brew install python@3.14 || brew upgrade python@3.14
 brew install python || brew upgrade python
 brew unlink python@3.13 && brew link python@3.13
 
