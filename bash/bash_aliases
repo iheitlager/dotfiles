@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-alias more=$PAGER # bypass more to default $PAGER
+alias more=view # bypass more to default $PAGER
 alias grep='grep --color=auto -i' # auto color grep
 export GREP_COLOR="1;31"
 alias env='env | sort' # make sure env is always sorted
@@ -8,7 +8,8 @@ alias env='env | sort' # make sure env is always sorted
 alias path='echo -e ${PATH//:/\\n}' # show path nicely
 
 alias b='cd $OLDPWD' # back to previous dir
-alias l=$PAGER
+alias l=view
+alias v=vim
 alias t='tail -n 50'
 alias tf='tail -f'
 alias x='exit'
@@ -26,7 +27,9 @@ alias ...='cd ../..'
 alias cd..='cd ../'
 alias ~='cd ~'
 
-mkd () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
+_mk_cddir () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
+alias md=_mk_cddir
+alias rd='rm -rf'
 
 lkill () { ps | grep -v grep | grep "$@" | awk '{print $1}' | xargs kill; }
 
