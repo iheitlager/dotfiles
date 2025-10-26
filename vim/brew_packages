@@ -6,6 +6,7 @@ PATH=/usr/local/bin:$PATH
 
 # only want the latest and greatest
 brew install vim || brew upgrade vim
+brew install nvim || brew upgrade nvim
 
 
 export PATH=$TMPPATH

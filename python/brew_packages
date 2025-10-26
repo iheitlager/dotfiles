@@ -6,6 +6,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install virtualenv || brew upgrade virtualenv
+brew install uv || brew upgrade uv
 brew install python || brew upgrade python
 brew unlink python@3.13 && brew link python@3.13
 
