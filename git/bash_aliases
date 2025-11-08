@@ -4,8 +4,9 @@ alias g=git
 alias gh='githelp'
 alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
 alias ga='git add --all' # short hand to add all changed files
+alias gu='git reset HEAD' # unstage changes
 alias gp='git pull origin main' # pull main
-alias gc='git commit -m' # pull master
+alias gc='git commit -m' # git commit short hand
 alias pb='git push origin `git rev-parse --abbrev-ref HEAD` -f' # push back active branch
 alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f' # pull down active branch
 # upgrade your git if -sb breaks for you. it's fun.
