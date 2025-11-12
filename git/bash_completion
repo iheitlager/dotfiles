@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-if [ -f $(brew --index)/etc/bash_completion.d/.git-completion.bash ]; then
-  . $(brew --index)/etc/bash_completetion.d/.git-completion.bash
+if [ -f $HOMEBREW_PREFIX/etc/bash_completion.d/git-completion.bash ]; then
+  . $HOMEBREW_PREFIX/etc/bash_completion.d/git-completion.bash
 fi
 
 # Bash completion for Git Worktree aliases
@@ -55,4 +55,4 @@ _branch_name_completion() {
 complete -F _worktree_name_completion wm rw
 complete -F _branch_name_completion gw gwc
 __git_complete g __git_main
-__git_complete gco __git_checkout
+__git_complete gco _git_checkout
