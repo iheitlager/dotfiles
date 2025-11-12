@@ -105,11 +105,12 @@ update_prompt() {
     local venv_info=""
     local python_info=""
     local git_info=""
+    local uv_info=""
     
     # Virtual environment with snake icon - use current directory name
     if [[ -n "$VIRTUAL_ENV" ]]; then
         local project_name=$(basename "$PWD")
-        venv_info="${GREEN}📦 ${project_name}${RESET} "
+        venv_info="${GREEN}📦 ${VIRTUAL_ENV_PROMPT}${RESET} "
     fi
     
     # Python version (only show if python is available)
@@ -123,8 +124,11 @@ update_prompt() {
         git_info="${YELLOW}$(__git_ps1 "⎇ %s")${RESET}"
     fi
     
+    if [[ -f "pyproject.toml" ]] && grep -q "uv" pyproject.toml 2>/dev/null; then
+        uv_info="⚡"
+    fi 
     # Build the first line
-    local first_line="${venv_info}${python_info}${git_info}"
+    local first_line="${uv_info}${venv_info}${python_info}${git_info}"
     
     # Only show first line if there's content
     if [[ -n "$first_line" ]]; then

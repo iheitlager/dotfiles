@@ -17,3 +17,18 @@ showenv () { ls $WORKON_DIR ; }
 alias se="showenv"
 alias m="python -Wignore manage.py"
 alias venv='source .*/bin/activate'
+
+# UV completions and optimizations
+eval "$(uv generate-shell-completion bash)"
+export UV_CACHE_DIR="$HOME/.cache/uv"
+export UV_PYTHON_PREFERENCE="only-managed"  # Prefer uv-managed Python versions
+
+# UV aliases for common workflows
+alias uvs="uv sync"
+alias uvr="uv run"
+alias uva="uv add"
+alias uvad="uv add --dev"
+alias uvx="uv tool run"
+alias uvi="uv tool install"
+alias uvp="uv python install"
+alias uvl="uv python list"
