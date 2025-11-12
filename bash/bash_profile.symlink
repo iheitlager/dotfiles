@@ -67,7 +67,6 @@ path_munge() {
 # export PATH=$DOTFILES/bin:/usr/local/bin:$PATH
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
-export PATH=/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH
 
 source_files () {
     local alias_file
