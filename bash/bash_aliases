@@ -7,7 +7,7 @@ alias env='env | sort' # make sure env is always sorted
 
 alias path='echo -e ${PATH//:/\\n}' # show path nicely
 
-alias b='cd $OLDPWD' # back to previous dir
+alias b='popd' # back to previous dir
 alias l=view
 alias v=vim
 alias t='tail -n 50'
@@ -21,7 +21,7 @@ alias ll='ls -FGlAhp'
 alias ls='ls -G' #default color ls
 alias recent="ls -lAt | head"
 
-alias e.='cd $DOTFILES' # go straight to dotfiles folder
+alias e.='pushd $DOTFILES' # go straight to dotfiles folder
 alias ..='cd ../'
 alias ...='cd ../..'
 alias cd..='cd ../'
