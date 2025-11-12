@@ -124,7 +124,7 @@ update_prompt() {
         git_info="${YELLOW}$(__git_ps1 "⎇ %s")${RESET}"
     fi
     
-    if [[ -f "pyproject.toml" ]] && grep -q "uv" pyproject.toml 2>/dev/null; then
+    if [[ -f "uv.lock" ]] || ([[ -f "pyproject.toml" ]] && grep -q "uv" pyproject.toml 2>/dev/null); then
         uv_info="⚡"
     fi 
     # Build the first line
