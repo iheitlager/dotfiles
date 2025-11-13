@@ -129,11 +129,11 @@ update_prompt() {
             local behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo "0")
             
             if [[ "$ahead" -gt 0 && "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${behind} behind/${ahead} ahead]"  # e.g. "⎇ main<> 2/3"
+                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}/${GREEN}${ahead} ahead${RESET}]"  # e.g. "⎇ main<> 2/3"
             elif [[ "$ahead" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${ahead} ahead]"            # e.g. "⎇ main> 2"
+                git_prompt="${git_prompt} [${GREEN}${ahead} ahead${RESET}]"            # e.g. "⎇ main> 2"
             elif [[ "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${behind} behind]"           # e.g. "⎇ main< 3"
+                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}]"           # e.g. "⎇ main< 3"
             fi
         fi
         
