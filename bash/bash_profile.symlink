@@ -98,6 +98,7 @@ update_prompt() {
     local GREEN='\[\033[32m\]'
     local BLUE='\[\033[34m\]'
     local YELLOW='\[\033[33m\]'
+    local RED='\[\033[31m\]'
     local CYAN='\[\033[36m\]'
     local RESET='\[\033[0m\]'
     
