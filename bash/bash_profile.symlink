@@ -121,7 +121,23 @@ update_prompt() {
     
     # Git information
     if git rev-parse --git-dir > /dev/null 2>&1; then
-        git_info="${YELLOW}$(__git_ps1 "⎇ %s")${RESET}"
+        local git_prompt="$(__git_ps1 "⎇ %s")"
+        
+        # Add numeric counts to existing symbols
+        if git rev-parse --abbrev-ref @{upstream} &>/dev/null; then
+            local ahead=$(git rev-list --count @{upstream}..HEAD 2>/dev/null || echo "0")
+            local behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo "0")
+            
+            if [[ "$ahead" -gt 0 && "$behind" -gt 0 ]]; then
+                git_prompt="${git_prompt} [${behind} behind/${ahead} ahead]"  # e.g. "⎇ main<> 2/3"
+            elif [[ "$ahead" -gt 0 ]]; then
+                git_prompt="${git_prompt} [${ahead} ahead]"            # e.g. "⎇ main> 2"
+            elif [[ "$behind" -gt 0 ]]; then
+                git_prompt="${git_prompt} [${behind} behind]"           # e.g. "⎇ main< 3"
+            fi
+        fi
+        
+        git_info="${YELLOW}${git_prompt}${RESET}"
     fi
     
     if [[ -f "uv.lock" ]] || ([[ -f "pyproject.toml" ]] && grep -q "uv" pyproject.toml 2>/dev/null); then
