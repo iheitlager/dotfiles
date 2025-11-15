@@ -17,19 +17,20 @@ _gco() {
 }
 
 
-git_commit() {
+_git_commit() {
     # Run formatters if available
-    if [[ -f "uv.lock" ]] && command -v ruff > /dev/null; then
-        uv run ruff format . 2>/dev/null || ruff format . 2>/dev/null
-        uv run ruff check --fix . 2>/dev/null || ruff check --fix . 2>/dev/null
+    if [[ -f "uv.lock" ]]; then
+        uv run ruff format . 2>/dev/null 
+        uv run ruff check --fix . 2>/dev/null
     fi
     
     # Stage formatted files
     git add .
     
     # Commit with message
-    if [[ -n "$1" ]]; then
-        git commit -m "$1"
+    if [[ $# -gt 0 ]]; then
+        # Use provided arguments
+        git commit -m "$@"
     else
         git commit
     fi
