@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 export WORKON_DIR=~/.virtualenv
-export VIRTUALENV=~/.virtualenv
 
 # need this for python compilation
 export ARCHFLAGS=-Wno-error=unused-command-line-argument-hard-error-in-future

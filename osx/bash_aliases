@@ -82,3 +82,7 @@ extract () {
     echo "'$FF' is not a valid file"
   fi
 }
+
+
+# this is for pfdlatex
+eval "$(/usr/libexec/path_helper)"

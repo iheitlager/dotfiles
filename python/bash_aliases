@@ -15,8 +15,9 @@ mkenv3 () { virtualenv -p python3 --system-site-packages $WORKON_DIR/$1 ; }
 
 showenv () { ls $WORKON_DIR ; }
 alias se="showenv"
-alias m="python -Wignore manage.py"
 alias venv='source .*/bin/activate'
+alias v='source .*/bin/activate'
+alias unv='deactivate'
 
 # UV completions and optimizations
 eval "$(uv generate-shell-completion bash)"

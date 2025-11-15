@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
 
-_git_commit() {
+# a smarter checkout
+_gco() {
+    if [[ $# -gt 0 ]]; then
+        # Use provided arguments
+        git checkout "$@"
+    else
+        # Interactive selection with fzf
+        local branch=$(git branch --all --format="%(refname:short)" | grep -v HEAD | fzf --height=20% --border --prompt="Select branch: ")
+        if [[ -n "$branch" ]]; then
+            # Remove 'origin/' prefix if it's a remote branch
+            branch=${branch#origin/}
+            git checkout "$branch"
+        fi
+    fi
+}
+
+
+git_commit() {
     # Run formatters if available
-    if [[ -f "uv.lock" ]] && command -v ruff &> /dev/null; then
+    if [[ -f "uv.lock" ]] && command -v ruff > /dev/null; then
         uv run ruff format . 2>/dev/null || ruff format . 2>/dev/null
         uv run ruff check --fix . 2>/dev/null || ruff check --fix . 2>/dev/null
     fi
@@ -37,10 +54,12 @@ alias g=git
 alias gh='githelp'
 alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
 alias ga='git add --all' # short hand to add all changed files
+alias gap='git add -p' # pick and stage
 alias gb="_git_newbranch"
 alias gu='git reset HEAD' # unstage changes
 alias gp='git pull origin main' # pull main
 alias gc='_git_commit' # git commit short hand
+alias gco='_gco'
 alias pb='git push origin `git rev-parse --abbrev-ref HEAD` -f' # push back active branch
 alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f' # pull down active branch
 # upgrade your git if -sb breaks for you. it's fun.
