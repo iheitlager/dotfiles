@@ -79,6 +79,11 @@ print_help() {
     echo "  Format 3 (pre-populated values):"
     echo "    ENV_VAR_NAME=value"
     echo ""
+    echo "  Format 4 (generated keys):"
+    echo "    ENV_VAR_NAME={openssl16}  # 32-char hex string"
+    echo "    ENV_VAR_NAME={base64}     # base64-encoded 32 random bytes"
+    echo "    ENV_VAR_NAME={uuid}       # UUID v4"
+    echo ""
     echo -e "  Comment lines (starting with #) and empty lines are also copied.\n"
     
     echo -e "${BLUE}Examples:${NC}"
@@ -92,7 +97,12 @@ print_help() {
     echo ""
     echo "  # Format 3 (pre-populated)"
     echo "  LOG_LEVEL=INFO"
-    echo -e "  DEBUG=false\n"
+    echo "  DEBUG=false"
+    echo ""
+    echo "  # Format 4 (generated)"
+    echo "  SECRET_KEY={openssl16}"
+    echo "  SESSION_KEY={base64}"
+    echo -e "  REQUEST_ID={uuid}\n"
     
     echo -e "${BLUE}Usage Examples:${NC}"
     echo "  $0                    # Silent mode, search all vaults"
@@ -263,6 +273,36 @@ EOF
             # Copy empty lines directly to .env file
             echo "" >> "$ENV_FILE"
             print_debug "Added empty line to .env"
+            continue
+        fi
+        
+        # Check for generated key formats FIRST: VARIABLE={openssl16}, {base64}, or {uuid}
+        if [[ "$credential_mapping" =~ ^([A-Z_]+)=\{(openssl16|base64|uuid)\}$ ]]; then
+            env_var="${BASH_REMATCH[1]}"
+            generator="${BASH_REMATCH[2]}"
+            
+            print_debug "Generating $env_var using $generator..."
+            
+            case "$generator" in
+                openssl16)
+                    value=$(openssl rand -hex 16)
+                    ;;
+                base64)
+                    value=$(head -c 32 /dev/urandom | base64)
+                    ;;
+                uuid)
+                    value=$(python3 -c "import uuid; print(uuid.uuid4())")
+                    ;;
+            esac
+            
+            if [ -z "$value" ]; then
+                print_error "Failed to generate $env_var using $generator"
+                exit 1
+            fi
+            
+            # Append to .env file
+            echo "$env_var=$value" >> "$ENV_FILE"
+            print_debug "Added generated $env_var to .env"
             continue
         fi
         
