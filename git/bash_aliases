@@ -1,5 +1,42 @@
 #!/usr/bin/env bash
 
+print_help () {
+   printf "  \033[0;33m$1\033[0m: $2\n"
+}
+
+__git_help() {
+    printf "git commands\n------------\n"
+    print_help 'git reset --hard' 'rollback and discard all uncommitted changes'
+    print_help 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
+    print_help 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
+    print_help 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
+    print_help 'git rebase origin/main' 'rebase on current main'
+
+    printf "\naliases\n-------\n"
+    cat $DOTFILES/git/bash_aliases | grep alias | grep -v cat | grep --color=auto git
+
+    printf "\nshorthand\n---------\n"
+    print_help 'g s' 'git status'
+    print_help 'g a' 'git add .'
+    print_help 'g cm' 'git commit -m'
+    print_help 'g d' 'git diff'
+    print_help 'g rh' 'git reset --hard'
+    print_help 'g co' 'git checkout'
+    print_help 'g br' 'git branch'
+    print_help 'g last' 'git log -1 HEAD'
+    print_help 'g cane' 'git commit --amend --no-edit'
+    print_help 'g lo' 'git log --online -n 10'
+    print_help 'g pr' 'git pull --rebase'
+    print_help 'g unstage' 'git reset HEAD --'
+    print_help 'g last' 'git log -1 HEAD'
+}
+
+__git_go() {
+    git add --all
+    git commit --amend --no-edit
+    git push origin `git rev-parse --abbrev-ref HEAD` -f # push back active branch
+}
+
 # a smarter checkout
 __git_checkout() {
     if [[ $# -gt 0 ]]; then
@@ -55,22 +92,27 @@ __git_newbranch() {
 }
 
 alias g=git
-alias gh='githelp'
+alias gh='__git_help' # git help
+alias ggo='__git_go' # amend the last change
+alias gl='git log --oneline --graph --decorate --all' # pretty git log
+alias glo='git log --oneline -n 10' # short git log
+alias gd='git diff' # git diff
+alias grh='git reset --hard' # git reset hard
+alias gca='git commit --amend --no-edit' # git commit amend no edit
 alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
 alias ga='git add --all' # short hand to add all changed files
 alias gap='git add -p' # pick and stage
-alias gb="__git_newbranch"
+alias gb="__git_newbranch" # create new branch and switch to it (python based)
 alias gu='git reset HEAD' # unstage changes
 alias gp='git pull origin main' # pull main
 alias gc='__git_commit' # git commit short hand
-alias gco='__git_checkout'
+alias gco='__git_checkout' # smarter git checkout with fzf
 alias pb='git push origin `git rev-parse --abbrev-ref HEAD` -f' # push back active branch
-alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f' # pull down active branch
-# upgrade your git if -sb breaks for you. it's fun.
+alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f --rebase' # pull down active branch
 alias gs='git status -sb' # short git status
 
 # =======================================================================
-# Git Worktree Aliases
+# Git Worktree commands
 # also see aliases
 #      venv=source .*/bin/activate
 #      make env # a standard job to run virtualenv .package
@@ -125,8 +167,8 @@ __git_worktree_create() {
 
 # gwc: Git Worktree Create and setup - Create worktree + auto-setup environment
 # Usage: gwc feat/authentication
-alias gwc='___git_worktree_create_and_setup'
-___git_worktree_create_and_setup() {
+alias gwc='__git_worktree_create_and_setup'
+__git_worktree_create_and_setup() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
     BASE=$(basename "$(___git_main_worktree)")
     DIRNAME=$(dirname "$(___git_main_worktree)")
@@ -391,5 +433,5 @@ __git_worktree_workflow() {
 }
 
 # ======================================================================
-# End Git Worktree Aliases
+# End Worktree commands
 # ======================================================================
