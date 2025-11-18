@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
 
+# Old global virtual env commands
 workon () { source $WORKON_DIR/$1/bin/activate ; }
 alias wo="workon"
 
-function deactivate {
-    local venv=basename $VIRTUAL_ENV
-    export PS1=echo PS1 | sed "s/($venv)//"
-    export PATH=${PATH#$VIRTUAL_ENV}
-    unset VIRTUAL_ENV
-}    
 
 mkenv () { virtualenv --system-site-packages $WORKON_DIR/$1 ; }
 mkenv3 () { virtualenv -p python3 --system-site-packages $WORKON_DIR/$1 ; }
 
 showenv () { ls $WORKON_DIR ; }
 alias se="showenv"
-alias venv='source .*/bin/activate'
-alias v='source .*/bin/activate'
+
+# Regular virtual env handling
+function deactivate {
+    local venv=basename $VIRTUAL_ENV
+    export PS1=echo PS1 | sed "s/($venv)//"
+    export PATH=${PATH#$VIRTUAL_ENV}
+    unset VIRTUAL_ENV
+}    
 alias unv='deactivate'
 
+# the local magic
+alias venv='source .*/bin/activate'
+alias v='source .*/bin/activate'
+
 # UV completions and optimizations
-eval "$(uv generate-shell-completion bash)"
 export UV_CACHE_DIR="$HOME/.cache/uv"
 export UV_PYTHON_PREFERENCE="only-managed"  # Prefer uv-managed Python versions
 
@@ -33,3 +37,287 @@ alias uvx="uv tool run"
 alias uvi="uv tool install"
 alias uvp="uv python install"
 alias uvl="uv python list"
+
+
+# Bash function to manage outdated Python packages using uv
+# Usage:
+#   __pip_outdated          - Interactive mode with fzf to select and update packages
+#   __pip_outdated -l       - List outdated packages only
+#   __pip_outdated -c       - Generate uv add commands with version comments to stdout
+
+__pip_outdated() {
+    local mode="default"
+    
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -c)
+                mode="commands"
+                shift
+                ;;
+            -l)
+                mode="list"
+                shift
+                ;;
+            *)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: __pip_outdated [-c|-l]" >&2
+                return 1
+                ;;
+        esac
+    done
+    
+    # Check if uv is available
+    if ! command -v uv &> /dev/null; then
+        echo "Error: 'uv' command not found. Please install uv first." >&2
+        return 1
+    fi
+    
+    # Find the git root directory
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    
+    if [[ -z "$git_root" ]]; then
+        echo "Error: Not in a git repository." >&2
+        return 1
+    fi
+    
+    # Check if pyproject.toml exists in the git root
+    if [[ ! -f "$git_root/pyproject.toml" ]]; then
+        echo "Error: No 'pyproject.toml' found in the git project root ($git_root)." >&2
+        return 1
+    fi
+    
+    # Get the outdated packages list
+    local output
+    output=$(uv pip list --outdated 2>&1)
+    
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to run 'uv pip list --outdated'" >&2
+        echo "$output" >&2
+        return 1
+    fi
+    
+    # Extract the data lines (skip the first two header lines)
+    local data_lines
+    data_lines=$(echo "$output" | tail -n +3)
+    
+    if [[ -z "$data_lines" ]]; then
+        echo "No outdated packages found."
+        return 0
+    fi
+    
+    case "$mode" in
+        list)
+            # Just output the list
+            echo "$output"
+            ;;
+        commands)
+            # Generate uv add commands with comments
+            while IFS= read -r line; do
+                # Skip empty lines
+                [[ -z "$line" ]] && continue
+                
+                # Parse the line: Package Version Latest Type
+                # Example: rich    13.9.4  14.2.0 wheel
+                local package version latest type
+                read -r package version latest type <<< "$line"
+                
+                # Output the command with a comment
+                echo "uv add ${package}~=${latest}  # from ${version}"
+            done <<< "$data_lines"
+            ;;
+        default)
+            # Interactive mode with fzf
+            if ! command -v fzf &> /dev/null; then
+                echo "Error: 'fzf' command not found. Please install fzf for interactive mode." >&2
+                return 1
+            fi
+            
+            # Use fzf to select packages (multi-select enabled)
+            local selected
+            selected=$(echo "$data_lines" | fzf --multi --header="Select package(s) to update (Tab to select multiple, Enter to confirm)" --preview="echo {1} | xargs -I {} sh -c 'echo Selected: {}'")
+            
+            if [[ -z "$selected" ]]; then
+                echo "No packages selected."
+                return 0
+            fi
+            
+            # Process each selected package and execute uv add
+            while IFS= read -r line; do
+                [[ -z "$line" ]] && continue
+                
+                local package version latest type
+                read -r package version latest type <<< "$line"
+                
+                echo "Updating $package from $version to $latest..."
+                uv add "${package}~=${latest}"
+                
+                if [[ $? -eq 0 ]]; then
+                    echo "✓ Successfully updated $package to $latest"
+                else
+                    echo "✗ Failed to update $package" >&2
+                fi
+            done <<< "$selected"
+            ;;
+    esac
+}
+
+alias uvo="__pip_outdated"
+
+
+__pip_versions() {
+    local package=""
+    local limit=5
+    local add_mode=false
+    local dev_group=false
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -a)
+                add_mode=true
+                shift
+                ;;
+            -d|--dev)
+                dev_group=true
+                shift
+                ;;
+            -n|--number)
+                limit="$2"
+                shift 2
+                ;;
+            -*)
+                echo "Error: Unknown option '$1'" >&2
+                echo "Usage: __pip_versions [-a] [-d|--dev] [package] [-n|--number <count>]" >&2
+                return 1
+                ;;
+            *)
+                package="$1"
+                shift
+                ;;
+        esac
+    done
+    
+    # If -a flag is set, use fzf to select a version and add package
+    if [[ "$add_mode" == true ]]; then
+        if ! command -v fzf &> /dev/null; then
+            echo "Error: 'fzf' command not found. Please install fzf." >&2
+            return 1
+        fi
+        
+        if ! command -v jq &> /dev/null; then
+            echo "Error: 'jq' command not found. Please install jq." >&2
+            return 1
+        fi
+        
+        if ! command -v uv &> /dev/null; then
+            echo "Error: 'uv' command not found. Please install uv." >&2
+            return 1
+        fi
+        
+        # If no package name provided, search for packages
+        if [[ -z "$package" ]]; then
+            echo "Search for package name (start typing to search):"
+            package=$(echo "" | fzf --preview 'curl -s "https://pypi.org/pypi/{q}/json" | jq -r ".info.summary // \"Package: {q}\"" 2>/dev/null || echo "Searching..."' \
+                --preview-window=right:50% \
+                --bind 'change:reload(curl -s "https://pypi.org/pypi/json?q={q}" 2>/dev/null | jq -r ".results[].name" | head -20 || true)' \
+                --header="Type to search for packages on PyPI")
+            
+            if [[ -z "$package" ]]; then
+                echo "No package selected."
+                return 0
+            fi
+        fi
+        
+        # Fetch available versions and let user select one
+        echo "Fetching versions for '$package'..."
+        local versions
+        versions=$(curl -s "https://pypi.org/pypi/${package}/json" | jq -r '.releases | keys[]' | sort -Vr | head -n "$limit")
+        
+        if [[ -z "$versions" ]]; then
+            echo "Error: Package '$package' not found or has no releases on PyPI" >&2
+            return 1
+        fi
+        
+        local selected_version
+        selected_version=$(echo "$versions" | fzf --preview "echo 'Version: {}'" \
+            --header="Select version for $package to add (showing latest $limit versions)" \
+            --preview-window=right:20%)
+        
+        if [[ -z "$selected_version" ]]; then
+            echo "No version selected."
+            return 0
+        fi
+        
+        echo "Adding package: ${package}~=${selected_version}"
+        if [[ "$dev_group" == true ]]; then
+            uv add --group dev "${package}~=${selected_version}"
+        else
+            uv add "${package}~=${selected_version}"
+        fi
+        
+        if [[ $? -eq 0 ]]; then
+            if [[ "$dev_group" == true ]]; then
+                echo "✓ Successfully added ${package}~=${selected_version} to dev dependencies"
+            else
+                echo "✓ Successfully added ${package}~=${selected_version}"
+            fi
+        else
+            echo "✗ Failed to add $package" >&2
+            return 1
+        fi
+        return 0
+    fi
+    
+    # Validate package name is provided
+    if [[ -z "$package" ]]; then
+        echo "Error: Package name is required" >&2
+        echo "Usage: __pip_versions [-a] [-d|--dev] [package] [-n|--number <count>]" >&2
+        return 1
+    fi
+    
+    # Validate limit is a positive integer
+    if ! [[ "$limit" =~ ^[0-9]+$ ]] || [[ "$limit" -le 0 ]]; then
+        echo "Error: Number must be a positive integer" >&2
+        return 1
+    fi
+    
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "Error: 'jq' command not found. Please install jq." >&2
+        return 1
+    fi
+    
+    # Get installed version if available
+    local installed_version=""
+    if command -v uv &> /dev/null; then
+        installed_version=$(uv pip list 2>/dev/null | grep -i "^${package}\s" | awk '{print $2}')
+    fi
+    
+    # Fetch versions from PyPI and display
+    echo "Fetching versions for '$package' from PyPI..."
+    local versions
+    versions=$(curl -s "https://pypi.org/pypi/${package}/json" | jq -r '.releases | keys[]' | sort -Vr | head -n "$limit")
+    
+    if [[ -z "$versions" ]]; then
+        echo "Error: Package '$package' not found or has no releases on PyPI" >&2
+        return 1
+    fi
+    
+    # Display versions with installed version highlighted
+    if [[ -n "$installed_version" ]]; then
+        echo "Available versions (installed: $installed_version marked with *):"
+        echo "$versions" | while read -r version; do
+            if [[ "$version" == "$installed_version" ]]; then
+                echo "* $version"
+            else
+                echo "  $version"
+            fi
+        done
+    else
+        echo "$versions"
+    fi
+}
+
+alias pv="__pip_versions"
