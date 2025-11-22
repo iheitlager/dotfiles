@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install --cask mactex-no-gui || brew upgrade mactex-no-gui
+brew install biber || brew upgrade biber
+
+export PATH=$TMPPATH

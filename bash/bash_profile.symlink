@@ -79,7 +79,8 @@ path_munge "$DOTFILES/bin"
 eval "$(/opt/homebrew/bin/brew shellenv)"
 # do this for UV
 export PATH="$HOME/.local/bin:$PATH"     # for uv
-export PATH="/Library/TeX/texbin:$PATH"  # for pdflatex/mactex
+export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
+#eval "$(/usr/libexec/path_helper)"
 
 #ssh-add -A 2>/dev/null;
 
