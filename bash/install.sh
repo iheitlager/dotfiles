@@ -6,3 +6,6 @@ then
     echo > ~/.localrc
 fi
 chmod og-r ~/.localrc
+
+# enable Homebrew bash
+chsh -s $HOMEBREW_PREFIX/bin/bash

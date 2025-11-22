@@ -56,9 +56,9 @@ path_munge() {
 
 # set path, make /usr/local/bin preference
 # export PATH=`echo ":$PATH:" | sed -e "s#:/usr/local/bin:#:#g" -e "s/^://" -e "s/:$//"`
-# export PATH=$DOTFILES/bin:/usr/local/bin:$PATH
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
+export PATH=$DOTFILES/bin:$PATH
 
 source_files () {
     local alias_file
@@ -74,13 +74,10 @@ if [ -e ~/.localrc ] ; then
 fi
 
 
-# path_munge "/opt/homebrew/bin"
-path_munge "$DOTFILES/bin"
-eval "$(/opt/homebrew/bin/brew shellenv)"
+eval "$($HOMEBREW_PREFIX/bin/brew shellenv)"
 # do this for UV
 export PATH="$HOME/.local/bin:$PATH"     # for uv
 export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
-#eval "$(/usr/libexec/path_helper)"
 
 #ssh-add -A 2>/dev/null;
 

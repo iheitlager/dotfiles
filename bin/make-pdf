@@ -1,0 +1,297 @@
+#!/bin/bash
+
+# Default settings
+CLEANUP=false
+VERBOSE=false
+OUTDIR=""
+BIBENGINE="biber"
+PASSES=3
+OPEN_PDF=false
+SHOW_LOG=false
+KEEP_LOG=false
+
+APP_NAME=$(basename $0)
+# Function to show usage
+show_usage() {
+    cat << EOF
+Usage: $APP_NAME [OPTIONS] <filename.tex>
+
+OPTIONS:
+    -c, --clean         Clean auxiliary files after compilation
+    -v, --verbose       Show stderr output (for debugging)
+    -o, --outdir DIR    Output directory for PDF and aux files
+    -b, --bibtex        Use bibtex instead of biber
+    -p, --passes N      Number of pdflatex passes (default: 3)
+    -x, --open          Open PDF after successful compilation
+    -l, --showlog       Show last 20 lines of .log file on error
+    --keeplog           Don't delete .log files during cleanup
+    -h, --help          Show this help message
+
+Example:
+    $APP_NAME paper.tex                    # Basic compilation
+    $APP_NAME -c -x paper.tex             # Compile with cleanup and auto-open PDF
+    $APP_NAME -o build -l paper.tex       # Output to build/ directory with error details
+    $APP_NAME -b -p 2 paper.tex           # Use bibtex with 2 passes
+
+EOF
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -c|--clean)
+            CLEANUP=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -o|--outdir)
+            OUTDIR="$2"
+            shift 2
+            ;;
+        -b|--bibtex)
+            BIBENGINE="bibtex"
+            shift
+            ;;
+        -p|--passes)
+            PASSES="$2"
+            shift 2
+            ;;
+        -x|--open)
+            OPEN_PDF=true
+            shift
+            ;;
+        -l|--showlog)
+            SHOW_LOG=true
+            shift
+            ;;
+        --keeplog)
+            KEEP_LOG=true
+            shift
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+        *)
+            FILENAME="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check if filename is provided
+if [ -z "$FILENAME" ]; then
+    echo "Error: No filename provided"
+    show_usage
+    exit 1
+fi
+
+# Check if file exists
+if [ ! -f "$FILENAME" ]; then
+    echo "❌ Error: File '$FILENAME' not found"
+    exit 1
+fi
+
+# Check if required commands exist
+check_command() {
+    if ! command -v "$1" >/dev/null 2>&1; then
+        echo "❌ Error: $1 not found"
+        echo ""
+        echo "To install LaTeX on macOS:"
+        echo "  brew install --cask mactex              # Full MacTeX (4GB)"
+        echo "  brew install mactex-no-gui              # Command-line only"
+        echo ""
+        echo "To install on Linux:"
+        echo "  sudo apt install texlive-full           # Ubuntu/Debian"
+        echo "  sudo dnf install texlive-scheme-full    # Fedora"
+        echo ""
+        exit 1
+    fi
+}
+
+check_command "pdflatex"
+check_command "$BIBENGINE"
+
+# Function to run commands with optional output suppression
+run_command() {
+    if [ "$VERBOSE" = true ]; then
+        "$@"
+    else
+        "$@" >/dev/null 2>&1
+    fi
+}
+
+# Function to show LaTeX errors from log file
+show_latex_errors() {
+    local logfile="$1"
+    
+    if [ ! -f "$logfile" ]; then
+        echo "❌ No log file found at: $logfile"
+        return
+    fi
+    
+    echo ""
+    echo "📋 LaTeX Error Details:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    # Extract error lines and surrounding context
+    if grep -q "^!" "$logfile"; then
+        echo "🔍 Errors found in log:"
+        grep -A 3 -B 1 "^!" "$logfile" | head -20
+    else
+        echo "⚠️  No explicit errors found. Last 20 lines of log:"
+        tail -20 "$logfile"
+    fi
+    
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "💡 Full log file: $logfile"
+}
+
+# Get basename
+basename="${FILENAME%.tex}"
+
+# Create output directory if specified
+if [ -n "$OUTDIR" ]; then
+    mkdir -p "$OUTDIR"
+    OUTDIR_ARG="-output-directory=$OUTDIR"
+else
+    OUTDIR_ARG=""
+fi
+
+echo "📄 Compiling LaTeX document: $FILENAME"
+if [ -n "$OUTDIR" ]; then
+    echo "📁 Output directory: $OUTDIR"
+fi
+echo "🔧 Bibliography engine: $BIBENGINE"
+echo "🔄 Number of passes: $PASSES"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# First pdflatex run
+echo "🔄 Running pdflatex (1st pass)..."
+if run_command pdflatex $OUTDIR_ARG "$FILENAME"; then
+    echo "✅ First pdflatex pass completed"
+else
+    echo "❌ First pdflatex pass failed"
+    
+    if [ "$SHOW_LOG" = true ]; then
+        if [ -n "$OUTDIR" ]; then
+            show_latex_errors "$OUTDIR/$basename.log"
+        else
+            show_latex_errors "$basename.log"
+        fi
+    fi
+    exit 1
+fi
+
+# Run bibliography engine
+echo "🔄 Running $BIBENGINE for bibliography..."
+if [ -n "$OUTDIR" ]; then
+    # For output directory, we need to handle the path differently
+    bibfile="$OUTDIR/$basename"
+else
+    bibfile="$basename"
+fi
+
+if run_command "$BIBENGINE" "$bibfile"; then
+    echo "✅ $BIBENGINE completed"
+else
+    echo "❌ $BIBENGINE failed"
+    exit 1
+fi
+
+# Additional pdflatex runs
+for ((i=2; i<=PASSES; i++)); do
+    # Generate ordinal suffix
+    case $i in
+        2) suffix="nd" ;;
+        3) suffix="rd" ;;
+        *) suffix="th" ;;
+    esac
+    echo "🔄 Running pdflatex (${i}${suffix} pass)..."
+    if run_command pdflatex $OUTDIR_ARG "$FILENAME"; then
+        echo "✅ Pass $i completed"
+    else
+        echo "❌ Pass $i failed"
+        
+        if [ "$SHOW_LOG" = true ]; then
+            if [ -n "$OUTDIR" ]; then
+                show_latex_errors "$OUTDIR/$basename.log"
+            else
+                show_latex_errors "$basename.log"
+            fi
+        fi
+        exit 1
+    fi
+done
+
+# Determine PDF location
+if [ -n "$OUTDIR" ]; then
+    pdffile="$OUTDIR/$basename.pdf"
+else
+    pdffile="$basename.pdf"
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🎉 Compilation complete! Output: $pdffile"
+
+# Check if PDF was created
+if [ -f "$pdffile" ]; then
+    echo "📁 PDF file size: $(du -h "$pdffile" | cut -f1)"
+    
+    # Open PDF if requested
+    if [ "$OPEN_PDF" = true ]; then
+        echo "🚀 Opening PDF..."
+        if command -v open >/dev/null 2>&1; then
+            # macOS
+            open "$pdffile"
+        elif command -v xdg-open >/dev/null 2>&1; then
+            # Linux
+            xdg-open "$pdffile" >/dev/null 2>&1 &
+        elif command -v evince >/dev/null 2>&1; then
+            # Linux fallback
+            evince "$pdffile" >/dev/null 2>&1 &
+        else
+            echo "⚠️  Could not detect PDF viewer to open file"
+        fi
+    fi
+else
+    echo "⚠️  Warning: PDF file not found"
+fi
+
+# Cleanup auxiliary files if requested
+if [ "$CLEANUP" = true ]; then
+    echo "🧹 Cleaning up auxiliary files..."
+    
+    # Define cleanup files
+    if [ "$KEEP_LOG" = true ]; then
+        # Keep log files
+        cleanup_extensions="aux,bbl,blg,out,toc,lof,lot,fls,fdb_latexmk,synctex.gz"
+    else
+        # Remove log files too
+        cleanup_extensions="aux,bbl,blg,log,out,toc,lof,lot,fls,fdb_latexmk,synctex.gz"
+    fi
+    
+    if [ -n "$OUTDIR" ]; then
+        # Clean files in output directory
+        eval "rm -f \"$OUTDIR/$basename\".{$cleanup_extensions}"
+    else
+        # Clean files in current directory
+        eval "rm -f \"$basename\".{$cleanup_extensions}"
+    fi
+    
+    if [ "$KEEP_LOG" = true ]; then
+        echo "✅ Cleanup completed (log files preserved)"
+    else
+        echo "✅ Cleanup completed"
+    fi
+fi
+
+echo "🏁 Done!"

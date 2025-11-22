@@ -6,5 +6,6 @@ PATH=/usr/local/bin:$PATH
 
 brew install --cask mactex-no-gui || brew upgrade mactex-no-gui
 brew install biber || brew upgrade biber
+brew install --cask bibdesk || brew upgrade bibdesk
 
 export PATH=$TMPPATH
