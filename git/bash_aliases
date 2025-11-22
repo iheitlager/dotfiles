@@ -257,7 +257,7 @@ __git_worktree_move() {
 
 # lw: List Worktrees - Show all worktrees with status
 alias lw='__git_list_worktrees'
-__list_worktrees() {
+__git_list_worktrees() {
     echo "Git Worktrees:"
     echo "=============="
 
