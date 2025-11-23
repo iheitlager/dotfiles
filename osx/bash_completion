@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
 # tab completion for $WORK_DIR folders
-[[ $(ls -A $WORK_DIR) ]] && complete -o "default" -o "nospace" -W"$(ls $WORK_DIR)" cdw
+[[ $(/bin/ls -A $WORK_DIR) ]] && complete -o "default" -o "nospace" -W"$(/bin/ls $WORK_DIR)" cdw
 
