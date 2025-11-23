@@ -59,6 +59,10 @@ path_munge() {
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
 export PATH=$DOTFILES/bin:$PATH
+eval "$(/opt/homebrew/bin/brew shellenv)"
+# do this for UV
+export PATH="$HOME/.local/bin:$PATH"     # for uv
+export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
 
 source_files () {
     local alias_file
@@ -72,14 +76,6 @@ source_files () {
 if [ -e ~/.localrc ] ; then
   source ~/.localrc
 fi
-
-
-eval "$($HOMEBREW_PREFIX/bin/brew shellenv)"
-# do this for UV
-export PATH="$HOME/.local/bin:$PATH"     # for uv
-export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
-
-#ssh-add -A 2>/dev/null;
 
 source_files "bash_aliases"
 source_files "bash_env"
