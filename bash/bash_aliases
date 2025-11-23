@@ -21,7 +21,7 @@ alias path='echo -e ${PATH//:/\\n}' # show path nicely
 alias t='tail -n 50'
 alias tf='tail -f'
 alias x='exit'
-alias a='alias'
+alias a='alias | sort | bat --plain --language=bash'
 alias c='clear'
 alias e='env | sort | bat --plain --language=bash' # make sure env is always sorted
 

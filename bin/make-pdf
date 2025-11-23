@@ -20,6 +20,7 @@ PASSES=3
 OPEN_PDF=false
 SHOW_LOG=false
 KEEP_LOG=false
+CONTINUE_ON_ERROR=false
 FILENAME=""
 
 #==============================================================================
@@ -36,7 +37,8 @@ show_usage() {
 Usage: $APP_NAME [OPTIONS] <filename.tex>
 
 OPTIONS:
-    -c, --clean         Clean auxiliary files after compilation
+    -c, --continue      Continue compilation even if bibliography has errors
+    -r, --clean         Clean auxiliary files after compilation
     -v, --verbose       Show stderr output (for debugging)
     -o, --outdir DIR    Output directory for PDF and aux files
     -b, --bibtex        Use bibtex instead of biber
@@ -48,9 +50,10 @@ OPTIONS:
 
 Example:
     $APP_NAME paper.tex                    # Basic compilation
-    $APP_NAME -c -x paper.tex             # Compile with cleanup and auto-open PDF
+    $APP_NAME -r -x paper.tex             # Compile with cleanup and auto-open PDF
     $APP_NAME -o build -l paper.tex       # Output to build/ directory with error details
     $APP_NAME -b -p 2 paper.tex           # Use bibtex with 2 passes
+    $APP_NAME -c paper.tex                # Continue despite bibliography errors
 
 EOF
 }
@@ -145,7 +148,7 @@ run_bibliography() {
     # Fail if warnings were found
     if [ "$warnings_found" = true ]; then
         echo "❌ $BIBENGINE failed: missing references"
-        exit 1
+        return 1
     fi
     
     if [ $exit_code -eq 0 ]; then
@@ -185,7 +188,7 @@ open_pdf() {
 }
 
 cleanup_files() {
-    local basename="$1"
+    local basename="${1:-${FILENAME%.tex}}"
     
     if [ "$CLEANUP" = false ]; then
         return 0
@@ -196,10 +199,10 @@ cleanup_files() {
     # Define cleanup files
     if [ "$KEEP_LOG" = true ]; then
         # Keep log files
-        cleanup_extensions="aux,bbl,blg,out,toc,lof,lot,fls,fdb_latexmk,synctex.gz"
+        cleanup_extensions="aux,bbl,bcf,run.xml,thm,blg,out,toc,lof,lot,fls,fdb_latexmk,synctex.gz"
     else
         # Remove log files too
-        cleanup_extensions="aux,bbl,blg,log,out,toc,lof,lot,fls,fdb_latexmk,synctex.gz"
+        cleanup_extensions="aux,bbl,bcf,run.xml,blg,log,out,toc,lof,lot,fls,fdb_latexmk,synctex.gz"
     fi
     
     if [ -n "$OUTDIR" ]; then
@@ -282,7 +285,7 @@ run_pdflatex_pass() {
 }
 
 compile_latex() {
-    local basename="${FILENAME%.tex}"
+    local basename="${1:-${FILENAME%.tex}}"
     local outdir_arg=""
     
     # Create output directory if specified
@@ -290,15 +293,7 @@ compile_latex() {
         mkdir -p "$OUTDIR"
         outdir_arg="-output-directory=$OUTDIR"
     fi
-    
-    echo "📄 Compiling LaTeX document: $FILENAME"
-    if [ -n "$OUTDIR" ]; then
-        echo "📁 Output directory: $OUTDIR"
-    fi
-    echo "🔧 Bibliography engine: $BIBENGINE"
-    echo "🔄 Number of passes: $PASSES"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
+     
     # First pdflatex run
     run_pdflatex_pass 1 "$outdir_arg"
     
@@ -310,7 +305,7 @@ compile_latex() {
         bibfile="$basename"
     fi
     
-    if ! run_bibliography "$bibfile"; then
+    if ! run_bibliography "$bibfile" && [ "$CONTINUE_ON_ERROR" = false ]; then
         exit 1
     fi
     
@@ -332,9 +327,6 @@ compile_latex() {
     
     # Open PDF and cleanup
     open_pdf "$pdffile"
-    cleanup_files "$basename"
-    
-    echo "🏁 Done!"
 }
 
 #==============================================================================
@@ -342,9 +334,23 @@ compile_latex() {
 #==============================================================================
 
 main() {
+    local basename="${1:-${FILENAME%.tex}}"
+
     validate_input
     check_dependencies
-    compile_latex
+
+    echo "📄 Compiling LaTeX document: $FILENAME"
+    if [ -n "$OUTDIR" ]; then
+        echo "📁 Output directory: $OUTDIR"
+    fi
+    echo "🔧 Bibliography engine: $BIBENGINE"
+    echo "🔄 Number of passes: $PASSES"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    compile_latex "$basename"
+    cleanup_files "$basename"
+    
+    echo "🏁 Done!"
 }
 
 #==============================================================================
@@ -354,7 +360,11 @@ main() {
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -c|--clean)
+        -c|--continue)
+            CONTINUE_ON_ERROR=true
+            shift
+            ;;
+        -r|--clean)
             CLEANUP=true
             shift
             ;;

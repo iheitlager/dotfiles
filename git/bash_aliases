@@ -31,6 +31,7 @@ __git_help() {
     print_help 'g last' 'git log -1 HEAD'
 }
 
+# Amend the last commit and push force to current branch
 __git_go() {
     git add --all
     git commit --amend --no-edit
@@ -110,7 +111,10 @@ alias gco='__git_checkout' # smarter git checkout with fzf
 alias pb='git push origin `git rev-parse --abbrev-ref HEAD` -f' # push back active branch
 alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f --rebase' # pull down active branch
 alias gs='git status -sb' # short git status
-
+alias gf='git fetch --all --prune' # fetch all remotes and prune deleted branches
+alias grom='git rebase origin/main' # rebase on origin main
+alias gwip='git add -A && git commit -m "WIP" --no-verify'  # park everything as WIP
+alias gunwip='git reset HEAD~1' # undo WIP by uncommitting last commit
 # =======================================================================
 # Git Worktree commands
 # also see aliases
@@ -120,7 +124,7 @@ alias gs='git status -sb' # short git status
 # =======================================================================
 
 # Helper function to get main worktree path
-___git_main_worktree() {
+__git_main_worktree() {
     git worktree list | head -1 | awk '{print $1}'
 }
 
@@ -135,8 +139,8 @@ __git_worktree_root() {
 alias gw='__git_worktree_create'
 __git_worktree_create() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(___git_main_worktree)")
-    DIRNAME=$(dirname "$(___git_main_worktree)")
+    BASE=$(basename "$(__git_main_worktree)")
+    DIRNAME=$(dirname "$(__git_main_worktree)")
     WORKTREE_BASE="$DIRNAME/$BASE-worktree"
 
     if [ -z "$1" ]; then
@@ -170,8 +174,8 @@ __git_worktree_create() {
 alias gwc='__git_worktree_create_and_setup'
 __git_worktree_create_and_setup() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(___git_main_worktree)")
-    DIRNAME=$(dirname "$(___git_main_worktree)")
+    BASE=$(basename "$(__git_main_worktree)")
+    DIRNAME=$(dirname "$(__git_main_worktree)")
     WORKTREE_BASE="$DIRNAME/$BASE-worktree"
 
     if [ -z "$1" ]; then
@@ -221,8 +225,8 @@ __git_worktree_create_and_setup() {
 alias wm='__git_worktree_move'
 __git_worktree_move() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(___git_main_worktree)")
-    DIRNAME=$(dirname "$(___git_main_worktree)")
+    BASE=$(basename "$(__git_main_worktree)")
+    DIRNAME=$(dirname "$(__git_main_worktree)")
     WORKTREE_BASE="$DIRNAME/$BASE-worktree"
 
     if [ -z "$1" ]; then
@@ -303,7 +307,7 @@ __git_list_worktrees() {
 # bw: Back to main Worktree
 alias bw='__git_worktree_back_to_main'
 __git_worktree_back_to_main() {
-    local main_path=$(___git_main_worktree)
+    local main_path=$(__git_main_worktree)
 
     if [ -z "$main_path" ]; then
         echo "❌ Could not find main worktree"
@@ -329,7 +333,7 @@ __git_worktree_back_to_main() {
 alias rw='__git_remove_worktree'
 __git_remove_worktree() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(___git_main_worktree)")
+    BASE=$(basename "$(__git_main_worktree)")
     WORKTREE_BASE="../$BASE-worktree"
 
     if [ -z "$1" ]; then
