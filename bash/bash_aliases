@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 
 alias more=$PAGER # bypass more to default $PAGER
-alias grep='grep --color=auto -i' # auto color grep
 export GREP_COLOR="1;31"
+export GREP_OPTIONS="--color=always -i"
+export LS_COLORS="di=34:ln=35:so=32:pi=33:ex=31:bd=34;46:cd=34;43:su=30;41:sg=30;46:tw=30;42:ow=30;43"
 alias env='env | sort' # make sure env is always sorted
+
+# Universal help formatter
+help() {
+    if [ $# -eq 0 ]; then
+        # Show shell built-in help
+        builtin help | bat --plain --language=help
+    else
+        # Format command help
+        "$@" --help 2>&1 | bat --plain --language=help
+    fi
+}
 
 alias path='echo -e ${PATH//:/\\n}' # show path nicely
 
-alias b='popd' # back to previous dir
 alias l=$PAGER
 alias t='tail -n 50'
 alias tf='tail -f'
@@ -20,6 +31,10 @@ alias ll='ls -FGlAhp'
 alias ls='ls -G' #default color ls
 alias recent="ls -lAt | head"
 
+alias info="tldr"
+alias man="tldr"
+
+alias b='popd' # back to previous dir
 alias e.='pushd $DOTFILES' # go straight to dotfiles folder
 alias ..='cd ../'
 alias ...='cd ../..'

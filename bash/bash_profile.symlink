@@ -17,6 +17,9 @@ export GIT_PS1_SHOWCOLORHINTS=1      # Enable color hints
 
 export PAGER=`which delta`
 export EDITOR=`which vim`
+export MANPAGER="bat --plain --language=man --paging=always"
+export CLICOLOR=1
+export LESS='-R --use-color'
 
 export HISTCONTROL=ignoreboth:erasedups
 export HISTSIZE=5000
