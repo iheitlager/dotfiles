@@ -20,7 +20,7 @@ brew install readline || brew upgrade readline
 pipx install podman-compose || pipx upgrade podman-compose
 
 # minio
-brew install minio/stable/mc || brew upgrade minio/stable/mc
+# brew install minio/stable/mc || brew upgrade minio/stable/mc
 
 #pip install ansible
 
