@@ -14,8 +14,9 @@ export GIT_PS1_SHOWSTASHSTATE=1      # $ for stashes
 export GIT_PS1_SHOWUNTRACKEDFILES=1  # % for untracked files
 #export GIT_PS1_SHOWUPSTREAM="auto"   # <, >, = for upstream comparison
 export GIT_PS1_SHOWCOLORHINTS=1      # Enable color hints
+export GIT_PAGER="delta --dark --line-numbers --side-by-side"
 
-export PAGER=`which delta`
+export PAGER=`which less`
 export EDITOR=`which vim`
 export MANPAGER="bat --plain --language=man --paging=always"
 export CLICOLOR=1
@@ -60,12 +61,12 @@ path_munge() {
 # set path, make /usr/local/bin preference
 # export PATH=`echo ":$PATH:" | sed -e "s#:/usr/local/bin:#:#g" -e "s/^://" -e "s/:$//"`
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-export PATH="/opt/local/bin:/opt/local/sbin:$PATH"
-export PATH=$DOTFILES/bin:$PATH
-eval "$(/opt/homebrew/bin/brew shellenv)"
-# do this for UV
-export PATH="$HOME/.local/bin:$PATH"     # for uv
+
 export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
+export PATH="$HOME/.local/bin:$PATH"     # for uv
+#export PATH="/opt/local/bin:/opt/local/sbin:$PATH"  # MacPorts
+eval "$(/opt/homebrew/bin/brew shellenv)"  # Homebrew
+export PATH=$DOTFILES/bin:$PATH
 
 source_files () {
     local alias_file
