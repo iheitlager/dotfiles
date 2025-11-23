@@ -82,3 +82,27 @@ extract () {
     echo "'$FF' is not a valid file"
   fi
 }
+
+# Quick file search
+ff() {
+    if command -v fd &> /dev/null; then
+        fd "$@"
+    else
+        find . -iname "*$1*"
+    fi
+}
+
+# Quick grep in files
+gg() {
+    if command -v rg &> /dev/null; then
+        rg --color=always "$@"
+    else
+        grep -r "$@" .
+    fi
+}
+
+alias myip='curl -s ifconfig.me && echo'
+alias localip='ipconfig getifaddr en0'
+# perl works best for this command
+alias ports='lsof -iTCP -sTCP:LISTEN -n -P | bat -p --language=perl'
+

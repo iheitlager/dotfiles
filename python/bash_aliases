@@ -1,17 +1,79 @@
 #!/usr/bin/env bash
 
+
+
+
+__python_clean() {
+    echo "Cleaning up Python build, test and bytecode files..."
+    find . -type f -name "*.pyc" -exec rm -f {} +
+    find . -type d -name "__pycache__" -exec rm -rf {} +
+    echo "✓ binary files and caches removed."
+	rm -rf dist
+	rm -rf build    
+	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+    echo "✓ build directories removed."
+	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name .ruff_cache -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name htmlcov -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name ".coverage" -delete    
+    echo "✓ Python cleanup completed."
+}
+
+alias pyclean=__python_clean
+
+# Regular virtual env handling
 # Old global virtual env commands
 workon () { source $WORKON_DIR/$1/bin/activate ; }
 alias wo="workon"
 
-
+# Create new virtual env
 mkenv () { virtualenv --system-site-packages $WORKON_DIR/$1 ; }
 mkenv3 () { virtualenv -p python3 --system-site-packages $WORKON_DIR/$1 ; }
 
-showenv () { ls $WORKON_DIR ; }
+showenv () {
+    # Show current active virtual environment
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        echo "Current environment: $VIRTUAL_ENV"
+        echo ""
+    fi
+    
+    # Check if in a git project
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    
+    if [[ -n "$git_root" ]]; then
+        echo "Git project root: $git_root"
+        
+        # Look for virtual environment in project
+        local venv_path=""
+        if [[ -f "$git_root/.venv/bin/activate" ]]; then
+            venv_path="$git_root/.venv"
+        elif [[ -f "$git_root/venv/bin/activate" ]]; then
+            venv_path="$git_root/venv"
+        elif [[ -f "$git_root/env/bin/activate" ]]; then
+            venv_path="$git_root/env"
+        fi
+        
+        if [[ -n "$venv_path" ]]; then
+            local venv_info="Project virtual environment: $venv_path"
+            
+            # Check if uv is used
+            if ([[ -f "$git_root/uv.lock" ]] || ([[ -f "$git_root/pyproject.toml" ]] && grep -q "uv" "$git_root/pyproject.toml" 2>/dev/null)); then
+                venv_info="⚡$venv_info"
+            fi
+            
+            echo "$venv_info"
+        else
+            echo "No project virtual environment found"
+        fi
+        echo ""
+    fi
+    
+    echo "Available global virtual environments:"
+    ls $WORKON_DIR | grep -v "pyvenv.cfg"
+}
 alias se="showenv"
 
-# Regular virtual env handling
 function deactivate {
     local venv=basename $VIRTUAL_ENV
     export PS1=echo PS1 | sed "s/($venv)//"
@@ -32,7 +94,7 @@ export UV_PYTHON_PREFERENCE="only-managed"  # Prefer uv-managed Python versions
 alias uvs="uv sync"
 alias uvr="uv run"
 alias uva="uv add"
-alias uvad="uv add --dev"
+alias uvad="uv add --group=dev"
 alias uvx="uv tool run"
 alias uvi="uv tool install"
 alias uvp="uv python install"

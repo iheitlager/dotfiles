@@ -6,6 +6,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install python || brew upgrade python
+brew install pipx || brew upgrade pipx
 brew install virtualenv || brew upgrade virtualenv
 brew install uv || brew upgrade uv
 # we rely on uv noe
@@ -15,6 +16,8 @@ brew install uv || brew upgrade uv
 # brew unlink python@3.13 && brew link python@3.13
 
 brew install readline || brew upgrade readline
+
+pipx install podman-compose || pipx upgrade podman-compose
 
 # minio
 brew install minio/stable/mc || brew upgrade minio/stable/mc

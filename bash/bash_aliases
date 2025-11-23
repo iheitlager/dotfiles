@@ -17,6 +17,10 @@ help() {
 }
 
 alias path='echo -e ${PATH//:/\\n}' # show path nicely
+alias now='date +"%Y-%m-%d_%H-%M-%S"'
+alias today='date +"%Y-%m-%d"'
+alias week='date +%V'
+alias sizeof='du -sh'
 
 alias t='tail -n 50'
 alias tf='tail -f'
@@ -34,7 +38,7 @@ alias l='eza -F --color=always'
 # Traditional ls with enhanced colors (fallback)
 alias lsold='/bin/ls --color=always'
 export LSCOLORS="GxFxCxDxBxegedabagaced"
-alias recent="ls -lAt | head"
+alias lr="ls -lAt | head"
 
 alias info="tldr"
 
@@ -42,20 +46,25 @@ alias b='popd' # back to previous dir
 alias e.='pushd $DOTFILES' # go straight to dotfiles folder
 alias ..='cd ../'
 alias ...='cd ../..'
+alias ....='cd ../../..'
+alias -- -='cd -'  # go back to previous directory
 alias cd..='cd ../'
 alias ~='cd ~'
 
-_mk_cddir () { mkdir -p "$@" && cd "$_" ; } # create a go into dir
-alias md=_mk_cddir
+_mk_cddir () { mkdir -p "$@" && cd "$_" || return ; } # create a go into dir
+alias mkcd=_mk_cddir
 alias rd='rm -rf'
 
 lkill () { ps | grep -v grep | grep "$@" | awk '{print $1}' | xargs kill; }
 
+cheat() {
+    curl -s "cheat.sh/$1" | bat --plain --language=help
+}
+
+
 alias first='head -n1'
 alias second="awk 'NR==2'"
 alias third="awk 'NR==3'"
-
-alias myip="ifconfig en0 | sed -n 's/.*inet \([0-9.]*\).*/\1/p'"
 
 __bash_history() {
     local HELP_CMD="cat"

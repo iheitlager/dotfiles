@@ -9,6 +9,7 @@ brew install docker-buildx  || brew upgrade docker-buildx
 brew install docker-compose  || brew upgrade docker-compose
 brew install docker-completion || brew upgrade docker-completion
 brew install colima || brew upgrade colima
+brew install podman || brew upgrade podman
 
 mkdir -p ~/.docker/cli-plugins
 ln -sfn $(which docker-buildx) ~/.docker/cli-plugins/docker-buildx

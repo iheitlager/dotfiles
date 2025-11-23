@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+
+# clean all docker files
+__docker_clean() {
+	echo "Cleaning up Docker resources..."
+	docker images | grep "localhost:" | awk '{print $$3}' | xargs docker rmi -f 2>/dev/null || true
+	docker rm -f $(docker ps -aq) 2>/dev/null || true
+	docker rmi -f $(docker images -aq) 2>/dev/null || true
+	docker volume prune -f 2>/dev/null || true
+	docker network prune -f 2>/dev/null || true
+	docker system prune -a -f --volumes 2>/dev/null || true
+	echo "✓ Docker cleanup completed"
+}
+
+
+alias dclean=__docker_clean

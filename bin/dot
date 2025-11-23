@@ -1,12 +1,113 @@
 #!/usr/bin/env bash
 # Install homebrew packages
+BREWFILE=~/.local/Brewfile
 
-# make sure we get the password early
-sudo -v
+# Trap Ctrl-C and exit cleanly
+trap 'echo ""; echo "❌ Installation interrupted by user"; exit 130' INT
+
+show_usage() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+    
+    $HELP << EOF
+Usage: dot [OPTIONS]
+
+OPTIONS:
+    -n, --new         Force regeneration of Brewfile and install
+    -x, --export      Only create Brewfile without installing
+    -s, --skip        Skip using brew bundle, force package installation
+    -v, --verbose     Show verbose output during operations
+    -f, --file PATH   Specify custom Brewfile location (default: ~/.local/Brewfile)
+    -h, --help        Show this help message
+
+Example:
+    dot                           # Install using existing Brewfile
+    dot -n                        # Regenerate Brewfile and install
+    dot -x                        # Export current installations to Brewfile
+    dot -v -n                     # Verbose output with new installation
+    dot -f ~/my-brewfile          # Use custom Brewfile location
+
+EOF
+}
+
+# Parse command line arguments
+USE_NEW=false
+EXPORT_ONLY=false
+SKIP_BUNDLE=false
+VERBOSE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -n|--new)
+            USE_NEW=true
+            shift
+            ;;
+        -x|--export)
+            EXPORT_ONLY=true
+            shift
+            ;;
+        -s|--skip)
+            SKIP_BUNDLE=true
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -f|--file)
+            BREWFILE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
 
 if [[ -z $DOTFILES ]]  
 then
-    echo "DOTFILES variable not set, exiting"
+    echo "❌ DOTFILES variable not set, exiting"
+    exit 1
+fi
+
+# Check if export-only mode
+if [[ "$EXPORT_ONLY" == true ]]; then
+    echo "📝 Exporting current Homebrew installations to Brewfile..."
+    if [[ "$VERBOSE" == true ]]; then
+        brew bundle dump --file="$BREWFILE" --force --verbose
+    else
+        brew bundle dump --file="$BREWFILE" --force
+    fi
+    echo "✅ Brewfile generated at $BREWFILE"
+    exit 0
+fi
+
+
+
+
+# Check if Brewfile exists and --new flag is not set and --skip flag is not set
+if [[ -f "$BREWFILE" && "$USE_NEW" == false && "$SKIP_BUNDLE" == false ]]; then
+    echo "📦 Using existing Brewfile: $BREWFILE"
+    echo "🔄 Installing packages from Brewfile..."
+    if [[ "$VERBOSE" == true ]]; then
+        brew bundle --file="$BREWFILE" --verbose
+    else
+        brew bundle --file="$BREWFILE"
+    fi
+    exit 0
+fi
+
+# make sure we get the password early
+if ! sudo -v; then
+    echo "❌ sudo authentication failed or was cancelled"
     exit 1
 fi
 
@@ -16,6 +117,20 @@ source $DOTFILES/homebrew/brew_install.sh 2>&1 || exit 1
 # now process all topical brew packages
 for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
 do
-    echo "  Processing installer: $src"
-    source "${src}" 2>&1 || exit 1
+    echo "🔄 Processing installer: $src"
+    if [[ "$VERBOSE" == true ]]; then
+        source "${src}" 2>&1 || exit 1
+    else
+        source "${src}" >/dev/null 2>&1 || exit 1
+    fi
 done
+
+# Finally, export the Brewfile
+echo "📝 Exporting current Homebrew installations to Brewfile..."
+if [[ "$VERBOSE" == true ]]; then
+    brew bundle dump --file="$BREWFILE" --force --verbose
+else
+    brew bundle dump --file="$BREWFILE" --force
+fi
+echo "✅ Brewfile generated at $BREWFILE"
+echo "✅ All done!"

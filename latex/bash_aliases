@@ -1,1 +1,12 @@
+#!/usr/bin/env bash
+
+
 alias bibdesk="open /Applications/BibDesk.app"
+
+__latex_clean() {
+    echo "Cleaning up LaTeX auxiliary files..."
+    find . -type f \( -name "*.aux" -o -name "*.log" -o -name "*.out" -o -name "*.toc" -o -name "*.bbl" -o -name "*.blg" -o -name "*.fls" -o -name "*.fdb_latexmk" \) -exec rm -f {} +
+    echo "✓ LaTeX cleanup completed"
+}
+
+alias texclean=__latex_clean
