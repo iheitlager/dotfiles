@@ -126,6 +126,12 @@ run_bibliography() {
         echo "📚 Bibliography database: $bibdb"
     fi
     
+    # Extract citekey count
+    if echo "$output" | grep -q "INFO - Found .* citekeys in bib section"; then
+        local citekey_count=$(echo "$output" | grep "INFO - Found .* citekeys in bib section" | sed 's/.*Found \([0-9]*\) citekeys.*/\1/')
+        echo "📖 Found $citekey_count citekeys in the document"
+    fi
+    
     # Check for missing reference warnings
     local warnings_found=false
     while IFS= read -r line; do

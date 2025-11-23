@@ -230,7 +230,6 @@ EOF
             
             if [[ -n "$clean_cmd" ]]; then
                 echo "Executing: $clean_cmd"
-                echo "----------------------------------------"
                 
                 # Add to history and execute
                 history -s "$clean_cmd"
