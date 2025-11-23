@@ -37,7 +37,6 @@ export LSCOLORS="GxFxCxDxBxegedabagaced"
 alias recent="ls -lAt | head"
 
 alias info="tldr"
-alias man="tldr"
 
 alias b='popd' # back to previous dir
 alias e.='pushd $DOTFILES' # go straight to dotfiles folder

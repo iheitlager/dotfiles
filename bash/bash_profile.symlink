@@ -18,7 +18,7 @@ export GIT_PAGER="delta --dark --line-numbers --side-by-side"
 
 export PAGER=`which less`
 export EDITOR=`which vim`
-export MANPAGER="bat --plain --language=man --paging=always"
+export MANPAGER="col -b | bat --plain --language=man"
 export CLICOLOR=1
 export LESS='-R --use-color'
 
