@@ -2,4 +2,4 @@
 
 eval "$(uv generate-shell-completion bash)"
 complete -o "nospace" -W "python" killall;
-eval "`pip3 completion --bash`"
+eval "$(pip3 completion --bash)"

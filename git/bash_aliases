@@ -6,6 +6,8 @@ print_help () {
 
 __git_help() {
     printf "git commands\n------------\n"
+    print_help 'cheat git' 'small cheat sheet of common git commands'
+    print_help 'info git' 'smallest cheat sheet of git commands'
     print_help 'git reset --hard' 'rollback and discard all uncommitted changes'
     print_help 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
     print_help 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
@@ -13,29 +15,20 @@ __git_help() {
     print_help 'git rebase origin/main' 'rebase on current main'
 
     printf "\naliases\n-------\n"
-    cat $DOTFILES/git/bash_aliases | grep alias | grep -v cat | grep --color=auto git
+    cat $DOTFILES/git/bash_aliases | grep alias | grep -v cat | grep -v sed | grep --color=auto git
 
     printf "\nshorthand\n---------\n"
-    print_help 'g s' 'git status'
-    print_help 'g a' 'git add .'
-    print_help 'g cm' 'git commit -m'
-    print_help 'g d' 'git diff'
-    print_help 'g rh' 'git reset --hard'
-    print_help 'g co' 'git checkout'
-    print_help 'g br' 'git branch'
-    print_help 'g last' 'git log -1 HEAD'
-    print_help 'g cane' 'git commit --amend --no-edit'
-    print_help 'g lo' 'git log --online -n 10'
-    print_help 'g pr' 'git pull --rebase'
-    print_help 'g unstage' 'git reset HEAD --'
-    print_help 'g last' 'git log -1 HEAD'
+
+    sed -n '/^\[alias\]/,/^\[/p' ~/.gitconfig | \
+      grep -E '^[[:space:]]+[a-z]+ = ' | \
+      awk -F' = ' '{gsub(/[[:space:]]+/, "", $1); printf "g %s\033[0m -> git %s\n", $1, $2}'
 }
 
 # Amend the last commit and push force to current branch
 __git_go() {
     git add --all
     git commit --amend --no-edit
-    git push origin `git rev-parse --abbrev-ref HEAD` -f # push back active branch
+    git push origin $(git rev-parse --abbrev-ref HEAD) -f # push back active branch
 }
 
 # a smarter checkout
@@ -93,7 +86,7 @@ __git_newbranch() {
 }
 
 alias g=git
-alias gh='__git_help' # git help
+alias gh='__git_help | less' # git help
 alias ggo='__git_go' # amend the last change
 alias gl='git log --oneline --graph --decorate --all' # pretty git log
 alias glo='git log --oneline -n 10' # short git log
