@@ -42,12 +42,11 @@ alias lr="ls -lAt | head"
 
 alias info="tldr"
 
-alias b='popd' # back to previous dir
+alias b='popd 2> /dev/null || cd -' # back to previous dir
 alias e.='pushd $DOTFILES' # go straight to dotfiles folder
 alias ..='cd ../'
 alias ...='cd ../..'
 alias ....='cd ../../..'
-alias -- -='cd -'  # go back to previous directory
 alias cd..='cd ../'
 alias ~='cd ~'
 

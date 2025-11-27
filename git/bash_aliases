@@ -217,20 +217,28 @@ __git_worktree_create_and_setup() {
 #        wm bugfix-issue-123
 alias wm='__git_worktree_move'
 __git_worktree_move() {
-    # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
-    BASE=$(basename "$(__git_main_worktree)")
-    DIRNAME=$(dirname "$(__git_main_worktree)")
-    WORKTREE_BASE="$DIRNAME/$BASE-worktree"
-
+    local worktree_path=""
     if [ -z "$1" ]; then
-        echo "Usage: wm <worktree-name>"
-        _list_worktrees
-        return 1
+        local selected=$(git worktree list | fzf --height=20% --border --prompt="Select worktree: ")
+        if [ -n "$selected" ]; then
+            local worktree_path=$(echo "$selected" | awk '{print $1}')
+            local main_path=$(__git_main_worktree)
+
+            if [ "$worktree_path" == "$main_path" ]; then
+                __git_worktree_back_to_main
+                return
+            fi
+        fi
     fi
 
-
-    local worktree_name=$(echo "$1" | sed 's/\//-/g')
-    local worktree_path="${WORKTREE_BASE}/${worktree_name}"
+    if [ -n "$1" ]; then
+        BASE=$(basename "$(__git_main_worktree)")
+        DIRNAME=$(dirname "$(__git_main_worktree)")
+        # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
+        WORKTREE_BASE="$DIRNAME/$BASE-worktree"
+        local worktree_name=$(echo "$1" | sed 's/\//-/g')
+        local worktree_path="${WORKTREE_BASE}/${worktree_name}"1
+    fi
 
     if [ -d "$worktree_path" ]; then
         cd "$worktree_path" || return 1
@@ -238,22 +246,44 @@ __git_worktree_move() {
         echo "🌳 Branch: $(git branch --show-current)"
 
         # Check if .virtual_env exists
-        local venv_dir=$(ls -d .[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f1)
+        venv_dir=$(ls -d .[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f1)
 
-        if [ -d "$venv_dir" ]; then
+        if [[ -n "$venv_dir" ]]; then
             echo "✅ Virtual environment exists ($venv_dir/)"
         else
             echo "⚠️  No virtual environment found - create local env"
         fi
     else
         echo "❌ Worktree not found: $worktree_path"
-        _list_worktrees
+        __git_list_worktrees
         return 1
     fi
 }
 
 # lw: List Worktrees - Show all worktrees with status
-alias lw='__git_list_worktrees'
+alias lw='__git_list_worktree'
+alias lwl='__git_list_worktrees'  # detailed list
+
+__git_list_worktree() {
+    if [ -z "$1" ]; then
+        local current_path=$(__git_worktree_root)
+
+        git worktree list | while IFS= read -r line; do
+            local path=$(echo "$line" | awk '{print $1}')
+            local branch=$(echo "$line" | awk '{print $3}' | tr -d '[]')
+            local marker="  "
+            [ "$path" = "$current_path" ] && marker="👉 "
+            echo "${marker}${path} [${branch}]"
+        done
+    elif [[ "$1" == "-v" ]]; then
+        __git_list_worktrees
+        return
+    else
+        echo "Usage: lw [-v]"
+        return 1    
+    fi
+}
+
 __git_list_worktrees() {
     echo "Git Worktrees:"
     echo "=============="
@@ -312,7 +342,7 @@ __git_worktree_back_to_main() {
     echo "🌳 Branch: $(git branch --show-current)"
 
     # Check if .virtual_env exists
-    local venv_dir=$(ls -d .[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f1)
+    local venv_dir=$(ls -d .[^.]*/bin/activate 2>/dev/null | head -n1 | cut -d'/' -f1)
 
     if [ -n "$venv_dir" ]; then
         echo "✅ Virtual environment exists ($venv_dir/)"
@@ -390,7 +420,7 @@ __git_print_worktree() {
     echo "Main:   $is_main"
 
     # Check if .virtual_env exists in this worktree
-    local venv_dir=$(ls -d $path/.[^.]*/bin/python 2>/dev/null | head -n1 | cut -d'/' -f2)
+    local venv_dir=$(ls -d $path/.[^.]*/bin/activate 2>/dev/null | head -n1 | cut -d'/' -f2)
     if [ -n $venv_dir ]; then
         echo "Env:    ✅ $venv_dir exists"
         if [ -n "$VIRTUAL_ENV" ]; then
