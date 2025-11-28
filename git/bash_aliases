@@ -1,38 +1,14 @@
 #!/usr/bin/env bash
 
-print_help () {
-   printf "  \033[0;33m$1\033[0m: $2\n"
-}
-
-__git_help() {
-    printf "git commands\n------------\n"
-    print_help 'cheat git' 'small cheat sheet of common git commands'
-    print_help 'info git' 'smallest cheat sheet of git commands'
-    print_help 'git reset --hard' 'rollback and discard all uncommitted changes'
-    print_help 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
-    print_help 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
-    print_help 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
-    print_help 'git rebase origin/main' 'rebase on current main'
-
-    printf "\naliases\n-------\n"
-    cat $DOTFILES/git/bash_aliases | grep alias | grep -v cat | grep -v sed | grep --color=auto git
-
-    printf "\nshorthand\n---------\n"
-
-    sed -n '/^\[alias\]/,/^\[/p' ~/.gitconfig | \
-      grep -E '^[[:space:]]+[a-z]+ = ' | \
-      awk -F' = ' '{gsub(/[[:space:]]+/, "", $1); printf "g %s\033[0m -> git %s\n", $1, $2}'
-}
-
 # Amend the last commit and push force to current branch
-__git_go() {
+_git_go() {
     git add --all
     git commit --amend --no-edit
     git push origin $(git rev-parse --abbrev-ref HEAD) -f # push back active branch
 }
 
 # a smarter checkout
-__git_checkout() {
+_git_checkout() {
     if [[ $# -gt 0 ]]; then
         # Use provided arguments
         git checkout "$@"
@@ -48,7 +24,7 @@ __git_checkout() {
 }
 
 
-__git_commit() {
+_git_commit() {
     # Run formatters if available
     local repo_root=$(git rev-parse --show-toplevel)
     if command -v uv &> /dev/null && [[ -f "$repo_root/pyproject.toml" ]]; then
@@ -69,10 +45,10 @@ __git_commit() {
 }
 
 # Branch management for Python projects
-__git_newbranch() {
+_git_newbranch() {
     local branch_name="$1"
     if [[ -z "$branch_name" ]]; then
-        echo "Usage: __git_newbranch <branch-name>"
+        echo "Usage: _git_newbranch <branch-name>"
         return 1
     fi
     
@@ -86,8 +62,8 @@ __git_newbranch() {
 }
 
 alias g=git
-alias gh='__git_help | less' # git help
-alias ggo='__git_go' # amend the last change
+alias gh='githelp | less' # git help
+alias ggo='_git_go' # amend the last change
 alias gl='git log --oneline --graph --decorate --all' # pretty git log
 alias glo='git log --oneline -n 10' # short git log
 alias gd='git diff' # git diff
@@ -96,11 +72,11 @@ alias gca='git commit --amend --no-edit' # git commit amend no edit
 alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
 alias ga='git add --all' # short hand to add all changed files
 alias gap='git add -p' # pick and stage
-alias gb="__git_newbranch" # create new branch and switch to it (python based)
+alias gb="_git_newbranch" # create new branch and switch to it (python based)
 alias gu='git reset HEAD' # unstage changes
 alias gp='git pull origin main' # pull main
-alias gc='__git_commit' # git commit short hand
-alias gco='__git_checkout' # smarter git checkout with fzf
+alias gc='_git_commit' # git commit short hand
+alias gco='_git_checkout' # smarter git checkout with fzf
 alias pb='git push origin `git rev-parse --abbrev-ref HEAD`' # push back active branch
 alias pd='git pull origin `git rev-parse --abbrev-ref HEAD` -f --rebase' # pull down active branch
 alias gs='git status -sb' # short git status
@@ -108,6 +84,7 @@ alias gf='git fetch --all --prune' # fetch all remotes and prune deleted branche
 alias grom='git rebase origin/main' # rebase on origin main
 alias gwip='git add -A && git commit -m "WIP" --no-verify'  # park everything as WIP
 alias gunwip='git reset HEAD~1' # undo WIP by uncommitting last commit
+
 # =======================================================================
 # Git Worktree commands
 # also see aliases
@@ -129,8 +106,8 @@ __git_worktree_root() {
 # gw: Git Worktree - Create new worktree
 # Usage: gw feat/authentication
 #        gw bugfix/issue-123
-alias gw='__git_worktree_create'
-__git_worktree_create() {
+alias gw='_git_worktree_create' # create new worktree
+_git_worktree_create() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
     BASE=$(basename "$(__git_main_worktree)")
     DIRNAME=$(dirname "$(__git_main_worktree)")
@@ -164,8 +141,8 @@ __git_worktree_create() {
 
 # gwc: Git Worktree Create and setup - Create worktree + auto-setup environment
 # Usage: gwc feat/authentication
-alias gwc='__git_worktree_create_and_setup'
-__git_worktree_create_and_setup() {
+alias gwc='_git_worktree_create_and_setup' # create worktree + setup environment
+_git_worktree_create_and_setup() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
     BASE=$(basename "$(__git_main_worktree)")
     DIRNAME=$(dirname "$(__git_main_worktree)")
@@ -215,8 +192,8 @@ __git_worktree_create_and_setup() {
 # wm: Worktree Move - Move to a worktree
 # Usage: wm feat-authentication
 #        wm bugfix-issue-123
-alias wm='__git_worktree_move'
-__git_worktree_move() {
+alias wm='_git_worktree_move' # move to worktree
+_git_worktree_move() {
     local worktree_path=""
     if [ -z "$1" ]; then
         local selected=$(git worktree list | fzf --height=20% --border --prompt="Select worktree: ")
@@ -225,7 +202,7 @@ __git_worktree_move() {
             local main_path=$(__git_main_worktree)
 
             if [ "$worktree_path" == "$main_path" ]; then
-                __git_worktree_back_to_main
+                _git_worktree_back_to_main
                 return
             fi
         fi
@@ -255,16 +232,16 @@ __git_worktree_move() {
         fi
     else
         echo "❌ Worktree not found: $worktree_path"
-        __git_list_worktrees
+        _git_list_worktrees
         return 1
     fi
 }
 
 # lw: List Worktrees - Show all worktrees with status
-alias lw='__git_list_worktree'
-alias lwl='__git_list_worktrees'  # detailed list
+alias lw='_git_list_worktree' # list worktrees
+alias lwl='_git_list_worktrees'  # detailed list
 
-__git_list_worktree() {
+_git_list_worktree() {
     if [ -z "$1" ]; then
         local current_path=$(__git_worktree_root)
 
@@ -276,7 +253,7 @@ __git_list_worktree() {
             echo "${marker}${path} [${branch}]"
         done
     elif [[ "$1" == "-v" ]]; then
-        __git_list_worktrees
+        _git_list_worktrees
         return
     else
         echo "Usage: lw [-v]"
@@ -284,7 +261,7 @@ __git_list_worktree() {
     fi
 }
 
-__git_list_worktrees() {
+_git_list_worktrees() {
     echo "Git Worktrees:"
     echo "=============="
 
@@ -328,8 +305,8 @@ __git_list_worktrees() {
 }
 
 # bw: Back to main Worktree
-alias bw='__git_worktree_back_to_main'
-__git_worktree_back_to_main() {
+alias bw='_git_worktree_back_to_main' # back to main worktree
+_git_worktree_back_to_main() {
     local main_path=$(__git_main_worktree)
 
     if [ -z "$main_path" ]; then
@@ -353,8 +330,8 @@ __git_worktree_back_to_main() {
 
 # rw: Remove Worktree
 # Usage: rw feat-authentication
-alias rw='__git_remove_worktree'
-__git_remove_worktree() {
+alias rw='_git_remove_worktree' # remove worktree
+_git_remove_worktree() {
     # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
     BASE=$(basename "$(__git_main_worktree)")
     WORKTREE_BASE="../$BASE-worktree"
@@ -400,8 +377,8 @@ __git_remove_worktree() {
 }
 
 # pw: Print current Worktree path
-alias pw='__git_print_worktree'
-__git_print_worktree() {
+alias pw='_git_print_worktree' # print current worktree info
+_git_print_worktree() {
     local worktree_path=$(__git_worktree_root)
 
     if [ -z "$worktree_path" ]; then
@@ -434,16 +411,16 @@ __git_print_worktree() {
 }
 
 # cw: Cleanup removed Worktrees
-alias cw='__git_cleanup_worktrees'
-__cleanup_worktrees() {
+alias cw='_git_cleanup_worktrees' # cleanup pruned worktrees
+_git_cleanup_worktrees() {
     echo "Pruning removed worktrees..."
     git worktree prune -v
     echo "✅ Cleanup complete"
 }
 
 # Combined alias for quick workflow
-alias gww='__git_worktree_workflow'
-__git_worktree_workflow() {
+alias gww='_git_worktree_workflow' # show worktree workflow
+_git_worktree_workflow() {
     echo "Git Worktree Quick Workflow:"
     echo "============================"
     echo ""

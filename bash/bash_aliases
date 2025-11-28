@@ -65,7 +65,7 @@ alias first='head -n1'
 alias second="awk 'NR==2'"
 alias third="awk 'NR==3'"
 
-__bash_history() {
+_bash_history() {
     local HELP_CMD="cat"
     if command -v bat >/dev/null 2>&1; then
         HELP_CMD="bat --plain --language=help"
@@ -74,7 +74,7 @@ __bash_history() {
     # Function to show usage
     show_usage() {
         $HELP_CMD << 'EOF'
-Usage: __bash_history [OPTIONS] [HISTORY_OPTIONS]
+Usage: _bash_history [OPTIONS] [HISTORY_OPTIONS]
 
 A sophisticated history viewer with syntax highlighting, search, and selection capabilities.
 
@@ -96,21 +96,21 @@ HISTORY_OPTIONS:
     NUMBER              Show only the last NUMBER entries
 
 EXAMPLES:
-    __bash_history                    # Show last 10 commands with syntax highlighting
-    __bash_history 50                # Show last 50 commands
-    __bash_history -g "git"          # Show ALL commands containing "git" (full history)
-    __bash_history -g "^sudo"        # Show ALL commands starting with "sudo" (full history)
-    __bash_history 50 -g "cat"       # Show last 50 commands containing "cat"
-    __bash_history -s                # Interactive selection with fzf (from last 10)
-    __bash_history -s -g "docker"    # Interactive selection of ALL docker commands
-    __bash_history -g "npm" -s       # Interactive selection of ALL npm commands
-    __bash_history -w                # Write current session to history file
-    __bash_history -d 1050           # Delete history entry 1050
+    _bash_history                   # Show last 10 commands with syntax highlighting
+    _bash_history 50                # Show last 50 commands
+    _bash_history -g "git"          # Show ALL commands containing "git" (full history)
+    _bash_history -g "^sudo"        # Show ALL commands starting with "sudo" (full history)
+    _bash_history 50 -g "cat"       # Show last 50 commands containing "cat"
+    _bash_history -s                # Interactive selection with fzf (from last 10)
+    _bash_history -s -g "docker"    # Interactive selection of ALL docker commands
+    _bash_history -g "npm" -s       # Interactive selection of ALL npm commands
+    _bash_history -w                # Write current session to history file
+    _bash_history -d 1050           # Delete history entry 1050
 
 NOTE:
     Default behavior shows the last 10 history entries for better readability.
     When using -g/--grep, searches through FULL history unless a number is specified.
-    Use a number argument to limit: __bash_history 100 or __bash_history 50 -g "pattern"
+    Use a number argument to limit: _bash_history 100 or _bash_history 50 -g "pattern"
     
     The -s option extracts and executes the actual command from the selected
     history line, preserving the exact command text as displayed.
@@ -150,7 +150,7 @@ EOF
                     i=$((i+1))  # Skip next argument (the pattern)
                 else
                     echo "Error: -g/--grep requires a pattern argument" >&2
-                    echo "Use __bash_history --help for usage information" >&2
+                    echo "Use _bash_history --help for usage information" >&2
                     return 1
                 fi
                 ;;
@@ -262,6 +262,6 @@ EOF
 }
 
 # Create convenient aliases
-alias h='__bash_history'
-alias hs='__bash_history -s'
-alias hg='__bash_history -g'
+alias h='_bash_history'
+alias hs='_bash_history -s'
+alias hg='_bash_history -g'
