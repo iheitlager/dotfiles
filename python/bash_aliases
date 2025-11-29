@@ -83,8 +83,8 @@ function deactivate {
 alias unv='deactivate'
 
 # the local magic
-alias venv='source .*/bin/activate'
-alias v='source .*/bin/activate'
+alias venv='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
+alias v='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
 
 # UV completions and optimizations
 export UV_CACHE_DIR="$HOME/.cache/uv"
