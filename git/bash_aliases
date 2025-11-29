@@ -28,17 +28,17 @@ _git_commit() {
     # Run formatters if available
     local repo_root=$(git rev-parse --show-toplevel)
     if command -v uv &> /dev/null && [[ -f "$repo_root/pyproject.toml" ]]; then
-        uv run ruff format . 2>/dev/null 
-        uv run ruff check --fix . 2>/dev/null
+        uv run ruff format
+        uv run ruff check --fix
     fi
     
     # Stage formatted files
-    git add .
+    git add --all
     
     # Commit with message
     if [[ $# -gt 0 ]]; then
         # Use provided arguments
-        git commit -m "$@"
+        git commit -m "$*"
     else
         git commit
     fi
@@ -63,11 +63,11 @@ _git_newbranch() {
 
 alias g=git
 alias gh='githelp | less' # git help
-alias gr='cd $(git rev-parse --show-toplevel) && pwd'
+alias gr='cd $(git rev-parse --show-toplevel) && pwd'  # Go back to this git repo root
 alias ggo='_git_go' # amend the last change and push
 alias gl='git log --oneline --graph --decorate --all' # pretty git log
 alias glo='git log --oneline -n 10' # short git log
-alias gd='git diff' # git diff
+alias gd='git dif' # git diff
 alias grh='git reset --hard' # git reset hard
 alias gca='git commit --amend --no-edit' # git commit amend no edit
 alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches

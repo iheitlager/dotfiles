@@ -105,13 +105,12 @@ update_prompt() {
     local venv_info=""
     local python_info=""
     local git_info=""
-    local uv_info=""
 
     # Virtual environment with snake icon - use current directory name
     if [[ -n "$VIRTUAL_ENV" ]]; then
         local git_root="${VIRTUAL_ENV%/*}"
         local project_name=$(basename "$git_root")
-        venv_info="${GREEN}📦 ${project_name}${RESET} "
+        venv_info="${YELLOW}📦 ${project_name}${RESET} "
         if ([[ -f "$git_root/uv.lock" ]] || ([[ -f "$git_root/pyproject.toml" ]] && grep -q "uv" "$git_root/pyproject.toml" 2>/dev/null)); then
             venv_info="⚡$venv_info"
         fi
@@ -120,7 +119,7 @@ update_prompt() {
     # Python version (only show if python is available)
     if command -v python &> /dev/null; then
         local py_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-        python_info="${BLUE}🐍 py${py_version}${RESET} "
+        python_info="${RED}🐍 py${py_version}${RESET} "
     fi
     
     # Git information
@@ -141,11 +140,10 @@ update_prompt() {
             fi
         fi
         
-        git_info="${YELLOW}${git_prompt}${RESET}"
     fi
     
     # Build the first line
-    local first_line="${venv_info}${python_info}${git_info}"
+    local first_line="${venv_info}${python_info}${git_prompt}"
     
     # Only show first line if there's content
     if [[ -n "$first_line" ]]; then
