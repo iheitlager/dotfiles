@@ -100,6 +100,7 @@ update_prompt() {
     local RED='\[\033[31m\]'
     local CYAN='\[\033[36m\]'
     local RESET='\[\033[0m\]'
+    local MAGENTA='\[\033[35m\]'
     
     # First line components
     local venv_info=""
@@ -118,7 +119,7 @@ update_prompt() {
     
     # Python version (only show if python is available)
     if command -v python &> /dev/null; then
-        local py_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+        local py_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
         python_info="${RED}🐍 py${py_version}${RESET} "
     fi
     
@@ -143,11 +144,14 @@ update_prompt() {
     fi
     
     # Build the first line
-    local first_line="${venv_info}${python_info}${git_prompt}"
+    local first_line="${venv_info}${python_info}"
+    if [[ -n "$git_prompt" ]]; then
+        first_line="${first_line}\[${git_prompt}\]"
+    fi
     
     # Only show first line if there's content
     if [[ -n "$first_line" ]]; then
-        PS1="${first_line}\n${CYAN}[\W] >${RESET} "
+        PS1="${first_line}\n${MAGENTA}\w>${RESET} "
     else
         PS1="${CYAN}[\W] >${RESET} "
     fi

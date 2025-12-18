@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# a smarter checkout
+
+if [[ $# -gt 0 ]]; then
+    # Use provided arguments
+    git checkout "$@"
+else
+    # Interactive selection with fzf
+    branch=$(git branch --all --format="%(refname:short)" | grep -v HEAD | grep -v origin | fzf --height=20% --border --prompt="Select branch: ")
+    if [[ -n "$branch" ]]; then
+        # Remove 'origin/' prefix if it's a remote branch
+        branch=${branch#origin/}
+        git checkout "$branch"
+    fi
+fi

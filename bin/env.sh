@@ -336,7 +336,7 @@ EOF
             exit_code=$?
         else
             print_debug "Running: op item get \"$item_name\" --field \"$field_name\""
-            value=$(op item get "$item_name" --field "$field_name" 2>&1)
+            value=$(op item get "$item_name" --field "$field_name" --reveal 2>&1)
             exit_code=$?
         fi
         

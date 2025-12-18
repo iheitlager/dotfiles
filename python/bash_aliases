@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-
-
-
 __python_clean() {
     echo "Cleaning up Python build, test and bytecode files..."
     find . -type f -name "*.pyc" -exec rm -f {} +

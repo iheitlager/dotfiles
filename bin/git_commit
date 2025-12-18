@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -x  # Enable debug mode (prints commands as they execute)
+
+# fuller git commit workflow for python projects
+
+echo "Running git commit with formatting..."
+# Run formatters if available
+if git rev-parse --git-dir &> /dev/null; then
+    git_root=$(git rev-parse --show-toplevel)
+    if command -v uv &> /dev/null && [[ -f "$git_root/pyproject.toml" ]]; then
+        echo "formatting."
+        uv run ruff format "$git_root"
+        uv run ruff check "$git_root" --fix
+    else
+        echo "uv not found or pyproject.toml missing, skipping formatting."
+    fi
+else
+    echo "Not a git repository, skipping formatting."
+    exit 1   
+fi
+
+# # Stage formatted files
+# git add --all
+
+# # Commit with message
+# if [[ $# -gt 0 ]]; then
+#     # Use provided arguments
+#     git commit -m "$*"
+# else
+#     git commit
+# fi

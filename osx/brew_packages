@@ -4,6 +4,7 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
+brew install jless || brew upgrade jless
 brew install openssl || brew upgrade openssl
 brew unlink openssl && brew link --force openssl
 brew install gnupg || brew upgrade gnupg
