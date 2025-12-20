@@ -49,6 +49,8 @@ alias ...='cd ../..'
 alias ....='cd ../../..'
 alias cd..='cd ../'
 alias ~='cd ~'
+alias pwdc='pwd | pbcopy'  # current dir to buffer
+alias cdp='cd $(pbpaste)'  # cd buffer
 
 _mk_cddir () { mkdir -p "$@" && cd "$_" || return ; } # create a go into dir
 alias mkcd=_mk_cddir
