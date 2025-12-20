@@ -79,9 +79,107 @@ function deactivate {
 }    
 alias unv='deactivate'
 
+# Virtual environment activation function with caching
+venv_activate() {
+    local CACHE_FILE="$HOME/.venv_latest"
+    
+    # Handle -v option to clear cache
+    if [[ "$1" == "-v" ]]; then
+        cat $CACHE_FILE
+        return 0
+    fi
+    # Handle -c option to clear cache
+    if [[ "$1" == "-c" ]]; then
+        if [[ -f "$CACHE_FILE" ]]; then
+            rm "$CACHE_FILE"
+            echo "Cache cleared: $CACHE_FILE"
+        else
+            echo "No cache to clear"
+        fi
+        return 0
+    fi
+    
+    # Function to find venv in a directory
+    find_venv() {
+        local dir="$1"
+        local venv_path=""
+        
+        # Check common virtual environment locations
+        for venv_dir in .venv venv env .env; do
+            if [[ -d "$dir/$venv_dir" && -f "$dir/$venv_dir/bin/activate" ]]; then
+                venv_path="$dir/$venv_dir/bin/activate"
+                break
+            fi
+        done
+        
+        # Check for any directory containing bin/activate
+        if [[ -z "$venv_path" ]]; then
+            local found=$(find "$dir" -maxdepth 2 -name activate -path "*/bin/activate" 2>/dev/null | head -n1)
+            if [[ -n "$found" ]]; then
+                venv_path="$found"
+            fi
+        fi
+        
+        echo "$venv_path"
+    }
+    
+    # Check if we're in a git repository
+    local git_root=$(git rev-parse --show-toplevel 2>/dev/null)
+    
+    if [[ -n "$git_root" ]]; then
+        # We are in a git repository
+        echo "In git repository: $git_root"
+        
+        # Look for virtual environment
+        local venv_path=$(find_venv "$git_root")
+        
+        if [[ -n "$venv_path" ]]; then
+            # Option 1: Git repo with virtual env -> activate and cache
+            echo "Found virtual environment: $venv_path"
+            echo "$venv_path" > "$CACHE_FILE"
+            source "$venv_path"
+            echo "Activated and cached: $(which python)"
+        else
+            # Option 2: Git repo without virtual env -> try cache
+            echo "No virtual environment found in git repository"
+            if [[ -f "$CACHE_FILE" ]] && [[ -s "$CACHE_FILE" ]]; then
+                local cached_venv=$(cat "$CACHE_FILE")
+                if [[ -f "$cached_venv" ]]; then
+                    echo "Activating from cache: $cached_venv"
+                    source "$cached_venv"
+                    echo "Activated: $(which python)"
+                else
+                    echo "Cached virtual environment no longer exists: $cached_venv"
+                fi
+            else
+                echo "No virtual environment in cache"
+            fi
+        fi
+    else
+        # Option 3: Not in a git repo -> try cache
+        echo "Not in a git repository"
+        if [[ -f "$CACHE_FILE" ]] && [[ -s "$CACHE_FILE" ]]; then
+            local cached_venv=$(cat "$CACHE_FILE")
+            if [[ -f "$cached_venv" ]]; then
+                echo "Activating from cache: $cached_venv"
+                source "$cached_venv"
+                echo "Activated: $(which python)"
+            else
+                echo "Cached virtual environment no longer exists: $cached_venv"
+            fi
+        else
+            # Option 4: Nothing in cache
+            echo "No virtual environment in cache"
+        fi
+    fi
+}
+
+# Create aliases
+alias v='venv_activate'
+alias venv='venv_activate'
 # the local magic
-alias venv='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
-alias v='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
+#alias venv='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
+#alias v='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
 
 # UV completions and optimizations
 export UV_CACHE_DIR="$HOME/.cache/uv"
