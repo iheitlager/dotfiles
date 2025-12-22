@@ -136,7 +136,7 @@ venv_activate() {
         if [[ -n "$venv_path" ]]; then
             # Option 1: Git repo with virtual env -> activate and cache
             echo "Found virtual environment: $venv_path"
-            echo "$venv_path" > "$CACHE_FILE"
+            echo "$venv_path" >| "$CACHE_FILE"
             source "$venv_path"
             echo "Activated and cached: $(which python)"
         else
