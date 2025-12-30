@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+
+# timeout - run a command with a time limit (pure bash implementation)
+
+usage() {
+    cat <<EOF
+Usage: timeout [OPTION]... DURATION COMMAND [ARG]...
+
+Run COMMAND, and send a signal if it runs longer than DURATION.
+
+Options:
+  -s, --signal=SIGNAL    signal to send (default: TERM)
+  -k, --kill-after=DUR   send KILL signal if still running after DUR
+  -p, --preserve-status  preserve exit status of the command
+  -v, --verbose          print signal sent to stderr
+  -h, --help             show this help
+
+DURATION is a number with optional suffix: s (seconds), m (minutes), h (hours), d (days)
+EOF
+    exit 0
+}
+
+parse_duration() {
+    local dur="$1"
+    local num="${dur%[smhd]}"
+    local suffix="${dur##*[0-9.]}"
+    
+    # Default to seconds if no suffix
+    [[ -z "$suffix" ]] && suffix="s"
+    
+    case "$suffix" in
+        s) echo "$num" ;;
+        m) echo "$(echo "$num * 60" | bc)" ;;
+        h) echo "$(echo "$num * 3600" | bc)" ;;
+        d) echo "$(echo "$num * 86400" | bc)" ;;
+        *) echo "Invalid duration: $dur" >&2; exit 1 ;;
+    esac
+}
+
+# Defaults
+SIGNAL="TERM"
+KILL_AFTER=""
+PRESERVE_STATUS=false
+VERBOSE=false
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -s|--signal)
+            SIGNAL="$2"; shift 2 ;;
+        --signal=*)
+            SIGNAL="${1#*=}"; shift ;;
+        -k|--kill-after)
+            KILL_AFTER="$2"; shift 2 ;;
+        --kill-after=*)
+            KILL_AFTER="${1#*=}"; shift ;;
+        -p|--preserve-status)
+            PRESERVE_STATUS=true; shift ;;
+        -v|--verbose)
+            VERBOSE=true; shift ;;
+        -h|--help)
+            usage ;;
+        --)
+            shift; break ;;
+        -*)
+            echo "Unknown option: $1" >&2; exit 1 ;;
+        *)
+            break ;;
+    esac
+done
+
+if [[ $# -lt 2 ]]; then
+    echo "timeout: missing operand" >&2
+    echo "Try 'timeout --help' for more information." >&2
+    exit 1
+fi
+
+DURATION="$1"
+shift
+CMD=("$@")
+
+TIMEOUT_SECS=$(parse_duration "$DURATION")
+[[ -n "$KILL_AFTER" ]] && KILL_AFTER_SECS=$(parse_duration "$KILL_AFTER")
+
+# Run command in background
+"${CMD[@]}" &
+CMD_PID=$!
+
+TIMED_OUT=false
+KILLED=false
+
+# Watcher process: sends initial signal after timeout
+(
+    sleep "$TIMEOUT_SECS"
+    kill -s "$SIGNAL" "$CMD_PID" 2>/dev/null
+) &
+WATCHER_PID=$!
+
+# Kill-after watcher if specified
+if [[ -n "$KILL_AFTER" ]]; then
+    (
+        sleep "$(echo "$TIMEOUT_SECS + $KILL_AFTER_SECS" | bc)"
+        kill -s KILL "$CMD_PID" 2>/dev/null
+    ) &
+    KILL_WATCHER_PID=$!
+fi
+
+# Wait for command to finish
+wait "$CMD_PID" 2>/dev/null
+EXIT_CODE=$?
+
+# Check if command was signaled (exit code > 128)
+if [[ $EXIT_CODE -gt 128 ]]; then
+    TIMED_OUT=true
+    RECEIVED_SIGNAL=$((EXIT_CODE - 128))
+    [[ $RECEIVED_SIGNAL -eq 9 ]] && KILLED=true
+fi
+
+# Cleanup watchers
+kill "$WATCHER_PID" 2>/dev/null
+wait "$WATCHER_PID" 2>/dev/null
+if [[ -n "$KILL_WATCHER_PID" ]]; then
+    kill "$KILL_WATCHER_PID" 2>/dev/null
+    wait "$KILL_WATCHER_PID" 2>/dev/null
+fi
+
+# Verbose output
+if $VERBOSE && $TIMED_OUT; then
+    if $KILLED; then
+        echo "timeout: sending signal KILL to command '${CMD[*]}'" >&2
+    else
+        echo "timeout: sending signal $SIGNAL to command '${CMD[*]}'" >&2
+    fi
+fi
+
+# Determine exit code
+if $PRESERVE_STATUS; then
+    exit $EXIT_CODE
+elif $TIMED_OUT; then
+    exit 124
+else
+    exit $EXIT_CODE
+fi
