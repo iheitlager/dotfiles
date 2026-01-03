@@ -35,6 +35,11 @@ alias la='eza -a --color=always --group-directories-first'
 alias lt='eza --tree --color=always --git-ignore --level=3'
 alias l='eza -F --color=always'
 
+lsort() {
+  local col=${2:-5}  # Default column 5 (date), or pass as second arg
+  eza -la --color=always --header --git "$1" | (read header; echo "$header"; sort -h -k "$col")
+}
+
 # Traditional ls with enhanced colors (fallback)
 alias lsold='/bin/ls --color=always'
 export LSCOLORS="GxFxCxDxBxegedabagaced"
