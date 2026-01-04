@@ -34,6 +34,8 @@ alias gd='git diff' # git diff
 alias grh='git reset --hard' # git reset hard
 alias gca='git commit --amend --no-edit' # git commit amend no edit
 alias cb='git branch --merged main | grep -v "\* main" | xargs -n 1 git branch -d' # clear all merged branches
+# clear all remotely merged branches
+alias cab="git fetch --prune && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs git branch -D"
 alias ga='git add --all' # short hand to add all changed files
 alias gap='git add -p' # pick and stage
 alias gb="_git_newbranch" # create new branch and switch to it (python based)
