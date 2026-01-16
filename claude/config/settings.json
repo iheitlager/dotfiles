@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo:*)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -m pytest:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(python -c:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(python etc/validate_db_schema.py)",
+      "Bash(wc:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run python:*)",
+      "Bash(git checkout:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rebase:*)",
+      "Bash(uv sync:*)",
+      "Bash(timeout 3 uv run:*)",
+      "Bash(make test:*)",
+      "Bash(user query\"\n   - No mounted widgets, pure markdown rendering\n\n3. Created _render_execution_result_with_prompt\\(\\) that combines:\n   - Formatted prompt block at the top\n   - Full 4-section narrative \\(Reasoning → Actions → Results → Answer\\)\n   - Timing footer\n\n4. Added _last_persona tracking to preserve persona through the workflow\n\nResult: Single unified markdown display with:\n- Prompt block with persona indicator\n- Analysis sections below\n- No duplicated content\n- Clean, consistent appearance\n\nCo-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git revert:*)",
+      "Bash(git restore:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)",
+      "Bash(tree:*)",
+      "Bash([ ! -f /Users/iheitlager/wc/code-analyzer/tests/integration/python/test_definition.py ])",
+      "Bash([ ! -f /Users/iheitlager/wc/code-analyzer/docs/FLUENT_TESTS_SUMMARY.md ])",
+      "Bash(.venv/bin/mkdocs build:*)",
+      "Bash(git stash:*)",
+      "Bash(head:*)"    
+    ]
+  }
+}

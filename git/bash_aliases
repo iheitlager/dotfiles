@@ -178,7 +178,7 @@ _git_worktree_move() {
         # WORKTREE_BASE: Base directory for all worktrees (relative to repo root)
         WORKTREE_BASE="$DIRNAME/$BASE-worktree"
         local worktree_name=$(echo "$1" | sed 's/\//-/g')
-        local worktree_path="${WORKTREE_BASE}/${worktree_name}"1
+        local worktree_path="${WORKTREE_BASE}/${worktree_name}"
     fi
 
     if [ -d "$worktree_path" ]; then

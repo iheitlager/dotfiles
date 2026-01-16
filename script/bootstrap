@@ -2,6 +2,9 @@
 #
 # bootstrap prepares the environment with dotfiles
 # taken from https://github.com/holman/dotfiles
+#
+# XDG Base Directory Specification:
+# https://specifications.freedesktop.org/basedir-spec/latest/
 
 starttime=$(date +"%s")
 
@@ -31,6 +34,29 @@ success () {
 fail () {
   printf "\r\033[2K  [\033[0;31mFAIL\033[0m] $1\n"
   echo ''
+}
+
+# Create XDG Base Directory structure
+# See: https://specifications.freedesktop.org/basedir-spec/latest/
+setup_xdg_dirs () {
+  info 'setting up XDG directories\n'
+
+  local xdg_dirs=(
+    "$HOME/.config"       # XDG_CONFIG_HOME - user configuration files
+    "$HOME/.local/share"  # XDG_DATA_HOME   - user data files
+    "$HOME/.local/state"  # XDG_STATE_HOME  - user state (logs, history)
+    "$HOME/.cache"        # XDG_CACHE_HOME  - non-essential cached data
+    "$HOME/.local/bin"    # User executables (not in XDG spec, but common convention)
+  )
+
+  for dir in "${xdg_dirs[@]}"; do
+    if [ ! -d "$dir" ]; then
+      mkdir -p "$dir"
+      success "created $dir"
+    else
+      success "exists $dir"
+    fi
+  done
 }
 
 # git gitconfig generator, drop the file to generate a new one
@@ -170,6 +196,7 @@ run_installers () {
   success "all installers done"
 }
 
+setup_xdg_dirs
 setup_gitconfig
 install_brew_packages
 install_dotfiles
