@@ -1,589 +1,155 @@
-# ADR Documentation Strategy - Code Analyzer
+# ADR Documentation Strategy
 
 ## Overview
 
-The code-analyzer project uses **Architecture Decision Records (ADRs)** to document major design decisions. There are **17 ADRs total**, with **13 validated through empirical testing** and 3 in design phase.
+This skill provides a comprehensive approach to documenting **Architecture Decision Records (ADRs)**—lightweight, living documents that capture significant architectural decisions and their rationale.
 
 ## What is an ADR?
 
-An ADR is a lightweight document that records a significant architectural decision, including:
-- **Context**: Why the decision was needed
-- **Decision**: What was decided
-- **Consequences**: Impacts (positive and negative)
-- **Alternatives Considered**: Other options evaluated
+An ADR is a concise document that records a significant architectural, technical, or design decision, including:
+- **Context**: Why the decision was needed (problem/constraint)
+- **Decision**: What was decided and why
+- **Consequences**: Impacts (positive, negative, tradeoffs)
+- **Alternatives Considered**: Other options evaluated and why they were rejected
 - **Status**: Proposed/Accepted/Superseded/Deprecated
-- **Validation**: How the decision was validated
+- **Validation**: How/when the decision was validated or will be validated
 
-**Philosophy**: ADRs are living documentation—updated as understanding evolves and decisions are validated.
+**Philosophy**: ADRs are living documentation—updated as understanding evolves and decisions are validated through implementation and testing.
 
-## ADR Repository Structure
+## Recommended ADR Repository Structure
 
 ```
 docs/adr/
-├── index.md                  # Master index with status summary
-├── 0001-core_architecture.md # Individual ADRs (numbered)
-├── 0002-four_layer_model.md
-├── ... (0003-0017) ...
+├── README.md                 # ADR documentation guide and index
+├── index.md                  # Summary table of all ADRs with status
+├── 0001-<decision-name>.md   # Individual ADRs (zero-padded numbering)
+├── 0002-<decision-name>.md
+├── ... (continue numbering) ...
 ├── templates/
-│   ├── adr-template.md       # Standard ADR template
-│   └── plan-template.md      # Implementation plan template
-└── README.md                 # ADR documentation guide
+│   ├── adr-template.md       # Blank ADR template for new decisions
+│   └── implementation-template.md  # Optional: Implementation plan template
+└── CONTRIBUTING.md           # Guidelines for writing/updating ADRs
 ```
 
-## The 17 ADRs
+## ADR Template Structure
 
-### Architecture & Core (ADR-0001 to ADR-0002)
-
-#### **ADR-0001: Four-Layer Architecture**
-
-**Status**: ✅ Accepted & Validated
-
-**Context**: Need to support static analysis across multiple programming languages without duplicating logic for each language.
-
-**Decision**: Implement a four-layer architecture:
-1. **Parser Layer**: Language-specific AST parsers
-2. **Metadata Layer**: Language-agnostic Symbol, Import, Metadata models
-3. **Storage Layer**: NetworkX graphs and PostgreSQL persistence
-4. **Query Layer**: Graph algorithms and analysis tools
-
-```
-┌─────────────────────────────────────┐
-│  Language-Specific Parsers          │
-│  (Python, Go, Java, Rust, ...)      │
-└──────────────┬──────────────────────┘
-               ↓ (extract symbols)
-┌─────────────────────────────────────┐
-│  Language-Agnostic Models           │
-│  (Symbol, Import, Metadata)         │
-└──────────────┬──────────────────────┘
-               ↓ (construct graph)
-┌─────────────────────────────────────┐
-│  Storage Layer                      │
-│  (NetworkX Graph, PostgreSQL)       │
-└──────────────┬──────────────────────┘
-               ↓ (query)
-┌─────────────────────────────────────┐
-│  Analysis & Tools                   │
-│  (Graph algorithms, metrics, etc)   │
-└─────────────────────────────────────┘
-```
-
-**Validation**: Spike 001 (348 tests) + real parsing of code-analyzer project
-
-**Implementation**: `src/code_analyzer/core/`, `src/code_analyzer/parsers/`
-
-#### **ADR-0002: SourceParser Base Class Pattern**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: All language parsers inherit from abstract `SourceParser` base class, ensuring consistent interface.
-
-**Interface**:
-```python
-class SourceParser(ABC):
-    @abstractmethod
-    def parse_file(self, file_path: str) -> CodeGraph: pass
-
-    @abstractmethod
-    def extract_symbols(self, source_code: str) -> List[Symbol]: pass
-
-    @abstractmethod
-    def extract_imports(self, source_code: str) -> List[Import]: pass
-```
-
-**Validation**: Spike 002 (Python parser implementation)
-
-**Implementation**: `src/code_analyzer/parsers/base.py`, `src/code_analyzer/parsers/python.py`, etc.
-
-### Parsing & Analysis (ADR-0004 to ADR-0007)
-
-#### **ADR-0004: Multi-Language Parsing Framework**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Support parsing via:
-- **Tree-sitter** for languages with grammars (Go, Java, JavaScript, Rust)
-- **Native AST** for languages with built-in parsing (Python)
-- **Custom parsers** for specialized formats (Makefile, TOML, YAML)
-
-**Coverage**:
-
-| Language | Method | Completeness |
-|----------|--------|--------------|
-| Python | AST | 100% (full introspection) |
-| Go | tree-sitter | 95% (via tree-sitter-go) |
-| Java | tree-sitter | 90% (via tree-sitter-java) |
-| JavaScript | tree-sitter | 90% (via tree-sitter-javascript) |
-| Rust | tree-sitter | 85% (via tree-sitter-rust) |
-| Makefile | Custom | 80% (target detection) |
-| TOML | Custom | 85% (key-value parsing) |
-| YAML | Custom | 80% (structure parsing) |
-| SQL | Framework-ready | 0% (interface defined) |
-| Zig | Framework-ready | 0% (interface defined) |
-
-**Validation**: Spike 008 (multi-language parsing)
-
-**Implementation**: `src/code_analyzer/parsers/` directory
-
-#### **ADR-0005: Embedding-Enriched Code Analysis**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use CodeBERT (sentence-transformers) embeddings to enrich code symbols with semantic information for similarity search.
-
-**Process**:
-1. Extract symbol documentation (docstrings, comments)
-2. Generate embeddings via CodeBERT
-3. Store in pgvector (PostgreSQL vector extension)
-4. Enable semantic similarity queries
-
-**Benefits**: Find similar code patterns across codebase
-
-**Validation**: Spike 006 (embedding implementation)
-
-**Implementation**: `src/code_analyzer/tools/embeddings.py`
-
-#### **ADR-0007: Parser Composability via Lark**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use Lark parser combinator library for custom grammars (Makefile, TOML, YAML) instead of regex.
-
-**Advantage**: Composable, maintainable grammar definitions
-
-**Example** (Makefile parser):
-```python
-MAKEFILE_GRAMMAR = """
-    ?start: rule+
-    rule: target ":" dependencies "\n" commands
-    target: WORD
-    dependencies: WORD*
-    commands: COMMAND+
-
-    %import common.WORD
-    %import common.WS
-    %ignore WS
-"""
-```
-
-**Validation**: Spike 003 (grammar-based parsing)
-
-**Implementation**: `src/code_analyzer/parsers/makefile.py`, etc.
-
-### Storage & Persistence (ADR-0003, ADR-0006, ADR-0011)
-
-#### **ADR-0003: PostgreSQL with pgvector**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use PostgreSQL as primary persistent store with pgvector extension for vector embeddings.
-
-**Schema**:
-```sql
-CREATE TABLE symbols (
-    id UUID PRIMARY KEY,
-    name VARCHAR(255),
-    type SymbolType,
-    fqn VARCHAR(512),
-    embedding vector(384)  -- CodeBERT embedding dimension
-);
-
-CREATE TABLE imports (
-    id UUID PRIMARY KEY,
-    source_symbol_id UUID,
-    target_module VARCHAR(512),
-    import_type ImportType,
-    category ImportCategory
-);
-
-CREATE EXTENSION pgvector;
-CREATE INDEX ON symbols USING ivfflat (embedding vector_cosine_ops);
-```
-
-**Advantages**:
-- Persistent storage of analysis results
-- Vector similarity search via pgvector
-- Transactional integrity
-- Proven scalability
-
-**Validation**: Spike 004 (schema design) + v0.10.1 release (production use)
-
-**Setup**: `etc/docker-compose.yml` provides containerized PostgreSQL
-
-#### **ADR-0006: Lazy Fluent Pipeline API**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Provide fluent API for deferred analysis execution.
-
-**Example**:
-```python
-analysis = CodeAnalyzer("project/path")
-    .extract_symbols()
-    .build_graph()
-    .analyze_dependencies()
-    .persist_to_db()
-    .execute()  # Deferred evaluation
-```
-
-**Benefit**: Enables optimization and lazy evaluation
-
-**Validation**: Spike 005 (fluent pipeline implementation)
-
-**Implementation**: `src/code_analyzer/core/analyzer.py`
-
-#### **ADR-0011: Graph Database Integration Strategy**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use NetworkX in-memory graphs for analysis, PostgreSQL for persistence, with explicit sync points.
-
-**Workflow**:
-```
-Parse → Build NetworkX Graph → Analyze → Persist to PostgreSQL
-                ↑                              ↓
-         (Fast in-memory)          (Long-term storage)
-```
-
-**Sync Pattern**:
-```python
-def persist_graph(graph: CodeGraph, db: DatabaseManager):
-    for symbol in graph.nodes:
-        db.insert_symbol(symbol)
-    for edge in graph.edges:
-        db.insert_import(edge)
-```
-
-**Validation**: v0.10.1 production release
-
-### Data Models (ADR-0008 to ADR-0010)
-
-#### **ADR-0008: Fully Qualified Name (FQN) Format**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use hierarchical FQN format with order preservation: `path#NN_section.MM_subsection`
-
-**Format**:
-```
-app/api.py#01_routes.02_users.03_get_user
-
-├── path: app/api.py
-├── section_number: 01 (routes)
-├── section_name: routes
-├── subsection_number: 02 (users)
-├── subsection_name: users
-└── item_number: 03 (get_user)
-```
-
-**Benefits**:
-- Order-preserving (enables source code navigation)
-- Language-agnostic
-- Hierarchical (reflects code structure)
-- Sortable and comparable
-
-**Examples**:
-```
-app/core.py#01_models.02_user.03_validate
-api/handlers.py#01_auth.02_login
-utils/helpers.py#01_string_ops
-```
-
-**Validation**: Spike 005 (real codebase FQN generation)
-
-**Implementation**: `src/code_analyzer/core/fully_qualified_name.py`
-
-#### **ADR-0009: Symbol Type Classification**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Classify symbols into standard types across languages.
-
-**Types**:
-```python
-class SymbolType(Enum):
-    MODULE = "module"
-    CLASS = "class"
-    FUNCTION = "function"
-    METHOD = "method"
-    VARIABLE = "variable"
-    CONSTANT = "constant"
-    INTERFACE = "interface"
-    ENUM = "enum"
-    STRUCT = "struct"
-    DECORATOR = "decorator"
-    ALIAS = "alias"
-```
-
-**Mapping by Language**:
-| Python | Go | Java | JavaScript |
-|--------|----|----|------------|
-| class → CLASS | struct → STRUCT | class → CLASS | class → CLASS |
-| def → FUNCTION | func → FUNCTION | method → METHOD | function → FUNCTION |
-| var → VARIABLE | var → VARIABLE | field → VARIABLE | const → CONSTANT |
-
-**Validation**: Spike 001 (type system validation)
-
-#### **ADR-0010: External Import Categorization**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Categorize all imports into 4 standard categories.
-
-**Categories**:
-```python
-class ImportCategory(Enum):
-    STDLIB = "stdlib"           # Standard library (os, sys, json)
-    POPULAR = "popular"         # Well-known packages (requests, numpy, django)
-    OTHER = "other"             # Unpopular third-party packages
-    INTERNAL = "internal"       # Project-internal modules
-```
-
-**Detection Logic**:
-```python
-def categorize_import(module_name: str, stdlib_list: Set[str]) -> ImportCategory:
-    if module_name in stdlib_list:
-        return ImportCategory.STDLIB
-    if module_name in POPULAR_PACKAGES:
-        return ImportCategory.POPULAR
-    if is_project_internal(module_name):
-        return ImportCategory.INTERNAL
-    return ImportCategory.OTHER
-```
-
-**Validation**: Spike 009 (categorization on real projects)
-
-**Implementation**: `src/code_analyzer/tools/import_analyzer.py`
-
-### Temporal & Advanced Analysis (ADR-0012, ADR-0013)
-
-#### **ADR-0012: Git-Based Temporal Analysis**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use git history to analyze code evolution and identify changing symbols over time.
-
-**Process**:
-1. Walk git history (from HEAD to initial commit)
-2. For each commit, extract code state
-3. Track symbol changes (additions, deletions, modifications)
-4. Build temporal dependency graph
-5. Analyze change patterns and hotspots
-
-**Performance**: Sub-second analysis of large repositories
-
-**Validation**: Spike 010 (git processing on real projects)
-
-**Use Cases**:
-- Identify frequently changing modules
-- Find circular dependencies introduced over time
-- Understand architecture drift
-
-#### **ADR-0013: Probabilistic LLM Enrichment with Hash-Based Caching**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Use LLM (Claude) to enrich code analysis with semantic insights, with deterministic caching via content hashing.
-
-**Architecture**:
-```
-Symbol + Documentation
-    ↓ (hash content)
-Hash Lookup (cache)
-    ├─ Hit: Return cached insight
-    └─ Miss: Call LLM API
-            ↓ (store result)
-    Database Cache
-
-Next run: Hash-based lookup skips LLM call
-```
-
-**Benefits**:
-- Reduces LLM API calls (cost optimization)
-- Deterministic caching (same input = same output)
-- Graceful degradation (works without LLM)
-
-**Validation**: Spike 011 (LLM integration with Ollama)
-
-**Implementation**: `src/code_analyzer/agent/enricher.py`
-
-### Querying & Interaction (ADR-0014 to ADR-0017)
-
-#### **ADR-0014: Agentic Querying System** (Proposed)
-
-**Status**: 📋 Design Phase
-
-**Decision**: Enable agentic querying where:
-1. User asks natural language question
-2. Agent decomposes into graph queries
-3. Agent iteratively refines results
-4. Agent provides explanation
-
-**Process**:
-```
-User: "Find all modules that depend on the authentication system"
-    ↓
-Agent: Decomposes into:
-  - Find "auth" module (name matching)
-  - Find incoming edges (dependents)
-  - Filter by strength/importance
-    ↓
-Results + Explanation
-```
-
-**Implementation**: `src/code_analyzer/agent/query_agent.py`
-
-#### **ADR-0015: Response Loop UX Design** (Proposed)
-
-**Status**: 📋 Design Phase
-
-**Decision**: Implement Claude Code-inspired interactive response loop where:
-1. User provides query
-2. System shows incremental results
-3. User can refine/clarify
-4. System re-executes with feedback
-
-**Interface** (inspired by Claude Code):
-```
-Query: Find all callers of 'parse_file'
-────────────────────────────────────────
-Results (3 found):
-  - api/handlers.py:api_handler()
-  - cli/main.py:main()
-  - tests/test_parsers.py:test_parse()
-
-Refine? (add more criteria, adjust results, etc.)
-```
-
-#### **ADR-0016: LLM Memory & Token Tracking**
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Implement LLM memory slots to track conversation context and token usage.
-
-**Memory System**:
-```python
-class MemorySlot:
-    slot_id: str
-    max_tokens: int
-    used_tokens: int
-    content: str  # Stored context
-
-    def can_add(self, new_content: str) -> bool:
-        return estimated_tokens(new_content) <= available_tokens
-```
-
-**Tracking**:
-- Per-conversation token budget
-- Slot-based context management
-- Automatic LRU eviction when full
-
-**Validation**: Spike 012 (21 tests validating memory system)
-
-**Implementation**: `src/code_analyzer/agent/memory.py`
-
-#### **ADR-0017: Cypher-Like Graph Query Language** ✅
-
-**Status**: ✅ Accepted & Validated
-
-**Decision**: Implement custom graph query DSL inspired by Neo4j Cypher for intuitive code querying.
-
-**Syntax**:
-```cypher
-# Find all functions calling a target function
-MATCH (f:Function)-[calls]->(target:Function {name: 'process'})
-RETURN f.name, f.module
-
-# Find dependency chains
-MATCH (a:Module)-[depends*1..3]->(b:Module {name: 'core'})
-RETURN a.name, b.name
-
-# Pattern with filters
-MATCH (class:Class)-[contains]->(method:Method)
-WHERE method.cyclomatic_complexity > 5
-RETURN class.name, method.name, method.cyclomatic_complexity
-```
-
-**Components**:
-- **Parser** (Lark-based): Converts Cypher-like syntax to AST
-- **Executor** (NetworkX): Traverses graph based on AST
-- **Type System**: Validates syntax and types
-
-**Status**: **35/35 core tests passing**
-
-**Validation**: Spike 014 (comprehensive query language testing)
-
-**Implementation**:
-- `src/code_analyzer/graph_query/parser.py` (syntax parsing)
-- `src/code_analyzer/graph_query/executor.py` (execution)
-- `src/code_analyzer/graph_query/models.py` (AST models)
-- `tests/unit/tools/test_graph_query_*.py` (comprehensive tests)
-
-## ADR Index & Validation Status
-
-| ADR | Title | Status | Validated | Tests | Implementation |
-|-----|-------|--------|-----------|-------|-----------------|
-| 0001 | Four-Layer Architecture | ✅ | Spike 001 | 348 | `src/code_analyzer/core/` |
-| 0002 | SourceParser Pattern | ✅ | Spike 002 | 150+ | `src/code_analyzer/parsers/base.py` |
-| 0003 | PostgreSQL + pgvector | ✅ | v0.10.1 | DB tests | `src/code_analyzer/db/` |
-| 0004 | Multi-Language Parsing | ✅ | Spike 008 | 200+ | `src/code_analyzer/parsers/` |
-| 0005 | Embedding Enrichment | ✅ | Spike 006 | 50+ | `src/code_analyzer/tools/embeddings.py` |
-| 0006 | Lazy Fluent Pipeline | ✅ | Spike 005 | 75+ | `src/code_analyzer/core/analyzer.py` |
-| 0007 | Lark-Based Parsing | ✅ | Spike 003 | 100+ | Various parsers |
-| 0008 | FQN Format | ✅ | Spike 005 | 85+ | `src/code_analyzer/core/fully_qualified_name.py` |
-| 0009 | Symbol Classification | ✅ | Spike 001 | 60+ | `src/code_analyzer/core/models.py` |
-| 0010 | Import Categorization | ✅ | Spike 009 | 70+ | `src/code_analyzer/tools/import_analyzer.py` |
-| 0011 | Graph Storage Strategy | ✅ | v0.10.1 | DB tests | `src/code_analyzer/db/` |
-| 0012 | Git Temporal Analysis | ✅ | Spike 010 | 45+ | `src/code_analyzer/tools/git_analyzer.py` |
-| 0013 | LLM Enrichment Caching | ✅ | Spike 011 | 55+ | `src/code_analyzer/agent/enricher.py` |
-| 0014 | Agentic Querying | 📋 | Design | — | `src/code_analyzer/agent/query_agent.py` |
-| 0015 | Response Loop UX | 📋 | Design | — | `src/code_analyzer/tui/` |
-| 0016 | LLM Memory Tracking | ✅ | Spike 012 | 21 | `src/code_analyzer/agent/memory.py` |
-| 0017 | Cypher Query Language | ✅ | Spike 014 | 35 | `src/code_analyzer/graph_query/` |
-
-**Summary**: 13/16 Accepted ADRs validated; 3 in design phase
-
-## ADR Template
-
-Location: `docs/adr/templates/adr-template.md`
+Each ADR follows a consistent structure:
 
 ```markdown
-# ADR-NNNN: [Title]
+# ADR-NNNN: Brief Title of Decision
 
 ## Status
-- [ ] Proposed
-- [x] Accepted
-- [ ] Superseded
-- [ ] Deprecated
+[Proposed | Accepted | Superseded | Deprecated]
 
 ## Context
-[Describe the issue leading to this decision, including background and motivation]
+Describe the issue or requirement that necessitated this decision.
+Include constraints, background, and what triggered the need for this decision.
 
 ## Decision
-[Describe the decision made, with rationale and key details]
+State the decision clearly and concisely.
+Explain why this approach was chosen over alternatives.
 
 ## Consequences
-### Positive
-- Benefit 1
-- Benefit 2
-
-### Negative
-- Trade-off 1
-- Trade-off 2
+Describe the impacts of this decision:
+- Positive consequences / Benefits
+- Negative consequences / Drawbacks
+- Tradeoffs involved
 
 ## Alternatives Considered
-1. [Alternative A]: [Why not chosen]
-2. [Alternative B]: [Why not chosen]
+Document other options that were evaluated:
+- Alternative 1: Why rejected
+- Alternative 2: Why rejected
+- etc.
 
-## Implementation
-- **File(s)**: src/code_analyzer/...
-- **Tests**: tests/unit/...
-- **Validation**: Spike NNN / Release vX.Y.Z
+## Validation
+How was/will this decision be validated?
+- Testing approach
+- Empirical evidence
+- Metrics for success
+- Review/approval process
 
-## References
-- [Related ADR](./NNNN-*.md)
-- [Issue](https://github.com/...)
-- [PR](https://github.com/...)
+## Related ADRs
+- Supersedes: [link if any]
+- Related to: [other relevant ADRs]
+- Superceded by: [if status is Superseded]
+
+## Implementation Notes
+Optional: Links to implementation, affected code, deployment info.
+```
+
+## Best Practices
+
+### Writing ADRs
+
+1. **Keep it concise**: 1-2 pages maximum
+2. **Use clear language**: Avoid jargon; be understandable to team members unfamiliar with the decision
+3. **Document tradeoffs**: Show you considered alternatives
+4. **Make it future-proof**: Write as if someone will read this in 2 years
+5. **Link related decisions**: Help readers understand the broader architecture
+
+### Organizing ADRs
+
+1. **Number sequentially**: Use zero-padded numbers (0001, 0002, etc.)
+2. **Group by category**: Consider organizing by architectural layer or domain
+3. **Create a master index**: Maintain `index.md` with all ADRs and current status
+4. **Timestamp decisions**: Include decision date for context
+5. **Use consistent formatting**: Enforce template structure across all ADRs
+
+### Maintenance
+
+1. **Update status regularly**: Mark as Superseded when decisions change
+2. **Link superseding decisions**: Show progression of thinking
+3. **Add validation results**: Update with empirical evidence as it accumulates
+4. **Review periodically**: Flag decisions that need revisiting
+5. **Keep rationale**: Even superseded ADRs provide historical context
+
+## When to Write an ADR
+
+Write an ADR when:
+- Making a significant architectural choice
+- Selecting between major technologies/frameworks
+- Establishing patterns that will be reused
+- Making decisions that affect multiple teams/systems
+- Choosing between approaches with different tradeoffs
+
+Don't write ADRs for:
+- Trivial implementation details
+- Temporary workarounds
+- Decisions that only affect one isolated component
+
+## Indexing and Referencing
+
+Create an `index.md` with a table of all ADRs:
+
+| ADR | Title | Status | Category | Date |
+|-----|-------|--------|----------|------|
+| 0001 | Example Decision | Accepted | Architecture | 2026-01-16 |
+| 0002 | Example Decision | Proposed | Technology | 2026-01-16 |
+| 0003 | Example Decision | Superseded | Pattern | 2026-01-15 |
+
+## Implementation Plan Template (Optional)
+
+For decisions requiring structured rollout, optionally create implementation plans:
+
+```markdown
+# ADR-NNNN Implementation Plan
+
+## Timeline
+- Phase 1: [Description] (Week X-Y)
+- Phase 2: [Description] (Week Y-Z)
+- etc.
+
+## Acceptance Criteria
+- [ ] Requirement 1
+- [ ] Requirement 2
+- [ ] etc.
+
+## Risk Mitigation
+- Risk: [Description] → Mitigation: [Approach]
+- etc.
+## Success Metrics
+- Metric 1: [Target]
+- Metric 2: [Target]
 ```
 
 ## How ADRs Guide Development
@@ -591,18 +157,18 @@ Location: `docs/adr/templates/adr-template.md`
 ### 1. **Decision Recording**
 
 When facing an architectural choice:
-1. Create new ADR (next number)
+1. Create new ADR (next sequential number)
 2. Document context, decision, consequences
 3. Mark as "Proposed"
-4. Request feedback from team
+4. Request feedback from stakeholders
 
-### 2. **Hypothesis Validation**
+### 2. **Validation & Experimentation**
 
-Before implementing in production:
-1. Create spike phase in `tests/spikes/NNN_*.py`
-2. Implement hypothesis
-3. Write exhaustive tests
-4. Validate ADR assumptions
+Before finalizing decisions:
+1. Create experimental/spike phase to test hypothesis
+2. Implement proof-of-concept
+3. Write tests to validate assumptions
+4. Gather empirical evidence
 5. Update ADR status to "Accepted"
 
 ### 3. **Implementation**
@@ -610,63 +176,143 @@ Before implementing in production:
 Once validated:
 1. Implement in production code
 2. Cross-reference ADR in docstrings
-3. Reference ADR in PR description
-4. Link tests to ADR
+3. Reference ADR in commit messages and PR descriptions
+4. Link implementation files to ADR
 
 ### 4. **Evolution**
 
 As requirements change:
 1. Update ADR status (Superseded/Deprecated)
 2. Create new ADR for revised decision
-3. Update references
+3. Cross-link old and new ADRs to show evolution
+4. Preserve old ADRs for historical context
 
-## Querying ADRs
+## Creating an ADR Index
 
-### ADR Index
-
-`docs/adr/index.md` provides overview:
+Maintain a master index (`docs/adr/index.md`) with all ADRs:
 
 ```markdown
 # Architecture Decision Records
 
-## Accepted & Validated (13)
-- ADR-0001: Four-Layer Architecture ✅
-- ADR-0002: SourceParser Pattern ✅
-- ...
+## Accepted & Validated
+| ADR | Title | Status | Category | Date |
+|-----|-------|--------|----------|------|
+| 0001 | Title | ✅ Accepted | Architecture | 2026-01-16 |
+| 0002 | Title | ✅ Accepted | Technology | 2026-01-16 |
 
-## Proposed (3)
-- ADR-0014: Agentic Querying ⏳
-- ADR-0015: Response Loop UX ⏳
+## Proposed (Under Review)
+| ADR | Title | Status | Category | Date |
+|-----|-------|--------|----------|------|
+| 0003 | Title | 📋 Proposed | Pattern | 2026-01-16 |
+
+## Superseded
+| ADR | Title | Replaced By |
+|-----|-------|------------|
+| 0004 | Old Decision | ADR-0005 |
 ```
 
-### Finding Related ADRs
+## Querying and Finding ADRs
 
-Use these commands:
-
+### By Status
 ```bash
-# Find ADRs mentioning "parser"
-grep -r "parser" docs/adr/
+# Find all accepted ADRs
+grep -r "Status: ✅" docs/adr/
 
-# Find ADRs by status
-grep "Status:" docs/adr/*.md
-
-# List all ADRs
-ls docs/adr/[0-9]*.md | sort
+# Find proposed ADRs
+grep -r "Status: 📋" docs/adr/
 ```
 
-## Best Practices
+### By Topic
+```bash
+# Find ADRs mentioning a specific technology
+grep -r "PostgreSQL" docs/adr/
 
-1. **Write ADRs Early**: Document decisions as they're made, not retroactively
-2. **Validate with Spikes**: Use experimental phases to test hypotheses
-3. **Justify Alternatives**: Explain why other approaches were rejected
-4. **Link to Code**: Reference implementation files in ADR
-5. **Update Status**: Mark ADRs as accepted/superseded as reality evolves
-6. **Keep Concise**: 1-2 pages per ADR is ideal
-7. **Include Metrics**: Quantify impacts where possible
+# Find related ADRs
+grep -r "Related ADRs:" docs/adr/0001-*.md
+```
+
+### Organization Tips
+
+1. **Organize by domain**: Group related ADRs together
+   - 0001-0010: Architecture decisions
+   - 0011-0020: Technology choices
+   - 0021-0030: Process decisions
+
+2. **Use consistent naming**: `NNNN-descriptive-title.md`
+
+3. **Create README**: `docs/adr/README.md` explains the ADR process to new team members
+
+## Workflow Integration
+
+### 1. During Planning
+- Review existing ADRs when starting new projects
+- Identify if a similar decision was already made
+- Reuse validated approaches
+
+### 2. During Development
+- Reference ADRs in code comments and docstrings
+- Link to relevant ADRs in PR descriptions
+- Update ADRs if implementation reveals new information
+
+### 3. During Reviews
+- Check if new decisions should be ADRs
+- Validate that decisions follow established ADRs
+- Suggest ADR updates if approach has changed
+
+### 4. During Retrospectives
+- Review ADRs that didn't work out
+- Mark as Superseded when decisions change
+- Extract lessons learned
+
+## Common Pitfalls to Avoid
+
+1. **Too Much Detail**: Keep ADRs at architectural level, not implementation level
+2. **No Alternatives**: Always document options considered
+3. **Incomplete Context**: Future readers may not know current situation
+4. **Never Updated**: Mark superseded ADRs, don't just ignore them
+5. **No Validation**: Always include how/when the decision was validated
+6. **Hidden ADRs**: Store in standard location (`docs/adr/`) for visibility
+
+## Advanced Features (Optional)
+
+### ADR Templates
+Create domain-specific templates:
+- `adr-template-architecture.md`
+- `adr-template-technology-selection.md`
+- `adr-template-process.md`
+
+### ADR Lifecycle Tracking
+Track when each ADR:
+- Was created (proposed date)
+- Was accepted (acceptance date)
+- Became relevant (implementation start)
+- Was superseded (retirement date)
+
+### ADR Metrics
+Monitor ADR effectiveness:
+- How many ADRs are currently active?
+- What's the supersession rate? (Rate of changes to decisions)
+- Which categories have most decisions?
+- How long do decisions typically hold?
+
+## Tools & Platforms
+
+### Manual (Recommended for small teams)
+- Store ADRs in Git alongside code
+- Use Markdown format
+- Maintain index manually
+
+### For Large Teams
+- Adr-tools: Command-line tools for managing ADRs
+- Custom templates and automation
+- Integration with issue tracking
+- Automated index generation from files
 
 ## References
 
-- **ADR Home**: `docs/adr/`
+- [ADR GitHub Org](https://adr.github.io/): Official ADR standards
+- [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions): Original ADR article
+- [ADR Examples](https://github.com/topics/adr): Real-world examples from various projects
 - **Spike Tests**: `tests/spikes/`
 - **Implementation**: `src/code_analyzer/`
 - **External**: https://adr.github.io/ (ADR standard)

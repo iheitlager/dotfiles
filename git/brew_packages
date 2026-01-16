@@ -5,5 +5,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install git || brew upgrade git
+brew install gh || brew upgrade gh
+brew install lazygit || brew upgrade lazygit
 
 export PATH=$TMPPATH
