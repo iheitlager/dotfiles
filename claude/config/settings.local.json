@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+<<<<<<< HEAD
       "Bash(uv pip list:*)",
       "Bash(uv add:*)",
       "Bash(uv --version:*)",
@@ -53,6 +54,11 @@
       "Bash(git -C /Users/iheitlager/wc/auto-trader-worktree/agent-1 push)",
       "Bash(git -C /Users/iheitlager/wc/auto-trader-worktree/agent-1 restore:*)",
       "Bash(git -C /Users/iheitlager/wc/auto-trader-worktree/agent-1 fetch origin --prune)",
+=======
+      "Bash(ruff check:*)",
+      "Bash(gh pr create --title \"Fix lint errors and configure per-file ignores\" --body \"$\\(cat <<''EOF''\n## Summary\n- Fixed all 232 lint errors across the codebase\n- Configured per-file-ignores in pyproject.toml for spike tests to allow E402 violations since they intentionally require setup code before imports\n\n## Changes\n- Removed unused imports and variables \\(F401, F841\\)\n- Fixed import sorting and organization \\(I001\\)\n- Removed blank lines with whitespace \\(W293\\)\n- Fixed f-strings without placeholders \\(F541\\)\n\n## Test plan\n- Run `ruff check src tests` to verify all lint errors are resolved\n- All existing tests should pass\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
+      "Bash(git pull:*)",
+>>>>>>> 2457031 (updating claude)
       "Bash(git merge:*)",
       "Bash(git branch:*)"
     ]
