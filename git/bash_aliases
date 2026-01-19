@@ -25,7 +25,7 @@ _git_newbranch() {
 }
 
 alias g=git
-alias gh='githelp | less' # git help
+alias ghlp='githelp | less' # git help
 alias gr='cd $(git rev-parse --show-toplevel) && pwd'  # Go back to this git repo root
 alias ggo='_git_go' # amend the last change and push
 alias gl='git log --oneline --graph --decorate --all' # pretty git log

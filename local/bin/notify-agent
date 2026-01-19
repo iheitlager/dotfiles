@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# notify-agent
+# Send a notification to the coordinator agent
+# Usage: notify-agent "Your message here"
+#        echo "Your message" | notify-agent
+#        notify-agent -h/--help
+
+set -e
+
+SESSION="claude-agents"
+COORDINATOR_PANE="$SESSION:agents.0"
+SHARED_CONTEXT="${XDG_STATE_HOME:-$HOME/.local/state}/agent-context"
+SCRIPT=$(basename "$0")
+
+show_help() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+
+    $HELP << EOF
+Usage: $SCRIPT [MESSAGE]
+
+Send a notification to the coordinator agent.
+
+Usage:
+    $SCRIPT "Your message here"
+    echo "Your message" | $SCRIPT
+
+Examples:
+    $SCRIPT "PR merged for feature-X"
+    echo "Ready for rebase" | $SCRIPT
+
+EOF
+}
+
+# Parse arguments
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            MESSAGE="$@"
+            ;;
+    esac
+else
+    MESSAGE=$(cat)
+fi
+
+# Validate message
+if [[ -z "$MESSAGE" ]]; then
+    echo "Error: No message provided" >&2
+    echo "Usage: notify 'message' or echo 'message' | notify" >&2
+    exit 1
+fi
+
+# Log to events.log
+mkdir -p "$SHARED_CONTEXT"
+echo "[$(date -Iseconds)] $(whoami)@$(hostname): $MESSAGE" >> "$SHARED_CONTEXT/events.log"
+
+# Send to coordinator pane
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+    tmux send-keys -t "$COORDINATOR_PANE" "$MESSAGE" && tmux send-keys -t "$COORDINATOR_PANE" Enter
+    echo "✓ Notified coordinator"
+else
+    echo "Warning: Session $SESSION not found, message logged only" >&2
+fi
