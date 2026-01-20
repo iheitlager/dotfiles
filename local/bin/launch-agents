@@ -197,7 +197,7 @@ create_agent_instructions() {
     local model=$2
     local worktree_path="$WORKTREE_ROOT/agent-$agent"
 
-    cat > "$worktree_path/AGENT.md" << EOF
+    cat > "$worktree_path/CLAUDE.md" << EOF
 # Agent Instructions
 
 You are agent-$agent running $model in a peer swarm for project: $REPO_NAME
@@ -351,8 +351,8 @@ create_tmux_layout() {
             sleep 0.1
         fi
         
-        debug "tmux send-keys -t $SESSION:agents.$pane 'claude $SKIP_PERMISSIONS' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "claude $SKIP_PERMISSIONS" C-m
+        debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model $SKIP_PERMISSIONS' C-m"
+        tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model $SKIP_PERMISSIONS" C-m
     done
 
     for i in $(seq 1 $count); do
