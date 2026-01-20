@@ -1,0 +1,557 @@
+#!/usr/bin/env bash
+# launch-agents
+# Usage: ./launch-agents [OPTIONS] COMMAND
+# Run from within your git repo
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Detect repo root and name
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo -e "${RED}Error: Not in a git repository${NC}"
+    exit 1
+}
+REPO_NAME=$(basename "$REPO_ROOT")
+REPO_PARENT=$(dirname "$REPO_ROOT")
+
+# Paths derived from repo
+SESSION="claude-$REPO_NAME"
+WORKTREE_ROOT="$REPO_PARENT/${REPO_NAME}-worktree"
+SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
+
+# Defaults
+AGENT_COUNT=2
+FORCE=false
+
+show_help() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+    
+    $HELP << EOF
+Usage: launch-agents [OPTIONS] COMMAND
+
+Launch and manage a Claude Code agent swarm.
+
+Commands:
+    start           Launch agents in tmux (or attach if running)
+    stop            Kill tmux session
+    clean           Remove worktrees (if branches merged and clean)
+    info            Show status of agents, models, and tasks
+
+Options:
+    -n COUNT        Number of agents: 2, 3, or 4 (default: 2)
+    --force         Force clean even with uncommitted changes
+    -h, --help      Show this help message
+
+Layouts:
+    2 agents        agent-1 │ agent-2
+    3 agents        agent-1 │ agent-2 / agent-3
+    4 agents        agent-1 / agent-3 │ agent-2 / agent-4
+
+Model assignment:
+    2 agents        opus, opus
+    3 agents        opus, sonnet, sonnet
+    4 agents        opus, opus, sonnet, haiku
+
+Examples:
+    launch-agents start             Start 2 agents (default)
+    launch-agents -n 4 start        Start 4 agents
+    launch-agents info              Show swarm status
+    launch-agents stop              Stop all agents
+    launch-agents clean             Remove merged worktrees
+    launch-agents --force clean     Remove all worktrees
+
+Paths:
+    Worktrees       $WORKTREE_ROOT/agent-N/
+    Shared state    $SHARED_CONTEXT/
+EOF
+}
+
+get_model() {
+    local agent=$1
+    local count=$2
+
+    case $count in
+        2)
+            echo "opus"
+            ;;
+        3)
+            case $agent in
+                1) echo "opus" ;;
+                *) echo "sonnet" ;;
+            esac
+            ;;
+        4)
+            case $agent in
+                1|2) echo "opus" ;;
+                3)   echo "sonnet" ;;
+                4)   echo "haiku" ;;
+            esac
+            ;;
+    esac
+}
+
+setup_worktree() {
+    local agent=$1
+    local worktree_path="$WORKTREE_ROOT/agent-$agent"
+    local branch="agent-$agent"
+
+    if [[ -d "$worktree_path" ]]; then
+        echo -e "  ${GREEN}✓${NC} agent-$agent worktree exists"
+        return 0
+    fi
+
+    mkdir -p "$WORKTREE_ROOT"
+
+    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+        echo -e "  ${BLUE}→${NC} Creating branch: $branch"
+        git branch "$branch"
+    fi
+
+    echo -e "  ${BLUE}→${NC} Creating worktree: agent-$agent"
+    git worktree add "$worktree_path" "$branch"
+
+    pushd "$worktree_path" > /dev/null
+    
+    if command -v uv &> /dev/null; then
+        echo -e "  ${BLUE}→${NC} Setting up uv venv"
+        uv venv
+    fi
+    
+    if command -v link_claude &> /dev/null; then
+        echo -e "  ${BLUE}→${NC} Linking claude skills"
+        link_claude
+    fi
+    
+    popd > /dev/null
+
+    echo -e "  ${GREEN}✓${NC} agent-$agent ready"
+}
+
+setup_shared_state() {
+    mkdir -p "$SHARED_CONTEXT/tasks/pending"
+    mkdir -p "$SHARED_CONTEXT/tasks/active"
+    mkdir -p "$SHARED_CONTEXT/tasks/done"
+    mkdir -p "$SHARED_CONTEXT/agents"
+
+    if [[ ! -f "$SHARED_CONTEXT/events.log" ]]; then
+        echo "# Agent Events Log - $REPO_NAME" > "$SHARED_CONTEXT/events.log"
+        echo "# Format: timestamp | agent | action | task | summary" >> "$SHARED_CONTEXT/events.log"
+        echo "" >> "$SHARED_CONTEXT/events.log"
+    fi
+
+    echo -e "${GREEN}✓${NC} Shared state ready"
+}
+
+create_agent_instructions() {
+    local agent=$1
+    local model=$2
+    local worktree_path="$WORKTREE_ROOT/agent-$agent"
+
+    cat > "$worktree_path/AGENT.md" << EOF
+# Agent Instructions
+
+You are agent-$agent running $model in a peer swarm for project: $REPO_NAME
+
+## Identity
+
+- Agent ID: agent-$agent
+- Model: $model
+- Worktree: $worktree_path
+- Shared state: $SHARED_CONTEXT
+
+## Receiving Orders
+
+Users may talk to you directly. When receiving a request:
+
+1. Assess complexity:
+   - Simple (haiku): docs, formatting, simple tests
+   - Moderate (sonnet): standard features, refactors
+   - Complex (opus): architecture, tricky bugs, design
+
+2. Decide:
+   - Small task + you match capability → do it directly
+   - Large task → break into subtasks, create task files
+   - Wrong capability tier → create task for better-suited agent
+
+## Task Queue
+
+Find work:
+\`\`\`bash
+ls $SHARED_CONTEXT/tasks/pending/
+\`\`\`
+
+Claim a task:
+\`\`\`bash
+mv $SHARED_CONTEXT/tasks/pending/task-XXX.yaml \\
+   $SHARED_CONTEXT/tasks/active/
+# Edit file: set claimed_by: agent-$agent, claimed_at: <timestamp>
+\`\`\`
+
+Complete a task:
+\`\`\`bash
+mv $SHARED_CONTEXT/tasks/active/task-XXX.yaml \\
+   $SHARED_CONTEXT/tasks/done/
+# Edit file: set completed_at, result summary
+\`\`\`
+
+Log completion:
+\`\`\`bash
+echo "\$(date -Iseconds) | agent-$agent | DONE | task-XXX | <summary>" \\
+  >> $SHARED_CONTEXT/events.log
+\`\`\`
+
+## Task File Format
+
+\`\`\`yaml
+id: task-XXX
+created: <ISO timestamp>
+created_by: agent-$agent
+priority: low | medium | high | urgent
+complexity: simple | moderate | complex
+recommended_model: haiku | sonnet | opus
+title: <short title>
+description: |
+  <detailed description>
+depends_on: []
+claimed_by: null
+claimed_at: null
+completed_at: null
+result: null
+\`\`\`
+
+## Peer Communication
+
+Check swarm activity:
+\`\`\`bash
+tail -30 $SHARED_CONTEXT/events.log
+\`\`\`
+
+Signal another agent (optional):
+\`\`\`bash
+tmux send-keys -t $SESSION:agents.N "Message here" C-m
+\`\`\`
+
+Pane mapping: agent-1=0, agent-2=1, agent-3=2, agent-4=3
+
+## Git Workflow
+
+You work on branch: agent-$agent
+
+For each task:
+1. Ensure branch is up to date: git pull --rebase origin main
+2. Make changes, commit with clear messages
+3. Create PR when complete: gh pr create
+4. Log completion to events.log
+
+## Principles
+
+- No hierarchy — all agents are peers
+- Match task complexity to your capability
+- One active task at a time
+- Signal completion clearly
+- Help clear simple tasks if queue is empty
+EOF
+}
+
+create_tmux_layout() {
+    local count=$1
+
+    echo -e "${BLUE}Creating tmux layout for $count agents...${NC}"
+
+    local model1=$(get_model 1 $count)
+    tmux new-session -d -s "$SESSION" -n "agents" -c "$WORKTREE_ROOT/agent-1"
+
+    case $count in
+        2)
+            tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
+            ;;
+        3)
+            tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
+            tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-3"
+            ;;
+        4)
+            tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
+            tmux split-window -v -t "$SESSION:agents.0" -c "$WORKTREE_ROOT/agent-3"
+            tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-4"
+            ;;
+    esac
+
+    for i in $(seq 1 $count); do
+        local pane=$((i - 1))
+        local model=$(get_model $i $count)
+        
+        sleep 0.3
+        tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_ID=agent-$i" C-m
+        sleep 0.1
+        tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_MODEL=$model" C-m
+        sleep 0.1
+        
+        if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
+            tmux send-keys -t "$SESSION:agents.$pane" "source .venv/bin/activate" C-m
+            sleep 0.1
+        fi
+        
+        tmux send-keys -t "$SESSION:agents.$pane" "claude" C-m
+    done
+
+    for i in $(seq 1 $count); do
+        tmux new-window -t "$SESSION" -n "shell-$i" -c "$WORKTREE_ROOT/agent-$i"
+        sleep 0.2
+        
+        if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
+            tmux send-keys -t "$SESSION:shell-$i" "source .venv/bin/activate" C-m
+        fi
+    done
+
+    tmux select-window -t "$SESSION:agents"
+    tmux select-pane -t "$SESSION:agents.0"
+
+    echo -e "${GREEN}✓ Tmux session created${NC}"
+}
+
+cmd_start() {
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo -e "${YELLOW}Session exists, attaching...${NC}"
+        tmux attach -t "$SESSION"
+        exit 0
+    fi
+
+    echo -e "${BLUE}Setting up $AGENT_COUNT agents for: $REPO_NAME${NC}"
+    echo ""
+
+    setup_shared_state
+
+    echo "Preparing worktrees..."
+    for i in $(seq 1 $AGENT_COUNT); do
+        setup_worktree $i
+        create_agent_instructions $i $(get_model $i $AGENT_COUNT)
+    done
+    echo ""
+
+    create_tmux_layout $AGENT_COUNT
+
+    echo ""
+    echo -e "${GREEN}${BOLD}Claude Swarm Ready${NC}"
+    echo ""
+    echo "Project:      $REPO_NAME"
+    echo "Agents:       $AGENT_COUNT"
+    echo ""
+    echo "Navigation:"
+    echo "  Ctrl-b 1        Agents window"
+    echo "  Ctrl-b 2-$((AGENT_COUNT+1))      Shell windows"
+    echo "  Ctrl-b ↑↓←→     Switch pane"
+    echo "  Ctrl-b z        Zoom pane"
+    echo "  Ctrl-b d        Detach"
+    echo ""
+
+    tmux attach -t "$SESSION"
+}
+
+cmd_stop() {
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
+        tmux kill-session -t "$SESSION"
+        echo -e "${GREEN}✓ Session stopped${NC}"
+    else
+        echo "No session running"
+    fi
+}
+
+cmd_clean() {
+    # Stop session first if running
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo -e "${YELLOW}Stopping session first...${NC}"
+        tmux kill-session -t "$SESSION"
+    fi
+
+    echo "Checking worktrees for cleanup..."
+
+    for i in 1 2 3 4; do
+        local worktree_path="$WORKTREE_ROOT/agent-$i"
+        local branch="agent-$i"
+
+        if [[ ! -d "$worktree_path" ]]; then
+            continue
+        fi
+
+        # Check for uncommitted changes
+        pushd "$worktree_path" > /dev/null
+        local has_changes=$(git status --porcelain)
+        popd > /dev/null
+
+        if [[ -n "$has_changes" ]] && [[ "$FORCE" != true ]]; then
+            echo -e "  ${RED}✗${NC} agent-$i: uncommitted changes (use --force to override)"
+            continue
+        fi
+
+        if [[ "$FORCE" == true ]]; then
+            echo -e "  ${YELLOW}!${NC} agent-$i: force removing"
+            git worktree remove "$worktree_path" --force 2>/dev/null || rm -rf "$worktree_path"
+            git branch -D "$branch" 2>/dev/null || true
+            continue
+        fi
+
+        # Check if branch is merged into main
+        pushd "$REPO_ROOT" > /dev/null
+        if git branch --merged main 2>/dev/null | grep -q "$branch"; then
+            echo -e "  ${GREEN}✓${NC} agent-$i: branch merged, removing"
+            git worktree remove "$worktree_path" --force
+            git branch -d "$branch" 2>/dev/null || true
+        else
+            echo -e "  ${YELLOW}!${NC} agent-$i: branch not merged into main, skipping"
+        fi
+        popd > /dev/null
+    done
+
+    if [[ -d "$WORKTREE_ROOT" ]] && [[ -z "$(ls -A "$WORKTREE_ROOT")" ]]; then
+        rmdir "$WORKTREE_ROOT"
+        echo -e "${GREEN}✓ Worktree directory removed${NC}"
+    fi
+
+    git worktree prune
+    echo -e "${GREEN}✓ Cleanup complete${NC}"
+}
+
+cmd_info() {
+    echo -e "${BOLD}Claude Swarm Status${NC}"
+    echo ""
+    echo -e "${BOLD}Project:${NC} $REPO_NAME"
+    echo ""
+
+    # Session status
+    echo -e "${BOLD}Session:${NC}"
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo -e "  Status: ${GREEN}running${NC}"
+        echo -e "  Attach: tmux attach -t $SESSION"
+    else
+        echo -e "  Status: ${YELLOW}stopped${NC}"
+    fi
+    echo ""
+
+    # Worktrees
+    echo -e "${BOLD}Agents:${NC}"
+    for i in 1 2 3 4; do
+        local worktree_path="$WORKTREE_ROOT/agent-$i"
+        if [[ -d "$worktree_path" ]]; then
+            local model=$(get_model $i 4)  # Show potential model
+            pushd "$worktree_path" > /dev/null
+            local branch=$(git branch --show-current)
+            local status=""
+            if [[ -n $(git status --porcelain) ]]; then
+                status=" ${YELLOW}(uncommitted changes)${NC}"
+            fi
+            popd > /dev/null
+            echo -e "  agent-$i: ${GREEN}exists${NC} [$branch]$status"
+        fi
+    done
+    if [[ ! -d "$WORKTREE_ROOT" ]]; then
+        echo "  (no worktrees)"
+    fi
+    echo ""
+
+    # Tasks
+    echo -e "${BOLD}Tasks:${NC}"
+    local pending=$(ls -1 "$SHARED_CONTEXT/tasks/pending" 2>/dev/null | wc -l | tr -d ' ')
+    local active=$(ls -1 "$SHARED_CONTEXT/tasks/active" 2>/dev/null | wc -l | tr -d ' ')
+    local done=$(ls -1 "$SHARED_CONTEXT/tasks/done" 2>/dev/null | wc -l | tr -d ' ')
+    echo "  Pending: $pending"
+    echo "  Active:  $active"
+    echo "  Done:    $done"
+    
+    if [[ "$active" -gt 0 ]]; then
+        echo ""
+        echo -e "${BOLD}Active Tasks:${NC}"
+        for f in "$SHARED_CONTEXT/tasks/active"/*.yaml; do
+            [[ -f "$f" ]] || continue
+            local id=$(basename "$f" .yaml)
+            local title=$(grep "^title:" "$f" | cut -d: -f2- | xargs)
+            local claimed=$(grep "^claimed_by:" "$f" | cut -d: -f2- | xargs)
+            echo "  $id: $title (${claimed:-unclaimed})"
+        done
+    fi
+    echo ""
+
+    # Recent events
+    if [[ -f "$SHARED_CONTEXT/events.log" ]]; then
+        local event_count=$(grep -v "^#" "$SHARED_CONTEXT/events.log" | grep -v "^$" | wc -l | tr -d ' ')
+        if [[ "$event_count" -gt 0 ]]; then
+            echo -e "${BOLD}Recent Events:${NC}"
+            grep -v "^#" "$SHARED_CONTEXT/events.log" | grep -v "^$" | tail -5 | while read line; do
+                echo "  $line"
+            done
+        fi
+    fi
+    echo ""
+
+    # Paths
+    echo -e "${BOLD}Paths:${NC}"
+    echo "  Worktrees:    $WORKTREE_ROOT/"
+    echo "  Shared state: $SHARED_CONTEXT/"
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -n)
+            if [[ "$2" =~ ^[2-4]$ ]]; then
+                AGENT_COUNT=$2
+                shift 2
+            else
+                echo -e "${RED}Error: -n requires 2, 3, or 4${NC}"
+                exit 1
+            fi
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        start|stop|clean|info)
+            COMMAND=$1
+            shift
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            show_help
+            exit 1
+            ;;
+    esac
+done
+
+# Execute command
+case ${COMMAND:-} in
+    start)
+        cmd_start
+        ;;
+    stop)
+        cmd_stop
+        ;;
+    clean)
+        cmd_clean
+        ;;
+    info)
+        cmd_info
+        ;;
+    "")
+        show_help
+        exit 0
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}"
+        show_help
+        exit 1
+        ;;
+esac
