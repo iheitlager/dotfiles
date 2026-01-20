@@ -53,7 +53,8 @@ SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 AGENT_COUNT=2
 FORCE=false
 VERBOSE=false
-SKIP_PERMISSIONS=""
+SKIP_PERMISSIONS="--permission-mode acceptEdits"
+ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
 
 debug() {
     if [[ "$VERBOSE" == true ]]; then
@@ -276,9 +277,19 @@ Check swarm activity:
 tail -30 $SHARED_CONTEXT/events.log
 \`\`\`
 
-Signal another agent (optional):
+Signal another agent (optional, always send an extra Enter):
 \`\`\`bash
-tmux send-keys -t $SESSION:agents.N "Message here" C-m
+tmux send-keys -t $SESSION:agents.N "Message here" Enter
+tmux send-keys -t $SESSION:agents.N Enter
+\`\`\`
+
+Close the swarm:
+If the customer types shut down, gracefully wind down:
+1. Finish current task
+2. Log shutdown event
+3. Exit process
+\`\`\`bash
+launch-agents stop
 \`\`\`
 
 Pane mapping: agent-1=0, agent-2=1, agent-3=2, agent-4=3
@@ -351,8 +362,8 @@ create_tmux_layout() {
             sleep 0.1
         fi
         
-        debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model $SKIP_PERMISSIONS' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model $SKIP_PERMISSIONS" C-m
+        debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
+        tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
     done
 
     for i in $(seq 1 $count); do
@@ -472,6 +483,28 @@ cmd_clean() {
     fi
 
     git worktree prune
+
+    # Clean shared state if all worktrees are removed
+    if [[ ! -d "$WORKTREE_ROOT" ]] || [[ -z "$(ls -A "$WORKTREE_ROOT")" ]]; then
+        if [[ -d "$SHARED_CONTEXT" ]]; then
+            if [[ "$FORCE" == true ]]; then
+                echo -e "  ${YELLOW}!${NC} Force removing shared state"
+                rm -rf "$SHARED_CONTEXT"
+                echo -e "${GREEN}✓ Shared state removed${NC}"
+            else
+                # Only remove if tasks are all done (no pending/active)
+                local pending=$(ls -1 "$SHARED_CONTEXT/tasks/pending" 2>/dev/null | wc -l | tr -d ' ')
+                local active=$(ls -1 "$SHARED_CONTEXT/tasks/active" 2>/dev/null | wc -l | tr -d ' ')
+                if [[ "$pending" -eq 0 ]] && [[ "$active" -eq 0 ]]; then
+                    rm -rf "$SHARED_CONTEXT"
+                    echo -e "${GREEN}✓ Shared state removed${NC}"
+                else
+                    echo -e "  ${YELLOW}!${NC} Shared state has pending/active tasks, keeping (use --force to override)"
+                fi
+            fi
+        fi
+    fi
+
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 }
 
