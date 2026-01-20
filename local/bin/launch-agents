@@ -14,21 +14,51 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # Detect repo root and name
+# If in a worktree, get the main repo (strip -worktree suffix)
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
     echo -e "${RED}Error: Not in a git repository${NC}"
     exit 1
 }
-REPO_NAME=$(basename "$REPO_ROOT")
-REPO_PARENT=$(dirname "$REPO_ROOT")
+
+# Extract the base repo name (handle -worktree suffix and agent-N subdirs)
+local_repo_name=$(basename "$REPO_ROOT")
+local_repo_parent=$(dirname "$REPO_ROOT")
+local_repo_grandparent=$(dirname "$local_repo_parent")
+
+# Check if we're in an agent-N subdirectory of a -worktree directory
+if [[ "$local_repo_parent" =~ ^(.+)-worktree$ ]]; then
+    # We're in a worktree agent subdirectory (e.g., agent-1 inside code-analyzer-worktree)
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+    WORKTREE_ROOT="$local_repo_parent"
+    REPO_PARENT="$local_repo_grandparent"
+    REPO_ROOT="$REPO_PARENT/$REPO_NAME"
+elif [[ "$local_repo_name" =~ ^(.+)-worktree$ ]]; then
+    # We're in the worktree root directory
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+    WORKTREE_ROOT="$REPO_ROOT"
+    REPO_PARENT=$(dirname "$REPO_ROOT")
+    REPO_ROOT="$REPO_PARENT/$REPO_NAME"
+else
+    # We're in the main repo
+    REPO_NAME="$local_repo_name"
+    REPO_PARENT=$(dirname "$REPO_ROOT")
+    WORKTREE_ROOT="$REPO_PARENT/${REPO_NAME}-worktree"
+fi
 
 # Paths derived from repo
 SESSION="claude-$REPO_NAME"
-WORKTREE_ROOT="$REPO_PARENT/${REPO_NAME}-worktree"
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 
 # Defaults
 AGENT_COUNT=2
 FORCE=false
+VERBOSE=false
+
+debug() {
+    if [[ "$VERBOSE" == true ]]; then
+        echo -e "${BOLD}${BLUE}[DEBUG]${NC} $*" >&2
+    fi
+}
 
 show_help() {
     local HELP="cat"
@@ -49,6 +79,7 @@ Commands:
 
 Options:
     -n COUNT        Number of agents: 2, 3, or 4 (default: 2)
+    -v, --verbose   Print commands being executed
     --force         Force clean even with uncommitted changes
     -h, --help      Show this help message
 
@@ -114,13 +145,21 @@ setup_worktree() {
 
     if ! git show-ref --verify --quiet "refs/heads/$branch"; then
         echo -e "  ${BLUE}→${NC} Creating branch: $branch"
+        debug "git branch $branch"
         git branch "$branch"
     fi
 
     echo -e "  ${BLUE}→${NC} Creating worktree: agent-$agent"
+    debug "git worktree add $worktree_path $branch"
     git worktree add "$worktree_path" "$branch"
 
     pushd "$worktree_path" > /dev/null
+    
+    # Link shared .claude config if it exists in main repo
+    if [[ -f "$REPO_ROOT/CLAUDE.md" ]] && [[ ! -f "$worktree_path/CLAUDE.md" ]]; then
+        echo -e "  ${BLUE}→${NC} Linking CLAUDE.md"
+        ln -s "$REPO_ROOT/CLAUDE.md" CLAUDE.md || true
+    fi
     
     if command -v uv &> /dev/null; then
         echo -e "  ${BLUE}→${NC} Setting up uv venv"
@@ -267,6 +306,7 @@ create_tmux_layout() {
     local count=$1
 
     echo -e "${BLUE}Creating tmux layout for $count agents...${NC}"
+    debug "tmux new-session -d -s $SESSION -n agents -c $WORKTREE_ROOT/agent-1"
 
     local model1=$(get_model 1 $count)
     tmux new-session -d -s "$SESSION" -n "agents" -c "$WORKTREE_ROOT/agent-1"
@@ -282,7 +322,7 @@ create_tmux_layout() {
         4)
             tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
             tmux split-window -v -t "$SESSION:agents.0" -c "$WORKTREE_ROOT/agent-3"
-            tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-4"
+            tmux split-window -v -t "$SESSION:agents.2" -c "$WORKTREE_ROOT/agent-4"
             ;;
     esac
 
@@ -291,16 +331,26 @@ create_tmux_layout() {
         local model=$(get_model $i $count)
         
         sleep 0.3
+        debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_ID=agent-$i' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_ID=agent-$i" C-m
         sleep 0.1
+        debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_MODEL=$model' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_MODEL=$model" C-m
+        sleep 0.1
+        debug "tmux send-keys -t $SESSION:agents.$pane 'export CLAUDE_SKIP_PERMISSION_PROMPTS=true' C-m"
+        tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
+        sleep 0.1
+        debug "tmux send-keys -t $SESSION:agents.$pane 'export CLAUDE_AUTO_APPROVE_FOLDERS=true' C-m"
+        tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
         sleep 0.1
         
         if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
+            debug "tmux send-keys -t $SESSION:agents.$pane 'source .venv/bin/activate' C-m"
             tmux send-keys -t "$SESSION:agents.$pane" "source .venv/bin/activate" C-m
             sleep 0.1
         fi
         
+        debug "tmux send-keys -t $SESSION:agents.$pane 'claude' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "claude" C-m
     done
 
@@ -358,6 +408,8 @@ cmd_start() {
 }
 
 cmd_stop() {
+    debug "Stopping session $SESSION"
+
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
         tmux kill-session -t "$SESSION"
@@ -510,6 +562,10 @@ while [[ $# -gt 0 ]]; do
                 echo -e "${RED}Error: -n requires 2, 3, or 4${NC}"
                 exit 1
             fi
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
             ;;
         --force)
             FORCE=true
