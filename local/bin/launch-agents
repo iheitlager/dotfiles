@@ -53,6 +53,7 @@ SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 AGENT_COUNT=2
 FORCE=false
 VERBOSE=false
+SKIP_PERMISSIONS=""
 
 debug() {
     if [[ "$VERBOSE" == true ]]; then
@@ -350,8 +351,8 @@ create_tmux_layout() {
             sleep 0.1
         fi
         
-        debug "tmux send-keys -t $SESSION:agents.$pane 'claude' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "claude" C-m
+        debug "tmux send-keys -t $SESSION:agents.$pane 'claude $SKIP_PERMISSIONS' C-m"
+        tmux send-keys -t "$SESSION:agents.$pane" "claude $SKIP_PERMISSIONS" C-m
     done
 
     for i in $(seq 1 $count); do
@@ -569,6 +570,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --force)
             FORCE=true
+            shift
+            ;;
+        --yolo)
+            SKIP_PERMISSIONS="--dangerously-skip-permissions"
             shift
             ;;
         -h|--help)
