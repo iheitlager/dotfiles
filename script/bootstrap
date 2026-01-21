@@ -8,6 +8,9 @@
 
 starttime=$(date +"%s")
 
+# Flags
+FORCE_GIT=false
+
 # make sure we get the sudo password at the start
 sudo -v
 
@@ -39,7 +42,7 @@ fail () {
 # Create XDG Base Directory structure
 # See: https://specifications.freedesktop.org/basedir-spec/latest/
 setup_xdg_dirs () {
-  info 'setting up XDG directories\n'
+  info 'setting up XDG directories'
 
   local xdg_dirs=(
     "$HOME/.config"       # XDG_CONFIG_HOME - user configuration files
@@ -57,13 +60,21 @@ setup_xdg_dirs () {
       success "exists $dir"
     fi
   done
+  success "setting up XDG directories"
 }
 
 # git gitconfig generator, drop the file to generate a new one
 setup_gitconfig () {
-  if ! [ -f git/gitconfig.symlink ]
-  then
-    info 'setup gitconfig'
+  local gitconfig_path="$HOME/.gitconfig"
+  local force=$1
+
+  if [ -f "$gitconfig_path" ] && [ "$force" != "true" ]; then
+    success "gitconfig already exists at $gitconfig_path"
+    return
+  fi
+
+  if ! [ -f git/gitconfig.symlink ] || [ "$force" = "true" ]; then
+    info 'setup gitconfig\n'
 
     user ' - What is your github author name?'
     read -e git_authorname
@@ -74,6 +85,20 @@ setup_gitconfig () {
 
     success 'gitconfig'
   fi
+}
+
+# Link XDG config directories
+link_config_files () {
+  info 'linking config directories\n'
+
+  local overwrite_all=false backup_all=false skip_all=false
+
+  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config')
+  do
+    local topic=$(basename $(dirname "$src"))
+    local dst="$HOME/.config/$topic"
+    link_file "$src" "$dst"
+  done
 }
 
 # create the actual symlink for a dotfile
@@ -169,7 +194,7 @@ install_brew_packages () {
   if [ "$(uname -s)" == "Darwin" ]
   then
     info "installing homebrew dependencies"
-    if bin/dot > /tmp/dotfiles-dot 2>&1 ; then
+    if local/bin/dot --new > /tmp/dotfiles-dot 2>&1 ; then
       success "all homebrew dependencies installed"
     else
       fail "error installing homebrew dependencies, check /tmp/dotfiles-dot"
@@ -196,10 +221,25 @@ run_installers () {
   success "all installers done"
 }
 
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -g|--git)
+      FORCE_GIT=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
 setup_xdg_dirs
-setup_gitconfig
+setup_gitconfig $FORCE_GIT
 install_brew_packages
 install_dotfiles
+link_config_files
 run_installers
 
 endtime=$(($(date +"%s")-$starttime))

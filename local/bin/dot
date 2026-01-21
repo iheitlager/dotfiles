@@ -117,7 +117,7 @@ source $DOTFILES/homebrew/brew_install.sh 2>&1 || exit 1
 # now process all topical brew packages
 for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
 do
-    echo "🔄 Processing installer: $src"
+    printf "  [ \033[00;34m..\033[0m ] Processing installer: $(basename $(dirname "$src"))\n"
     if [[ "$VERBOSE" == true ]]; then
         source "${src}" 2>&1 || exit 1
     else
@@ -126,7 +126,7 @@ do
 done
 
 # Finally, export the Brewfile
-echo "📝 Exporting current Homebrew installations to Brewfile..."
+printf "  [ \033[00;34m..\033[0m ] Exporting current Homebrew installations to Brewfile...\n"
 if [[ "$VERBOSE" == true ]]; then
     brew bundle dump --file="$BREWFILE" --force --verbose
 else

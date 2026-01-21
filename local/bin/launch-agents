@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.2.0
+# Version: 0.3.0
 #
 # Changelog:
+# 0.3.0 Improved agent manifest and instructions
 # 0.2.0 Uniform multi agent structure
 # 0.1.0 Three agent coordinator/worker structure
 #
@@ -151,42 +152,87 @@ setup_worktree() {
 
     if [[ -d "$worktree_path" ]]; then
         echo -e "  ${GREEN}✓${NC} agent-$agent worktree exists"
-        return 0
-    fi
+    else
+        mkdir -p "$WORKTREE_ROOT"
 
-    mkdir -p "$WORKTREE_ROOT"
+        if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+            echo -e "  ${BLUE}→${NC} Creating branch: $branch"
+            debug "git branch $branch"
+            git branch "$branch"
+        fi
 
-    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
-        echo -e "  ${BLUE}→${NC} Creating branch: $branch"
-        debug "git branch $branch"
-        git branch "$branch"
-    fi
+        echo -e "  ${BLUE}→${NC} Creating worktree: agent-$agent"
+        debug "git worktree add $worktree_path $branch"
+        git worktree add "$worktree_path" "$branch"
 
-    echo -e "  ${BLUE}→${NC} Creating worktree: agent-$agent"
-    debug "git worktree add $worktree_path $branch"
-    git worktree add "$worktree_path" "$branch"
+        pushd "$worktree_path" > /dev/null
+        
+        # Link shared .claude config if it exists in main repo
+        if [[ -f "$REPO_ROOT/CLAUDE.md" ]] && [[ ! -f "$worktree_path/CLAUDE.md" ]]; then
+            echo -e "  ${BLUE}→${NC} Linking CLAUDE.md"
+            ln -s "$REPO_ROOT/CLAUDE.md" CLAUDE.md || true
+        fi
+        
+        if command -v uv &> /dev/null; then
+            echo -e "  ${BLUE}→${NC} Setting up uv venv"
+            uv venv
+        fi
+        
+        if command -v link_claude &> /dev/null; then
+            echo -e "  ${BLUE}→${NC} Linking claude skills"
+            link_claude
+        fi
+        
+        popd > /dev/null
 
-    pushd "$worktree_path" > /dev/null
-    
-    # Link shared .claude config if it exists in main repo
-    if [[ -f "$REPO_ROOT/CLAUDE.md" ]] && [[ ! -f "$worktree_path/CLAUDE.md" ]]; then
-        echo -e "  ${BLUE}→${NC} Linking CLAUDE.md"
-        ln -s "$REPO_ROOT/CLAUDE.md" CLAUDE.md || true
+        echo -e "  ${GREEN}✓${NC} agent-$agent ready"
     fi
-    
-    if command -v uv &> /dev/null; then
-        echo -e "  ${BLUE}→${NC} Setting up uv venv"
-        uv venv
+}
+
+create_agents_manifest() {
+    local agent=$1
+    local model=$2
+    local worktree_path="$WORKTREE_ROOT/agent-$agent"
+
+    cat > "$worktree_path/AGENTS.md" << EOF
+# Agents in Swarm
+
+This document lists all agents in the $REPO_NAME swarm.
+
+## Current Agent
+
+- **ID**: agent-$agent
+- **Model**: $model
+- **Worktree**: $worktree_path
+- **Shared State**: $SHARED_CONTEXT
+
+## All Agents
+
+To see all agents, check worktrees:
+
+\`\`\`bash
+git worktree list
+\`\`\`
+
+Or view the swarm layout:
+
+\`\`\`bash
+launch-agents info
+\`\`\`
+EOF
+
+    # Ensure AGENTS.md is in .gitignore
+    pushd "$REPO_ROOT" > /dev/null
+    if [[ ! -f .gitignore ]]; then
+        echo "AGENTS.md" > .gitignore
+        git add .gitignore
+        git commit -m "chore: add .gitignore with AGENTS.md"
+    elif ! grep -q "^AGENTS.md$" .gitignore; then
+        echo "AGENTS.md" >> .gitignore
+        git add .gitignore
+        git commit -m "chore: ignore AGENTS.md" || true
     fi
-    
-    if command -v link_claude &> /dev/null; then
-        echo -e "  ${BLUE}→${NC} Linking claude skills"
-        link_claude
-    fi
-    
     popd > /dev/null
-
-    echo -e "  ${GREEN}✓${NC} agent-$agent ready"
 }
 
 setup_shared_state() {
@@ -407,7 +453,9 @@ cmd_start() {
     echo "Preparing worktrees..."
     for i in $(seq 1 $AGENT_COUNT); do
         setup_worktree $i
-        create_agent_instructions $i $(get_model $i $AGENT_COUNT)
+        local model=$(get_model $i $AGENT_COUNT)
+        create_agent_instructions $i $model
+        create_agents_manifest $i $model
     done
     echo ""
 
