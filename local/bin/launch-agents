@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 # launch-agents
+# Version: 0.2.0
+#
+# Changelog:
+# 0.2.0 Uniform multi agent structure
+# 0.1.0 Three agent coordinator/worker structure
+#
 # Usage: ./launch-agents [OPTIONS] COMMAND
 # Run from within your git repo
 
@@ -12,6 +18,11 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
+
+show_version() {
+    local version=$(sed -n '3p' "$0" | sed 's/.*Version: \([0-9.]*\).*/\1/')
+    echo "launch-agents version $version"
+}
 
 # Detect repo root and name
 # If in a worktree, get the main repo (strip -worktree suffix)
@@ -596,6 +607,10 @@ while [[ $# -gt 0 ]]; do
                 echo -e "${RED}Error: -n requires 2, 3, or 4${NC}"
                 exit 1
             fi
+            ;;
+        --version)
+            show_version
+            exit 0
             ;;
         -v|--verbose)
             VERBOSE=true
