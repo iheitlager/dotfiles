@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.3.0
+# Version: 0.4.0
 #
 # Changelog:
+# 0.4.0 Multi-client support with copilot and gemini
 # 0.3.0 Improved agent manifest and instructions
 # 0.2.0 Uniform multi agent structure
 # 0.1.0 Three agent coordinator/worker structure
@@ -65,6 +66,7 @@ SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 AGENT_COUNT=2
 FORCE=false
 VERBOSE=false
+EQUAL_DISTRIBUTION=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
 
@@ -92,24 +94,28 @@ Commands:
     info            Show status of agents, models, and tasks
 
 Options:
-    -n COUNT        Number of agents: 2, 3, or 4 (default: 2)
+    -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
+    --equal         For n=6, use equal distribution (Option 5) instead of default
     -v, --verbose   Print commands being executed
     --force         Force clean even with uncommitted changes
+    --yolo          Skip permission prompts (Claude agents only)
     -h, --help      Show this help message
 
 Layouts:
     2 agents        agent-1 │ agent-2
     3 agents        agent-1 │ agent-2 / agent-3
     4 agents        agent-1 / agent-3 │ agent-2 / agent-4
+    6 agents        agent-1 / agent-2 │ agent-3 / agent-4 │ agent-5 / agent-6
 
-Model assignment:
-    2 agents        opus, opus
-    3 agents        opus, sonnet, sonnet
-    4 agents        opus, opus, sonnet, haiku
+Clients & Models:
+    claude          opus (agents 1-2)
+    copilot         5.1-codex (agents 3-4)
+    gemini          gemini-pro (agents 5-6)
 
 Examples:
     launch-agents start             Start 2 agents (default)
     launch-agents -n 4 start        Start 4 agents
+    launch-agents -n 6 start        Start 6 agents with multi-client
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
     launch-agents clean             Remove merged worktrees
@@ -121,7 +127,123 @@ Paths:
 EOF
 }
 
+get_client() {
+    local agent=$1
+    local count=$2
+
+    case $count in
+        2|3|4)
+            echo "claude"
+            ;;
+        6)
+            if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
+                # Option 5: Equal pairs
+                case $agent in
+                    1|2) echo "claude" ;;
+                    3|4) echo "copilot" ;;
+                    5|6) echo "gemini" ;;
+                esac
+            else
+                # Option 1: Default (4 claude, 1 copilot, 1 gemini)
+                case $agent in
+                    1|2|3|4) echo "claude" ;;
+                    5) echo "copilot" ;;
+                    6) echo "gemini" ;;
+                esac
+            fi
+            ;;
+    esac
+}
+
 get_model() {
+    local agent=$1
+    local count=$2
+
+    case $count in
+        2)
+            echo "opus"
+            ;;
+        3)
+            case $agent in
+                1) echo "opus" ;;
+                *) echo "sonnet" ;;
+            esac
+            ;;
+        4)
+            case $agent in
+                1|2) echo "opus" ;;
+                3)   echo "sonnet" ;;
+                4)   echo "haiku" ;;
+            esac
+            ;;
+        6)
+            if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
+                # Option 5: Equal pairs
+                case $agent in
+                    1) echo "opus" ;;
+                    2) echo "sonnet" ;;
+                    3|4) echo "5.1-codex" ;;
+                    5|6) echo "gemini-pro" ;;
+                esac
+            else
+                # Option 1: Default (4 claude, 1 copilot, 1 gemini)
+                case $agent in
+                    1|2) echo "opus" ;;
+                    3|4) echo "sonnet" ;;
+                    5) echo "5.1-codex" ;;
+                    6) echo "gemini-pro" ;;
+                esac
+            fi
+            ;;
+    esac
+}
+
+create_agent() {
+    local agent=$1
+    local client=$2
+    local model=$3
+    local worktree_path="$WORKTREE_ROOT/agent-$agent"
+
+    if [[ -d "$worktree_path" ]]; then
+        echo -e "  ${GREEN}✓${NC} agent-$agent ($client/$model) worktree exists"
+    else
+        mkdir -p "$WORKTREE_ROOT"
+
+        local branch="agent-$agent"
+        if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+            echo -e "  ${BLUE}→${NC} Creating branch: $branch"
+            debug "git branch $branch"
+            git branch "$branch"
+        fi
+
+        echo -e "  ${BLUE}→${NC} Creating worktree: agent-$agent"
+        debug "git worktree add $worktree_path $branch"
+        git worktree add "$worktree_path" "$branch"
+
+        pushd "$worktree_path" > /dev/null
+        
+        # Link shared config if it exists in main repo
+        if [[ "$client" == "claude" ]] && [[ -f "$REPO_ROOT/CLAUDE.md" ]] && [[ ! -f "$worktree_path/CLAUDE.md" ]]; then
+            echo -e "  ${BLUE}→${NC} Linking CLAUDE.md"
+            ln -s "$REPO_ROOT/CLAUDE.md" CLAUDE.md || true
+        fi
+        
+        if command -v uv &> /dev/null; then
+            echo -e "  ${BLUE}→${NC} Setting up uv venv"
+            uv venv
+        fi
+        
+        popd > /dev/null
+
+        echo -e "  ${GREEN}✓${NC} agent-$agent ready"
+    fi
+
+    # Generate agents manifest and instructions (always)
+    create_agents_manifest $agent $client $model
+    create_agent_instructions $agent $client $model
+}
+
+old_get_model() {
     local agent=$1
     local count=$2
 
@@ -252,17 +374,22 @@ setup_shared_state() {
 
 create_agent_instructions() {
     local agent=$1
-    local model=$2
+    local client=$2
+    local model=$3
     local worktree_path="$WORKTREE_ROOT/agent-$agent"
 
-    cat > "$worktree_path/CLAUDE.md" << EOF
+    local filename="INSTRUCTIONS.md"
+    [[ "$client" == "claude" ]] && filename="CLAUDE.md"
+
+    cat > "$worktree_path/$filename" << EOF
 # Agent Instructions
 
-You are agent-$agent running $model in a peer swarm for project: $REPO_NAME
+You are agent-$agent running $model (via $client) in a peer swarm for project: $REPO_NAME
 
 ## Identity
 
 - Agent ID: agent-$agent
+- Client: $client
 - Model: $model
 - Worktree: $worktree_path
 - Shared state: $SHARED_CONTEXT
@@ -272,9 +399,9 @@ You are agent-$agent running $model in a peer swarm for project: $REPO_NAME
 Users may talk to you directly. When receiving a request:
 
 1. Assess complexity:
-   - Simple (haiku): docs, formatting, simple tests
-   - Moderate (sonnet): standard features, refactors
-   - Complex (opus): architecture, tricky bugs, design
+   - Simple: docs, formatting, simple tests
+   - Moderate: standard features, refactors
+   - Complex: architecture, tricky bugs, design
 
 2. Decide:
    - Small task + you match capability → do it directly
@@ -382,35 +509,48 @@ create_tmux_layout() {
 
     case $count in
         2)
+            # Create 1x2 layout: 1 | 2
             tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
             ;;
         3)
+            # Create 1x3 layout: 1 | 2 | 3
             tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
-            tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-3"
+            tmux split-window -v -t "$SESSION:agents.2" -c "$WORKTREE_ROOT/agent-3"
             ;;
         4)
+            # Create 2x2 layout: 1 | 3
+            #                    2 | 4
             tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
-            tmux split-window -v -t "$SESSION:agents.0" -c "$WORKTREE_ROOT/agent-3"
-            tmux split-window -v -t "$SESSION:agents.2" -c "$WORKTREE_ROOT/agent-4"
+            tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-3"
+            tmux split-window -v -t "$SESSION:agents.3" -c "$WORKTREE_ROOT/agent-4"
+            ;;
+        6)
+            # Create 2x3 grid: 1 | 3 | 5
+            #                  2 | 4 | 6
+            # First create 3 columns with explicit sizing (1-based pane index)
+            tmux split-window -h -t "$SESSION:agents" -l 66% -c "$WORKTREE_ROOT/agent-3"
+            tmux split-window -h -t "$SESSION:agents" -l 50% -c "$WORKTREE_ROOT/agent-5"
+            # Split each column vertically for the bottom row
+            tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-2"
+            tmux split-window -v -t "$SESSION:agents.3" -c "$WORKTREE_ROOT/agent-4"
+            tmux split-window -v -t "$SESSION:agents.5" -c "$WORKTREE_ROOT/agent-6"
             ;;
     esac
 
     for i in $(seq 1 $count); do
-        local pane=$((i - 1))
+        local pane=$i
+        local client=$(get_client $i $count)
         local model=$(get_model $i $count)
         
         sleep 0.3
         debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_ID=agent-$i' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_ID=agent-$i" C-m
         sleep 0.1
+        debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_CLIENT=$client' C-m"
+        tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_CLIENT=$client" C-m
+        sleep 0.1
         debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_MODEL=$model' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_MODEL=$model" C-m
-        sleep 0.1
-        debug "tmux send-keys -t $SESSION:agents.$pane 'export CLAUDE_SKIP_PERMISSION_PROMPTS=true' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
-        sleep 0.1
-        debug "tmux send-keys -t $SESSION:agents.$pane 'export CLAUDE_AUTO_APPROVE_FOLDERS=true' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
         sleep 0.1
         
         if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
@@ -419,8 +559,29 @@ create_tmux_layout() {
             sleep 0.1
         fi
         
-        debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+        # Start the appropriate agent based on client
+        case $client in
+            claude)
+                tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
+                sleep 0.1
+                tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
+                sleep 0.1
+                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
+                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+                ;;
+            copilot)
+                tmux send-keys -t "$SESSION:agents.$pane" "export COPILOT_MODEL=$model" C-m
+                sleep 0.1
+                debug "tmux send-keys -t $SESSION:agents.$pane 'copilot' C-m"
+                tmux send-keys -t "$SESSION:agents.$pane" "copilot" C-m
+                ;;
+            gemini)
+                tmux send-keys -t "$SESSION:agents.$pane" "export GEMINI_MODEL=$model" C-m
+                sleep 0.1
+                debug "tmux send-keys -t $SESSION:agents.$pane 'gemini' C-m"
+                tmux send-keys -t "$SESSION:agents.$pane" "gemini" C-m
+                ;;
+        esac
     done
 
     for i in $(seq 1 $count); do
@@ -433,7 +594,7 @@ create_tmux_layout() {
     done
 
     tmux select-window -t "$SESSION:agents"
-    tmux select-pane -t "$SESSION:agents.0"
+    tmux select-pane -t "$SESSION:agents.1"
 
     echo -e "${GREEN}✓ Tmux session created${NC}"
 }
@@ -452,10 +613,9 @@ cmd_start() {
 
     echo "Preparing worktrees..."
     for i in $(seq 1 $AGENT_COUNT); do
-        setup_worktree $i
+        local client=$(get_client $i $AGENT_COUNT)
         local model=$(get_model $i $AGENT_COUNT)
-        create_agent_instructions $i $model
-        create_agents_manifest $i $model
+        create_agent $i $client $model
     done
     echo ""
 
@@ -470,7 +630,7 @@ cmd_start() {
     echo "Navigation:"
     echo "  Ctrl-b 1        Agents window"
     echo "  Ctrl-b 2-$((AGENT_COUNT+1))      Shell windows"
-    echo "  Ctrl-b ↑↓←→     Switch pane"
+    echo "  Alt ↑↓←→        Switch pane"
     echo "  Ctrl-b z        Zoom pane"
     echo "  Ctrl-b d        Detach"
     echo ""
@@ -499,42 +659,42 @@ cmd_clean() {
 
     echo "Checking worktrees for cleanup..."
 
-    for i in 1 2 3 4; do
-        local worktree_path="$WORKTREE_ROOT/agent-$i"
-        local branch="agent-$i"
+    # Find all agent worktrees dynamically
+    if [[ -d "$WORKTREE_ROOT" ]]; then
+        for worktree_path in "$WORKTREE_ROOT"/agent-*; do
+            [[ -d "$worktree_path" ]] || continue
+            local agent=$(basename "$worktree_path")
+            local branch="$agent"
 
-        if [[ ! -d "$worktree_path" ]]; then
-            continue
-        fi
+            # Check for uncommitted changes
+            pushd "$worktree_path" > /dev/null
+            local has_changes=$(git status --porcelain)
+            popd > /dev/null
 
-        # Check for uncommitted changes
-        pushd "$worktree_path" > /dev/null
-        local has_changes=$(git status --porcelain)
-        popd > /dev/null
+            if [[ -n "$has_changes" ]] && [[ "$FORCE" != true ]]; then
+                echo -e "  ${RED}✗${NC} $agent: uncommitted changes (use --force to override)"
+                continue
+            fi
 
-        if [[ -n "$has_changes" ]] && [[ "$FORCE" != true ]]; then
-            echo -e "  ${RED}✗${NC} agent-$i: uncommitted changes (use --force to override)"
-            continue
-        fi
+            if [[ "$FORCE" == true ]]; then
+                echo -e "  ${YELLOW}!${NC} $agent: force removing"
+                git worktree remove "$worktree_path" --force 2>/dev/null || rm -rf "$worktree_path"
+                git branch -D "$branch" 2>/dev/null || true
+                continue
+            fi
 
-        if [[ "$FORCE" == true ]]; then
-            echo -e "  ${YELLOW}!${NC} agent-$i: force removing"
-            git worktree remove "$worktree_path" --force 2>/dev/null || rm -rf "$worktree_path"
-            git branch -D "$branch" 2>/dev/null || true
-            continue
-        fi
-
-        # Check if branch is merged into main
-        pushd "$REPO_ROOT" > /dev/null
-        if git branch --merged main 2>/dev/null | grep -q "$branch"; then
-            echo -e "  ${GREEN}✓${NC} agent-$i: branch merged, removing"
-            git worktree remove "$worktree_path" --force
-            git branch -d "$branch" 2>/dev/null || true
-        else
-            echo -e "  ${YELLOW}!${NC} agent-$i: branch not merged into main, skipping"
-        fi
-        popd > /dev/null
-    done
+            # Check if branch is merged into main
+            pushd "$REPO_ROOT" > /dev/null
+            if git branch --merged main 2>/dev/null | grep -q "$branch"; then
+                echo -e "  ${GREEN}✓${NC} $agent: branch merged, removing"
+                git worktree remove "$worktree_path" --force
+                git branch -d "$branch" 2>/dev/null || true
+            else
+                echo -e "  ${YELLOW}!${NC} $agent: branch not merged into main, skipping"
+            fi
+            popd > /dev/null
+        done
+    fi
 
     if [[ -d "$WORKTREE_ROOT" ]] && [[ -z "$(ls -A "$WORKTREE_ROOT")" ]]; then
         rmdir "$WORKTREE_ROOT"
@@ -648,17 +808,21 @@ cmd_info() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         -n)
-            if [[ "$2" =~ ^[2-4]$ ]]; then
+            if [[ "$2" =~ ^[2-6]$ ]]; then
                 AGENT_COUNT=$2
                 shift 2
             else
-                echo -e "${RED}Error: -n requires 2, 3, or 4${NC}"
+                echo -e "${RED}Error: -n requires 2, 3, 4, or 6${NC}"
                 exit 1
             fi
             ;;
         --version)
             show_version
             exit 0
+            ;;
+        --equal)
+            EQUAL_DISTRIBUTION=true
+            shift
             ;;
         -v|--verbose)
             VERBOSE=true
