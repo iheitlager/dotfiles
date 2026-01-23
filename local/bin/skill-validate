@@ -13,9 +13,6 @@ Usage:
 """
 
 import argparse
-import hashlib
-import json
-import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -27,16 +24,43 @@ RED = "\033[0;31m"
 YELLOW = "\033[0;33m"
 GREEN = "\033[0;32m"
 BLUE = "\033[0;34m"
+CYAN = "\033[0;36m"
+MAGENTA = "\033[0;35m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 NC = "\033[0m"
 
+
+class ColorHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Colorful help formatter for argparse."""
+    
+    def _format_usage(self, usage, actions, groups, prefix):
+        if prefix is None:
+            prefix = f'{BOLD}Usage:{NC} '
+        return super()._format_usage(usage, actions, groups, prefix)
+    
+    def _format_action_invocation(self, action):
+        result = super()._format_action_invocation(action)
+        return f'{CYAN}{result}{NC}'
+    
+    def _metavar_formatter(self, action, default_metavar):
+        formatter = super()._metavar_formatter(action, default_metavar)
+        def colored_formatter(tuple_size):
+            result = formatter(tuple_size)
+            if isinstance(result, tuple):
+                return tuple(f'{YELLOW}{r}{NC}' for r in result)
+            return f'{YELLOW}{result}{NC}'
+        return colored_formatter
+    
+    def start_section(self, heading):
+        super().start_section(f'{BOLD}{heading}{NC}')
+
+
 # Default scan paths
 DEFAULT_PATHS = [
+    Path.home() / ".claude",
     Path.home() / ".claude" / "skills",
-    Path.home() / ".config" / "claude" / "skills",
-    Path.home() / ".dotfiles" / "claude" / "config" / "skills",
-    Path.home() / ".dotfiles" / "claude" / "config" / "commands",
+    Path.home() / ".claude" / "commands",
 ]
 
 # File extensions to scan
@@ -51,6 +75,7 @@ class Finding:
     file: str
     line: int
     description: str
+    pattern_id: int
     match: str
 
 
@@ -59,6 +84,7 @@ class Pattern:
     severity: str
     category: str
     regex: re.Pattern
+    pattern_id: int
     description: str
 
 
@@ -97,15 +123,46 @@ def _init_patterns():
         ("HIGH", "PROMPT_INJECTION", r"you are now|you're now|from now on you", "Role hijacking attempt"),
         ("HIGH", "PROMPT_INJECTION", r"new system prompt|new prompt:", "System prompt injection"),
         ("HIGH", "PROMPT_INJECTION", r"forget (everything|what|your)", "Memory manipulation"),
+        ("HIGH", "PROMPT_INJECTION", r"pretend (you are|to be|you're)", "Role pretending attack"),
+        ("HIGH", "PROMPT_INJECTION", r"\bDAN\b|do anything now", "DAN jailbreak attempt"),
+        ("HIGH", "PROMPT_INJECTION", r"developer mode|maintenance mode", "Mode switching attack"),
         ("MEDIUM", "PROMPT_INJECTION", r"\b(bypass|jailbreak)\b", "Security bypass mention"),
+        ("MEDIUM", "PROMPT_INJECTION", r"```system|<system>|<<SYS>>", "Delimiter injection"),
 
         # === DATA EXFILTRATION ===
         ("CRITICAL", "DATA_EXFIL", r"curl.*\|.*bash|wget.*\|.*sh|curl.*\|.*sh", "Remote code execution (curl|bash)"),
+        ("CRITICAL", "DATA_EXFIL", r"/dev/tcp/", "Bash TCP socket (data exfiltration)"),
+        ("CRITICAL", "DATA_EXFIL", r"bash -i.*>&.*/dev/tcp", "Reverse shell"),
         ("HIGH", "DATA_EXFIL", r"curl.*(--data|--upload|-d |-F )", "Data upload via curl"),
         ("HIGH", "DATA_EXFIL", r"curl.*(-X POST|-X PUT)", "HTTP POST/PUT request"),
-        ("HIGH", "DATA_EXFIL", r"\bnc -", "Netcat usage (potential reverse shell)"),
+        ("HIGH", "DATA_EXFIL", r"\bnc\s+-", "Netcat usage (potential reverse shell)"),
+        ("HIGH", "DATA_EXFIL", r"\bsocat\b", "Socat (bidirectional data transfer)"),
         ("HIGH", "DATA_EXFIL", r"base64.*\|.*(curl|wget)", "Encoded data exfiltration"),
+        ("HIGH", "DATA_EXFIL", r"aws s3 (cp|sync|mv).*s3://", "AWS S3 upload"),
+        ("HIGH", "DATA_EXFIL", r"gsutil (cp|rsync)", "Google Cloud Storage upload"),
+        ("HIGH", "DATA_EXFIL", r"\bscp\b.*:", "SCP file transfer"),
+        ("HIGH", "DATA_EXFIL", r"\bftp\b|-ftp-", "FTP file transfer"),
+        ("HIGH", "DATA_EXFIL", r"ssh -R|ssh.*-R\s+\d+", "SSH reverse tunnel"),
         ("MEDIUM", "DATA_EXFIL", r"\b(webhook|ngrok|pastebin)\b", "External service reference"),
+        ("MEDIUM", "DATA_EXFIL", r"\b(dig|nslookup)\b.*TXT", "DNS exfiltration"),
+
+        # === CODE INJECTION ===
+        ("CRITICAL", "CODE_INJECTION", r"\beval\s*\(", "Eval execution"),
+        ("CRITICAL", "CODE_INJECTION", r"\bexec\s*\(", "Exec execution"),
+        ("CRITICAL", "CODE_INJECTION", r"os\.system\s*\(", "OS system call"),
+        ("CRITICAL", "CODE_INJECTION", r"subprocess.*shell\s*=\s*True", "Subprocess shell injection"),
+        ("HIGH", "CODE_INJECTION", r"pickle\.loads?", "Pickle deserialization (RCE risk)"),
+        ("HIGH", "CODE_INJECTION", r"yaml\.load\s*\([^)]*\)(?!.*Loader)", "Unsafe YAML load"),
+        ("HIGH", "CODE_INJECTION", r"yaml\.unsafe_load", "Unsafe YAML load"),
+        ("HIGH", "CODE_INJECTION", r"__import__\s*\(", "Dynamic import"),
+        ("HIGH", "CODE_INJECTION", r"compile\s*\(.*exec", "Dynamic code compilation"),
+
+        # === OBFUSCATION ===
+        ("HIGH", "OBFUSCATION", r"\\x[0-9a-fA-F]{2}.*\\x[0-9a-fA-F]{2}", "Hex-encoded strings"),
+        ("HIGH", "OBFUSCATION", r"chr\s*\(\s*\d+\s*\)\s*\+\s*chr", "Character concatenation obfuscation"),
+        ("HIGH", "OBFUSCATION", r"base64\s+(-d|--decode)", "Base64 decoding"),
+        ("HIGH", "OBFUSCATION", r"\bxxd\s+-r", "Hex decoding"),
+        ("MEDIUM", "OBFUSCATION", r"\\u[0-9a-fA-F]{4}.*\\u[0-9a-fA-F]{4}", "Unicode escape obfuscation"),
 
         # === PRIVILEGE ESCALATION ===
         ("CRITICAL", "PRIV_ESC", r"NOPASSWD", "Passwordless sudo configuration"),
@@ -115,30 +172,58 @@ def _init_patterns():
         ("HIGH", "PRIV_ESC", r"visudo|/etc/sudoers", "Sudoers modification"),
         ("HIGH", "PRIV_ESC", r"/etc/passwd|/etc/shadow", "System password file access"),
         ("HIGH", "PRIV_ESC", r"\.ssh/(authorized_keys|id_rsa|id_ed25519)", "SSH key manipulation"),
+        ("HIGH", "PRIV_ESC", r"python.*pty\.spawn", "PTY spawn (shell escape)"),
+
+        # === CONTAINER ESCAPE ===
+        ("CRITICAL", "CONTAINER", r"--privileged", "Privileged container"),
+        ("CRITICAL", "CONTAINER", r"docker\.sock|/var/run/docker", "Docker socket access"),
+        ("HIGH", "CONTAINER", r"/proc/self/root", "Container root escape"),
+        ("HIGH", "CONTAINER", r"--cap-add\s*(SYS_ADMIN|ALL)", "Dangerous capability addition"),
+        ("HIGH", "CONTAINER", r"--pid\s*=\s*host|--net\s*=\s*host", "Host namespace access"),
 
         # === SUPPLY CHAIN ===
         ("CRITICAL", "SUPPLY_CHAIN", r"pip install.*(--trusted-host|-i http://)", "Untrusted package source"),
         ("CRITICAL", "SUPPLY_CHAIN", r"npm config set registry", "NPM registry override"),
         ("HIGH", "SUPPLY_CHAIN", r"pip install.*(github\.com|git\+)", "Direct Git package installation"),
         ("HIGH", "SUPPLY_CHAIN", r"npm install.*github:", "Direct GitHub npm install"),
+        ("HIGH", "SUPPLY_CHAIN", r"go get\s+github\.com", "Direct Go package from GitHub"),
+        ("HIGH", "SUPPLY_CHAIN", r"cargo install.*--git", "Direct Cargo install from Git"),
+        ("HIGH", "SUPPLY_CHAIN", r"gem install.*--source", "Ruby gem from custom source"),
 
         # === FILESYSTEM RISKS ===
         ("CRITICAL", "FILESYSTEM", r"rm -rf /[^a-z]|rm -rf /\$", "Recursive root deletion"),
         ("HIGH", "FILESYSTEM", r"mkfs\.|dd if=.*of=/dev", "Disk formatting/direct write"),
+        ("HIGH", "FILESYSTEM", r">\s*/dev/sd[a-z]|>\s*/dev/nvme", "Direct disk write"),
 
         # === CREDENTIALS ===
         ("HIGH", "CREDENTIALS", r"(password|api_key|api-key|secret|token)\s*[=:]\s*['\"][^'\"]+['\"]", "Hardcoded credential"),
+        ("HIGH", "CREDENTIALS", r"~/.aws/(credentials|config)", "AWS credentials access"),
+        ("HIGH", "CREDENTIALS", r"AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID", "AWS key reference"),
+        ("HIGH", "CREDENTIALS", r"GITHUB_TOKEN|GH_TOKEN", "GitHub token reference"),
+        ("HIGH", "CREDENTIALS", r"OPENAI_API_KEY|ANTHROPIC_API_KEY", "AI API key reference"),
+        ("HIGH", "CREDENTIALS", r"~/.netrc|\.netrc", "Netrc credentials file"),
+        ("HIGH", "CREDENTIALS", r"~/.npmrc|\.npmrc", "NPM credentials file"),
+        ("MEDIUM", "CREDENTIALS", r"cat\s+.*\.(env|pem|key)", "Reading secrets file"),
+
+        # === INFO DISCLOSURE ===
+        ("HIGH", "INFO_DISCLOSURE", r"\bprintenv\b|/proc/self/environ", "Environment variable dump"),
+        ("HIGH", "INFO_DISCLOSURE", r"cat.*/etc/passwd", "User enumeration"),
+        ("HIGH", "INFO_DISCLOSURE", r"git config --list|git config -l", "Git config disclosure"),
+        ("MEDIUM", "INFO_DISCLOSURE", r"cat.*\.env\b|cat.*\.env\.", "Env file disclosure"),
+        ("MEDIUM", "INFO_DISCLOSURE", r"ls -la.*/\.", "Hidden file enumeration"),
 
         # === PERSISTENCE ===
         ("HIGH", "PERSISTENCE", r"\b(crontab|/etc/cron)", "Cron job manipulation"),
         ("HIGH", "PERSISTENCE", r"launchctl|LaunchAgents|LaunchDaemons", "macOS launch agent/daemon"),
         ("HIGH", "PERSISTENCE", r"systemctl.*enable", "Systemd service enabling"),
+        ("HIGH", "PERSISTENCE", r"/etc/init\.d/|update-rc\.d", "Init script modification"),
         ("MEDIUM", "PERSISTENCE", r"\.(bashrc|zshrc|profile|bash_profile)\b", "Shell RC modification"),
     ]
 
-    for severity, category, pattern, description in pattern_defs:
+    for idx, (severity, category, pattern, description) in enumerate(pattern_defs, start=1):
         try:
             PATTERNS.append(Pattern(
+                pattern_id=idx,
                 severity=severity,
                 category=category,
                 regex=re.compile(pattern, re.IGNORECASE),
@@ -191,6 +276,7 @@ def scan_file(filepath: Path, results: ScanResults) -> None:
                     file=str(filepath),
                     line=line_num,
                     description=pattern.description,
+                    pattern_id=pattern.pattern_id,
                     match=match.group(0)[:80],
                 ))
 
@@ -205,11 +291,10 @@ def print_finding(finding: Finding, verbose: bool = False) -> None:
     }
     color = colors.get(finding.severity, NC)
 
-    print(f"{color}[{finding.severity}]{NC} {BOLD}{finding.category}{NC}")
+    print(f"{color}[{finding.severity}]{NC} {BOLD}{finding.category}/{finding.pattern_id}{NC}")
     print(f"  File: {finding.file}:{finding.line}")
     print(f"  Issue: {finding.description}")
-    if verbose:
-        print(f"  {DIM}Match: {finding.match}{NC}")
+    print(f"  {DIM}{finding.match}{NC}")
     print()
 
 
@@ -241,6 +326,31 @@ def print_summary(results: ScanResults) -> None:
         print(f"{GREEN}✓ No security findings detected{NC}")
     else:
         print(f"{YELLOW}Review medium/low findings for context-specific risks{NC}")
+
+
+def print_patterns() -> None:
+    """Print all vulnerability patterns being checked."""
+    colors = {
+        "CRITICAL": RED,
+        "HIGH": RED,
+        "MEDIUM": YELLOW,
+        "LOW": BLUE,
+    }
+    
+    print(f"{BOLD}Vulnerability Patterns ({len(PATTERNS)} total){NC}")
+    print(f"{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NC}")
+    print()
+    
+    current_category = None
+    for p in PATTERNS:
+        if p.category != current_category:
+            current_category = p.category
+            print(f"{BOLD}{current_category}{NC}")
+        
+        color = colors.get(p.severity, NC)
+        print(f"  {color}{p.pattern_id:2d}. [{p.severity:8s}]{NC} {p.description}")
+        print(f"      {DIM}{p.regex.pattern}{NC}")
+    print()
 
 
 def output_json(results: ScanResults) -> None:
@@ -309,25 +419,26 @@ def check_integrity(hash_file: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Validate AI agent skills for security vulnerabilities.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Vulnerability Categories:
-    1. Prompt Injection    - Attempts to override system instructions
-    2. Data Exfiltration   - Unauthorized data transmission
-    3. Privilege Escalation - Elevated permission acquisition
-    4. Supply Chain        - Malicious dependency introduction
+        description=f"{BOLD}Validate AI agent skills for security vulnerabilities.{NC}",
+        formatter_class=ColorHelpFormatter,
+        epilog=f"""
+{BOLD}Vulnerability Categories:{NC}
+    {RED}1. Prompt Injection{NC}     - Attempts to override system instructions
+    {YELLOW}2. Data Exfiltration{NC}    - Unauthorized data transmission
+    {MAGENTA}3. Privilege Escalation{NC} - Elevated permission acquisition
+    {CYAN}4. Supply Chain{NC}         - Malicious dependency introduction
 
-Examples:
-    skill-validate                          # Scan default locations
-    skill-validate ~/.claude/skills/        # Scan specific directory
-    skill-validate --strict --verbose .     # Strict scan with details
-    skill-validate --json > report.json     # JSON output for CI/CD
+{BOLD}Examples:{NC}
+    {DIM}${NC} skill-validate                          {DIM}# Scan default locations{NC}
+    {DIM}${NC} skill-validate ~/.claude/skills/        {DIM}# Scan specific directory{NC}
+    {DIM}${NC} skill-validate --strict --verbose .     {DIM}# Strict scan with details{NC}
+    {DIM}${NC} skill-validate --json > report.json     {DIM}# JSON output for CI/CD{NC}
         """,
     )
     parser.add_argument("paths", nargs="*", help="Paths to scan (default: common skill locations)")
     parser.add_argument("--strict", action="store_true", help="Exit with error on medium+ severity")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show matched patterns")
+    parser.add_argument("-i", "--info", action="store_true", help="Show vulnerability patterns")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--integrity", action="store_true", help="Check file integrity")
     parser.add_argument("--generate-hashes", action="store_true", help="Generate integrity hashes")
@@ -340,6 +451,11 @@ Examples:
     # Handle hash generation
     if args.generate_hashes:
         generate_hashes(scan_paths)
+        return 0
+
+    # Show patterns info
+    if args.info:
+        print_patterns()
         return 0
 
     # Header
