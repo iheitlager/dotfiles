@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Interactive shell configuration - sourced for every interactive shell
+# Aliases, shell options, completions, and prompt go here
+
+# Exit if not running interactively
+[[ $- != *i* ]] && return
+
+# Shell options
+shopt -s cdspell        # Fix spelling errors in cd
+shopt -s histappend     # Append to history rather than overwrite
+shopt -s checkwinsize   # Check window after each command
+shopt -s dotglob        # Include dotfiles in glob expansion
+shopt -s extglob        # Extended globbing
+
+# Shell settings
+set -o noclobber        # Prevent overwriting files with >
+set -o ignoreeof        # Prevent Ctrl+D from logging out
+
+# Tab complete for sudo
+complete -cf sudo
+
+# Source aliases from modules
+for alias_file in $DOTFILES/**/bash_aliases; do
+    source "$alias_file"
+done
+
+# Bash completion
+[[ -r "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh" ]] && . "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh"
+source "$HOMEBREW_PREFIX/etc/bash_completion.d/git-prompt.sh"
+
+# Source completions from modules
+for comp_file in $DOTFILES/**/bash_completion; do
+    source "$comp_file"
+done
+
+# Prompt configuration
+REMOTE_PROMPT="\e[0;31m[\u@\h \W]\$ \e[m "
+
+update_prompt() {
+    # Color codes
+    local GREEN='\[\033[32m\]'
+    local BLUE='\[\033[34m\]'
+    local YELLOW='\[\033[33m\]'
+    local RED='\[\033[31m\]'
+    local CYAN='\[\033[36m\]'
+    local RESET='\[\033[0m\]'
+    local MAGENTA='\[\033[35m\]'
+    
+    # First line components
+    local venv_info=""
+    local python_info=""
+    local git_info=""
+
+    # Virtual environment with snake icon - use current directory name
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        local git_root="${VIRTUAL_ENV%/*}"
+        local project_name=$(basename "$git_root")
+        venv_info="${YELLOW}📦 ${project_name}${RESET} "
+        if ([[ -f "$git_root/uv.lock" ]] || ([[ -f "$git_root/pyproject.toml" ]] && grep -q "uv" "$git_root/pyproject.toml" 2>/dev/null)); then
+            venv_info="⚡$venv_info"
+        fi
+    fi
+    
+    # Python version (only show if python is available)
+    if command -v python &> /dev/null; then
+        local py_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
+        python_info="${RED}🐍 py${py_version}${RESET} "
+    fi
+    
+    # Git information
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        local git_prompt="$(__git_ps1 "⎇ %s")"
+        
+        # Add numeric counts to existing symbols
+        if git rev-parse --abbrev-ref @{upstream} &>/dev/null; then
+            local ahead=$(git rev-list --count @{upstream}..HEAD 2>/dev/null || echo "0")
+            local behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo "0")
+            
+            if [[ "$ahead" -gt 0 && "$behind" -gt 0 ]]; then
+                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}/${GREEN}${ahead} ahead${RESET}]"
+            elif [[ "$ahead" -gt 0 ]]; then
+                git_prompt="${git_prompt} [${GREEN}${ahead} ahead${RESET}]"
+            elif [[ "$behind" -gt 0 ]]; then
+                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}]"
+            fi
+        fi
+    fi
+    
+    # Build the first line
+    local first_line="${venv_info}${python_info}"
+    if [[ -n "$git_prompt" ]]; then
+        first_line="${first_line}\[${git_prompt}\]"
+    fi
+    
+    # Only show first line if there's content
+    if [[ -n "$first_line" ]]; then
+        PS1="${first_line}\n${MAGENTA}\w>${RESET} "
+    else
+        PS1="${CYAN}[\W] >${RESET} "
+    fi
+}
+
+PROMPT_COMMAND=update_prompt

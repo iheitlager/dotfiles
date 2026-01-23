@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Login shell configuration - sourced once per session
+# Environment variables, PATH setup, and exports go here
+
 export DOTFILES=$HOME/.dotfiles
 
 # XDG Base Directory Specification
@@ -26,6 +29,7 @@ export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 export BASH_SILENCE_DEPRECATION_WARNING=1
 
+# Editor and pager
 export PAGER=less
 export EDITOR=vim
 export MANPAGER="col -b | bat --plain --language=man"
@@ -47,139 +51,30 @@ export HISTTIMEFORMAT="[%DT%T] "
 export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
 mkdir -p "$XDG_STATE_HOME/psql" 2>/dev/null
 
-shopt -s cdspell #fix spelling
-shopt -s histappend # Append to history rather than overwrite
-shopt -s checkwinsize   # Check window after each command
-shopt -s dotglob    # files beginning with . to be returned in the results of path-name expansion.
-shopt -s extglob # turn on extended globbing
-
-# Tab complete for sudo
-complete -cf sudo
-
-#prevent overwriting files with cat
-set -o noclobber
-
-#stops ctrl+d from logging me out
-set -o ignoreeof
-
-REMOTE_PROMPT="\e[0;31m[\u@\h \W]\$ \e[m "
-
-path_munge() {
-    if [ -d "$1" ]; then
-        PATH=${PATH//":$1:"/:} #delete all instances in the middle
-        PATH=${PATH/%":$1"/} #delete any instance at the end
-        PATH=${PATH/#"$1:"/} #delete any instance at the beginning
-        if [ "$2" = "after" ] ; then
-            PATH=$PATH:$1
-        else
-            PATH=$1:$PATH
-        fi
-    fi
-}
-
-# set path, make /usr/local/bin preference
-# export PATH=`echo ":$PATH:" | sed -e "s#:/usr/local/bin:#:#g" -e "s/^://" -e "s/:$//"`
+# PATH setup - only done once in login shell
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-
 export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
 export PATH="$HOME/.local/bin:$PATH"     # for uv and other user binaries
 #export PATH="/opt/local/bin:/opt/local/sbin:$PATH"  # MacPorts
 eval "$(/opt/homebrew/bin/brew shellenv)"  # Homebrew
 export PATH=$DOTFILES/local/bin:$PATH
 
-source_files () {
-    local alias_file
-    for alias_file in $DOTFILES/**/$1; do
-        source "$alias_file"
-    done
-}
+export MANPATH="/opt/local/share/man:$MANPATH"
 
-# use .localrc for SUPER SECRET CRAP that you don't
-# want in your public, versioned repo.
-if [ -e $XDG_CONFIG_HOME/secrets ] ; then
-  source "$XDG_CONFIG_HOME/secrets"
+# 1Password SSH agent
+export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
+
+# Source secrets (not in version control)
+if [ -e "$XDG_CONFIG_HOME/secrets" ]; then
+    source "$XDG_CONFIG_HOME/secrets"
 fi
 
-source_files "bash_aliases"
-source_files "bash_env"
+# Source environment variables from modules
+for env_file in $DOTFILES/**/bash_env; do
+    source "$env_file"
+done
 
-[[ -r "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh" ]] && . "$HOMEBREW_PREFIX/etc/profile.d/bash_completion.sh"
-# Source the git prompt script from Homebrew
-source "$HOMEBREW_PREFIX/etc/bash_completion.d/git-prompt.sh"
-
-source_files "bash_completion"
-
-unset source_files
-
-update_prompt() {
-    # Color codes
-    local GREEN='\[\033[32m\]'
-    local BLUE='\[\033[34m\]'
-    local YELLOW='\[\033[33m\]'
-    local RED='\[\033[31m\]'
-    local CYAN='\[\033[36m\]'
-    local RESET='\[\033[0m\]'
-    local MAGENTA='\[\033[35m\]'
-    
-    # First line components
-    local venv_info=""
-    local python_info=""
-    local git_info=""
-
-    # Virtual environment with snake icon - use current directory name
-    if [[ -n "$VIRTUAL_ENV" ]]; then
-        local git_root="${VIRTUAL_ENV%/*}"
-        local project_name=$(basename "$git_root")
-        venv_info="${YELLOW}📦 ${project_name}${RESET} "
-        if ([[ -f "$git_root/uv.lock" ]] || ([[ -f "$git_root/pyproject.toml" ]] && grep -q "uv" "$git_root/pyproject.toml" 2>/dev/null)); then
-            venv_info="⚡$venv_info"
-        fi
-    fi
-    
-    # Python version (only show if python is available)
-    if command -v python &> /dev/null; then
-        local py_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
-        python_info="${RED}🐍 py${py_version}${RESET} "
-    fi
-    
-    # Git information
-    if git rev-parse --git-dir > /dev/null 2>&1; then
-        local git_prompt="$(__git_ps1 "⎇ %s")"
-        
-        # Add numeric counts to existing symbols
-        if git rev-parse --abbrev-ref @{upstream} &>/dev/null; then
-            local ahead=$(git rev-list --count @{upstream}..HEAD 2>/dev/null || echo "0")
-            local behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo "0")
-            
-            if [[ "$ahead" -gt 0 && "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}/${GREEN}${ahead} ahead${RESET}]"  # e.g. "⎇ main<> 2/3"
-            elif [[ "$ahead" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${GREEN}${ahead} ahead${RESET}]"            # e.g. "⎇ main> 2"
-            elif [[ "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}]"           # e.g. "⎇ main< 3"
-            fi
-        fi
-        
-    fi
-    
-    # Build the first line
-    local first_line="${venv_info}${python_info}"
-    if [[ -n "$git_prompt" ]]; then
-        first_line="${first_line}\[${git_prompt}\]"
-    fi
-    
-    # Only show first line if there's content
-    if [[ -n "$first_line" ]]; then
-        PS1="${first_line}\n${MAGENTA}\w>${RESET} "
-    else
-        PS1="${CYAN}[\W] >${RESET} "
-    fi
-}
-
-PROMPT_COMMAND=update_prompt
-
-
-export MANPATH="/opt/local/share/man:$MANPATH"
-# Finished adapting your MANPATH environment variable for use with MacPorts.
-
-export SSH_AUTH_SOCK=~/Library/Group\ Containers/2BUA8C4S2C.com.1password/t/agent.sock
+# Source bashrc for interactive login shells
+if [[ $- == *i* ]]; then
+    source ~/.bashrc
+fi

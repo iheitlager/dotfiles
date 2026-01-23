@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Create symlinks for bash configuration
+ln -sf "$DOTFILES/bash/bash_profile.symlink" ~/.bash_profile
+ln -sf "$DOTFILES/bash/bashrc.symlink" ~/.bashrc
+
 if [ ! -f $XDG_CONFIG_HOME/secrets ] ; then
     echo "  Creating an empty $XDG_CONFIG_HOME/secrets, put super secret stuff here!"
     echo > "$XDG_CONFIG_HOME/secrets"
