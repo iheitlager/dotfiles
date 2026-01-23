@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Ruby IRB history - XDG compliant
+export IRBRC="$XDG_CONFIG_HOME/irb/irbrc"
+export IRB_HISTORY_FILE="$XDG_STATE_HOME/irb/history"
+mkdir -p "$XDG_STATE_HOME/irb" 2>/dev/null
+mkdir -p "$XDG_CONFIG_HOME/irb" 2>/dev/null

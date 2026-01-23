@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+# Node.js REPL history - XDG compliant
+export NODE_REPL_HISTORY="$XDG_STATE_HOME/node/repl_history"
+mkdir -p "$XDG_STATE_HOME/node" 2>/dev/null
