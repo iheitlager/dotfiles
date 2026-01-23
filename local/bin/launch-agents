@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.4.0
+# Version: 0.4.1
 #
 # Changelog:
+# 0.4.1 Improved skill handling and instructions
 # 0.4.0 Multi-client support with copilot and gemini
 # 0.3.0 Improved agent manifest and instructions
 # 0.2.0 Uniform multi agent structure
@@ -125,6 +126,9 @@ Examples:
 Paths:
     Worktrees       $WORKTREE_ROOT/agent-N/
     Shared state    $SHARED_CONTEXT/
+
+Documentation:
+    See ~/.dotfiles/docs/agent-system.md for detailed architecture and usage.
 EOF
 }
 
@@ -432,7 +436,7 @@ Check swarm activity:
 tail -30 $SHARED_CONTEXT/events.log
 \`\`\`
 
-Signal another agent (optional, always send an extra Enter):
+Signal another agent (optional, always send an extra tmux with a clear Enter, otherwise it will not be processed):
 \`\`\`bash
 tmux send-keys -t $SESSION:agents.N "Message here" Enter
 tmux send-keys -t $SESSION:agents.N Enter
@@ -466,6 +470,13 @@ For each task:
 - One active task at a time
 - Signal completion clearly
 - Help clear simple tasks if queue is empty
+
+## Documentation
+
+For detailed architecture, security considerations, and advanced usage:
+\`\`\`bash
+cat ~/.dotfiles/docs/agent-system.md
+\`\`\`
 EOF
 }
 
@@ -530,11 +541,12 @@ create_tmux_layout() {
             claude)
                 tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
                 tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
+                tmux send-keys -t "$SESSION:agents.$pane" "clear" C-m
                 # Inject AGENTS.md via --append-system-prompt (CLAUDE.md is auto-read for project info)
                 debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
                 tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
-                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
-                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+                # debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
+                # tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
                 ;;
             copilot)
                 tmux send-keys -t "$SESSION:agents.$pane" "export COPILOT_MODEL=$model" C-m
@@ -609,9 +621,46 @@ cmd_stop() {
     debug "Stopping session $SESSION"
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
-        echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
-        tmux kill-session -t "$SESSION"
-        echo -e "${GREEN}✓ Session stopped${NC}"
+        # Count panes in agents window to determine agent count
+        local pane_count=$(tmux list-panes -t "$SESSION:agents" 2>/dev/null | wc -l | tr -d ' ')
+        
+        if [[ "$FORCE" == true ]]; then
+            echo -e "${YELLOW}Force killing agents...${NC}"
+            
+            # Send Ctrl-C to interrupt running processes
+            for i in $(seq 1 $pane_count); do
+                debug "Sending Ctrl-C to agent-$i"
+                tmux send-keys -t "$SESSION:agents.$i" C-c
+            done
+            sleep 0.5
+            
+            # Send exit to terminate shells
+            for i in $(seq 1 $pane_count); do
+                debug "Sending exit to agent-$i"
+                tmux send-keys -t "$SESSION:agents.$i" "exit" Enter
+            done
+            sleep 0.5
+            
+            echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
+            tmux kill-session -t "$SESSION"
+            echo -e "${GREEN}✓ Session killed${NC}"
+        else
+            echo -e "${YELLOW}Sending shutdown to agents...${NC}"
+            
+            # Send graceful shutdown message to each agent
+            for i in $(seq 1 $pane_count); do
+                debug "Sending shutdown to agent-$i"
+                tmux send-keys -t "$SESSION:agents.$i" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter
+                tmux send-keys -t "$SESSION:agents.$i" Enter
+            done
+            
+            echo -e "${BLUE}Waiting 5s for agents to wind down...${NC}"
+            sleep 5
+            
+            echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
+            tmux kill-session -t "$SESSION"
+            echo -e "${GREEN}✓ Session stopped${NC}"
+        fi
     else
         echo "No session running"
     fi

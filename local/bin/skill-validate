@@ -115,109 +115,175 @@ PATTERNS: list[Pattern] = []
 
 
 def _init_patterns():
-    """Initialize compiled regex patterns."""
+    """Initialize compiled regex patterns.
+    
+    Categories follow SkillScan taxonomy (arXiv:2601.10338):
+    - P1: Instruction Override    - P2: Hidden Instructions
+    - P3: Exfiltration Commands   - P4: Behavior Manipulation
+    - E1: External Transmission   - E2: Env Variable Harvesting
+    - E3: File System Enumeration - E4: Context Leakage
+    - PE1: Excessive Permissions  - PE2: Sudo/Root Execution
+    - PE3: Credential Access      - SC1: Unpinned Dependencies
+    - SC2: External Script Fetch  - SC3: Obfuscated Code
+    
+    Additional categories for comprehensive coverage:
+    - CODE: Code Injection        - CONTAINER: Container Escape
+    - PERSIST: Persistence        - FS: Filesystem Risks
+    """
     pattern_defs = [
-        # === PROMPT INJECTION ===
-        ("HIGH", "PROMPT_INJECTION", r"ignore.*(previous|all|above|prior).*instructions", "Instruction override attempt"),
-        ("HIGH", "PROMPT_INJECTION", r"disregard.*(instructions|rules|guidelines)", "Instruction override attempt"),
-        ("HIGH", "PROMPT_INJECTION", r"you are now|you're now|from now on you", "Role hijacking attempt"),
-        ("HIGH", "PROMPT_INJECTION", r"new system prompt|new prompt:", "System prompt injection"),
-        ("HIGH", "PROMPT_INJECTION", r"forget (everything|what|your)", "Memory manipulation"),
-        ("HIGH", "PROMPT_INJECTION", r"pretend (you are|to be|you're)", "Role pretending attack"),
-        ("HIGH", "PROMPT_INJECTION", r"\bDAN\b|do anything now", "DAN jailbreak attempt"),
-        ("HIGH", "PROMPT_INJECTION", r"developer mode|maintenance mode", "Mode switching attack"),
-        ("MEDIUM", "PROMPT_INJECTION", r"\b(bypass|jailbreak)\b", "Security bypass mention"),
-        ("MEDIUM", "PROMPT_INJECTION", r"```system|<system>|<<SYS>>", "Delimiter injection"),
+        # === P1: INSTRUCTION OVERRIDE ===
+        ("HIGH", "P1", r"ignore.*(previous|all|above|prior).*instructions", "Instruction override attempt"),
+        ("HIGH", "P1", r"disregard.*(instructions|rules|guidelines)", "Instruction override attempt"),
+        ("HIGH", "P1", r"new system prompt|new prompt:", "System prompt injection"),
+        ("HIGH", "P1", r"forget (everything|what|your)", "Memory manipulation"),
+        ("MEDIUM", "P1", r"\b(bypass|jailbreak)\b", "Security bypass mention"),
+        ("MEDIUM", "P1", r"```system|<system>|<<SYS>>", "Delimiter injection"),
 
-        # === DATA EXFILTRATION ===
-        ("CRITICAL", "DATA_EXFIL", r"curl.*\|.*bash|wget.*\|.*sh|curl.*\|.*sh", "Remote code execution (curl|bash)"),
-        ("CRITICAL", "DATA_EXFIL", r"/dev/tcp/", "Bash TCP socket (data exfiltration)"),
-        ("CRITICAL", "DATA_EXFIL", r"bash -i.*>&.*/dev/tcp", "Reverse shell"),
-        ("HIGH", "DATA_EXFIL", r"curl.*(--data|--upload|-d |-F )", "Data upload via curl"),
-        ("HIGH", "DATA_EXFIL", r"curl.*(-X POST|-X PUT)", "HTTP POST/PUT request"),
-        ("HIGH", "DATA_EXFIL", r"\bnc\s+-", "Netcat usage (potential reverse shell)"),
-        ("HIGH", "DATA_EXFIL", r"\bsocat\b", "Socat (bidirectional data transfer)"),
-        ("HIGH", "DATA_EXFIL", r"base64.*\|.*(curl|wget)", "Encoded data exfiltration"),
-        ("HIGH", "DATA_EXFIL", r"aws s3 (cp|sync|mv).*s3://", "AWS S3 upload"),
-        ("HIGH", "DATA_EXFIL", r"gsutil (cp|rsync)", "Google Cloud Storage upload"),
-        ("HIGH", "DATA_EXFIL", r"\bscp\b.*:", "SCP file transfer"),
-        ("HIGH", "DATA_EXFIL", r"\bftp\b|-ftp-", "FTP file transfer"),
-        ("HIGH", "DATA_EXFIL", r"ssh -R|ssh.*-R\s+\d+", "SSH reverse tunnel"),
-        ("MEDIUM", "DATA_EXFIL", r"\b(webhook|ngrok|pastebin)\b", "External service reference"),
-        ("MEDIUM", "DATA_EXFIL", r"\b(dig|nslookup)\b.*TXT", "DNS exfiltration"),
+        # === P2: HIDDEN INSTRUCTIONS ===
+        ("HIGH", "P2", r"<!--.*?(ignore|override|bypass|execute).*?-->", "Hidden directive in HTML comment"),
+        ("HIGH", "P2", r"\[//\]:\s*#.*?(ignore|execute|bypass)", "Hidden directive in markdown comment"),
+        ("HIGH", "P2", r"[\u200b\u200c\u200d\ufeff]", "Zero-width character (steganography)"),
+        ("MEDIUM", "P2", r"/\*.*?(ignore|override|secret).*?\*/", "Hidden directive in code comment"),
+        ("MEDIUM", "P2", r"#.*?(secret|hidden|ignore this)", "Suspicious inline comment"),
 
-        # === CODE INJECTION ===
-        ("CRITICAL", "CODE_INJECTION", r"\beval\s*\(", "Eval execution"),
-        ("CRITICAL", "CODE_INJECTION", r"\bexec\s*\(", "Exec execution"),
-        ("CRITICAL", "CODE_INJECTION", r"os\.system\s*\(", "OS system call"),
-        ("CRITICAL", "CODE_INJECTION", r"subprocess.*shell\s*=\s*True", "Subprocess shell injection"),
-        ("HIGH", "CODE_INJECTION", r"pickle\.loads?", "Pickle deserialization (RCE risk)"),
-        ("HIGH", "CODE_INJECTION", r"yaml\.load\s*\([^)]*\)(?!.*Loader)", "Unsafe YAML load"),
-        ("HIGH", "CODE_INJECTION", r"yaml\.unsafe_load", "Unsafe YAML load"),
-        ("HIGH", "CODE_INJECTION", r"__import__\s*\(", "Dynamic import"),
-        ("HIGH", "CODE_INJECTION", r"compile\s*\(.*exec", "Dynamic code compilation"),
+        # === P3: EXFILTRATION COMMANDS ===
+        ("CRITICAL", "P3", r"curl.*\|.*bash|wget.*\|.*sh|curl.*\|.*sh", "Remote code execution (curl|bash)"),
+        ("CRITICAL", "P3", r"/dev/tcp/", "Bash TCP socket (data exfiltration)"),
+        ("CRITICAL", "P3", r"bash -i.*>&.*/dev/tcp", "Reverse shell"),
+        ("HIGH", "P3", r"curl.*(--data|--upload|-d |-F )", "Data upload via curl"),
+        ("HIGH", "P3", r"curl.*(-X POST|-X PUT)", "HTTP POST/PUT request"),
+        ("HIGH", "P3", r"\bnc\s+-", "Netcat usage (potential reverse shell)"),
+        ("HIGH", "P3", r"\bsocat\b", "Socat (bidirectional data transfer)"),
+        ("HIGH", "P3", r"base64.*\|.*(curl|wget)", "Encoded data exfiltration"),
+        ("HIGH", "P3", r"aws s3 (cp|sync|mv).*s3://", "AWS S3 upload"),
+        ("HIGH", "P3", r"gsutil (cp|rsync)", "Google Cloud Storage upload"),
+        ("HIGH", "P3", r"\bscp\b.*:", "SCP file transfer"),
+        ("HIGH", "P3", r"\bftp\b|-ftp-", "FTP file transfer"),
+        ("HIGH", "P3", r"ssh -R|ssh.*-R\s+\d+", "SSH reverse tunnel"),
+        ("MEDIUM", "P3", r"\b(webhook|ngrok|pastebin)\b", "External service reference"),
+        ("MEDIUM", "P3", r"\b(dig|nslookup)\b.*TXT", "DNS exfiltration"),
 
-        # === OBFUSCATION ===
-        ("HIGH", "OBFUSCATION", r"\\x[0-9a-fA-F]{2}.*\\x[0-9a-fA-F]{2}", "Hex-encoded strings"),
-        ("HIGH", "OBFUSCATION", r"chr\s*\(\s*\d+\s*\)\s*\+\s*chr", "Character concatenation obfuscation"),
-        ("HIGH", "OBFUSCATION", r"base64\s+(-d|--decode)", "Base64 decoding"),
-        ("HIGH", "OBFUSCATION", r"\bxxd\s+-r", "Hex decoding"),
-        ("MEDIUM", "OBFUSCATION", r"\\u[0-9a-fA-F]{4}.*\\u[0-9a-fA-F]{4}", "Unicode escape obfuscation"),
+        # === P4: BEHAVIOR MANIPULATION ===
+        ("HIGH", "P4", r"you are now|you're now|from now on you", "Role hijacking attempt"),
+        ("HIGH", "P4", r"pretend (you are|to be|you're)", "Role pretending attack"),
+        ("HIGH", "P4", r"\bDAN\b|do anything now", "DAN jailbreak attempt"),
+        ("HIGH", "P4", r"developer mode|maintenance mode", "Mode switching attack"),
+        ("HIGH", "P4", r"always (say yes|approve|accept|confirm)", "Forced approval pattern"),
+        ("HIGH", "P4", r"(skip|bypass|disable).*(confirmation|prompt|approval|check)", "Confirmation bypass"),
+        ("HIGH", "P4", r"execute without (asking|confirmation|approval)", "Unattended execution"),
+        ("HIGH", "P4", r"don't (wait|ask|prompt|confirm)", "Interaction suppression"),
+        ("HIGH", "P4", r"auto.*(approve|accept|confirm|execute)", "Automatic approval"),
+        ("MEDIUM", "P4", r"no.*(human|user|manual).*(review|approval|check)", "Human review bypass"),
 
-        # === PRIVILEGE ESCALATION ===
-        ("CRITICAL", "PRIV_ESC", r"NOPASSWD", "Passwordless sudo configuration"),
-        ("HIGH", "PRIV_ESC", r"sudo -S", "Sudo with stdin password"),
-        ("HIGH", "PRIV_ESC", r"chmod 777|chmod \+s", "Dangerous permission change"),
-        ("HIGH", "PRIV_ESC", r"chown root", "Ownership change to root"),
-        ("HIGH", "PRIV_ESC", r"visudo|/etc/sudoers", "Sudoers modification"),
-        ("HIGH", "PRIV_ESC", r"/etc/passwd|/etc/shadow", "System password file access"),
-        ("HIGH", "PRIV_ESC", r"\.ssh/(authorized_keys|id_rsa|id_ed25519)", "SSH key manipulation"),
-        ("HIGH", "PRIV_ESC", r"python.*pty\.spawn", "PTY spawn (shell escape)"),
+        # === E1: EXTERNAL TRANSMISSION ===
+        ("HIGH", "E1", r"curl.*https?://[^/]+\.[^/]+", "HTTP request to external URL"),
+        ("HIGH", "E1", r"wget\s+https?://", "Wget to external URL"),
+        ("HIGH", "E1", r"requests?\.(get|post|put)\s*\(", "Python requests call"),
+        ("MEDIUM", "E1", r"fetch\s*\(.*https?://", "JavaScript fetch call"),
 
-        # === CONTAINER ESCAPE ===
+        # === E2: ENV VARIABLE HARVESTING ===
+        ("HIGH", "E2", r"\bprintenv\b|/proc/self/environ", "Environment variable dump"),
+        ("HIGH", "E2", r"os\.environ|process\.env", "Environment access in code"),
+        ("HIGH", "E2", r"\$\{?\w*SECRET\w*\}?|\$\{?\w*KEY\w*\}?|\$\{?\w*TOKEN\w*\}?", "Secret env var reference"),
+        ("MEDIUM", "E2", r"env\s*\|", "Env piped to another command"),
+
+        # === E3: FILE SYSTEM ENUMERATION ===
+        ("HIGH", "E3", r"find\s+/\s+-name.*\.(pem|key|env|secret)", "Searching for secrets"),
+        ("HIGH", "E3", r"ls\s+.*~/.ssh|ls\s+.*/.aws", "Listing credential directories"),
+        ("MEDIUM", "E3", r"cat.*/etc/passwd", "User enumeration"),
+        ("MEDIUM", "E3", r"ls -la.*/\.", "Hidden file enumeration"),
+        ("MEDIUM", "E3", r"find.*-type\s+f.*-exec", "Find with exec (enumeration)"),
+
+        # === E4: CONTEXT LEAKAGE ===
+        ("HIGH", "E4", r"(send|transmit|upload|post).*(conversation|chat|history|context)", "Conversation exfiltration"),
+        ("HIGH", "E4", r"(export|dump|save).*(messages?|prompts?|responses?)", "Message history export"),
+        ("HIGH", "E4", r"(copy|include|attach).*(system prompt|instructions)", "System prompt leakage"),
+        ("MEDIUM", "E4", r"log.*(user input|conversation|session)", "Session logging concern"),
+
+        # === PE1: EXCESSIVE PERMISSIONS ===
+        ("HIGH", "PE1", r"request.*all.*permissions?", "Excessive permission request"),
+        ("HIGH", "PE1", r"(full|complete|total|unrestricted).*access", "Unrestricted access request"),
+        ("MEDIUM", "PE1", r"permission.*everything|access.*everything", "Blanket permission request"),
+        ("MEDIUM", "PE1", r"trust.*this.*(skill|tool|script|code)", "Trust manipulation"),
+        ("HIGH", "PE1", r"--yes|--force|-y\b|-f\b.*dangerous", "Force flag in dangerous context"),
+
+        # === PE2: SUDO/ROOT EXECUTION ===
+        ("CRITICAL", "PE2", r"NOPASSWD", "Passwordless sudo configuration"),
+        ("HIGH", "PE2", r"sudo -S", "Sudo with stdin password"),
+        ("HIGH", "PE2", r"chmod 777|chmod \+s", "Dangerous permission change"),
+        ("HIGH", "PE2", r"chown root", "Ownership change to root"),
+        ("HIGH", "PE2", r"visudo|/etc/sudoers", "Sudoers modification"),
+        ("HIGH", "PE2", r"/etc/passwd|/etc/shadow", "System password file access"),
+        ("HIGH", "PE2", r"\.ssh/(authorized_keys|id_rsa|id_ed25519)", "SSH key manipulation"),
+        ("HIGH", "PE2", r"python.*pty\.spawn", "PTY spawn (shell escape)"),
+
+        # === PE3: CREDENTIAL ACCESS ===
+        ("HIGH", "PE3", r"(password|api_key|api-key|secret|token)\s*[=:]\s*['\"][^'\"]+['\"]", "Hardcoded credential"),
+        ("HIGH", "PE3", r"~/.aws/(credentials|config)", "AWS credentials access"),
+        ("HIGH", "PE3", r"AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID", "AWS key reference"),
+        ("HIGH", "PE3", r"GITHUB_TOKEN|GH_TOKEN", "GitHub token reference"),
+        ("HIGH", "PE3", r"OPENAI_API_KEY|ANTHROPIC_API_KEY", "AI API key reference"),
+        ("HIGH", "PE3", r"~/.netrc|\.netrc", "Netrc credentials file"),
+        ("HIGH", "PE3", r"~/.npmrc|\.npmrc", "NPM credentials file"),
+        ("MEDIUM", "PE3", r"cat\s+.*\.(env|pem|key)", "Reading secrets file"),
+        ("MEDIUM", "PE3", r"git config --list|git config -l", "Git config disclosure"),
+        ("MEDIUM", "PE3", r"cat.*\.env\b|cat.*\.env\.", "Env file disclosure"),
+
+        # === SC1: UNPINNED DEPENDENCIES ===
+        ("LOW", "SC1", r"pip install\s+[a-zA-Z][a-zA-Z0-9_-]+\s*$", "Unpinned pip package (no version)"),
+        ("LOW", "SC1", r"npm install\s+[a-zA-Z@][^@\s]+\s*$", "Unpinned npm package (no version)"),
+        ("LOW", "SC1", r"requirements\.txt.*[a-zA-Z]\s*$", "Unpinned requirement in requirements.txt"),
+        ("MEDIUM", "SC1", r"(pip|npm|yarn)\s+install.*--upgrade", "Blind upgrade (supply chain risk)"),
+
+        # === SC2: EXTERNAL SCRIPT FETCHING ===
+        ("CRITICAL", "SC2", r"pip install.*(--trusted-host|-i http://)", "Untrusted package source"),
+        ("CRITICAL", "SC2", r"npm config set registry", "NPM registry override"),
+        ("HIGH", "SC2", r"pip install.*(github\.com|git\+)", "Direct Git package installation"),
+        ("HIGH", "SC2", r"npm install.*github:", "Direct GitHub npm install"),
+        ("HIGH", "SC2", r"go get\s+github\.com", "Direct Go package from GitHub"),
+        ("HIGH", "SC2", r"cargo install.*--git", "Direct Cargo install from Git"),
+        ("HIGH", "SC2", r"gem install.*--source", "Ruby gem from custom source"),
+        ("HIGH", "SC2", r"pip install\s+\w{1,3}\b", "Suspiciously short package name (typosquatting)"),
+        ("HIGH", "SC2", r"(requests?|numpy|pandas|django|flask)[0-9]|[0-9](requests?|numpy|pandas)", "Possible typosquat of popular package"),
+        ("MEDIUM", "SC2", r"install.*from\s+https?://(?!pypi|npmjs|github|gitlab)", "Install from non-standard URL"),
+        ("MEDIUM", "SC2", r"curl.*\|\s*(python|node|ruby|perl)", "Piped script execution"),
+
+        # === SC3: OBFUSCATED CODE ===
+        ("HIGH", "SC3", r"\\x[0-9a-fA-F]{2}.*\\x[0-9a-fA-F]{2}", "Hex-encoded strings"),
+        ("HIGH", "SC3", r"chr\s*\(\s*\d+\s*\)\s*\+\s*chr", "Character concatenation obfuscation"),
+        ("HIGH", "SC3", r"base64\s+(-d|--decode)", "Base64 decoding"),
+        ("HIGH", "SC3", r"\bxxd\s+-r", "Hex decoding"),
+        ("MEDIUM", "SC3", r"\\u[0-9a-fA-F]{4}.*\\u[0-9a-fA-F]{4}", "Unicode escape obfuscation"),
+
+        # === CODE: CODE INJECTION (Additional) ===
+        ("CRITICAL", "CODE", r"\beval\s*\(", "Eval execution"),
+        ("CRITICAL", "CODE", r"\bexec\s*\(", "Exec execution"),
+        ("CRITICAL", "CODE", r"os\.system\s*\(", "OS system call"),
+        ("CRITICAL", "CODE", r"subprocess.*shell\s*=\s*True", "Subprocess shell injection"),
+        ("HIGH", "CODE", r"pickle\.loads?", "Pickle deserialization (RCE risk)"),
+        ("HIGH", "CODE", r"yaml\.load\s*\([^)]*\)(?!.*Loader)", "Unsafe YAML load"),
+        ("HIGH", "CODE", r"yaml\.unsafe_load", "Unsafe YAML load"),
+        ("HIGH", "CODE", r"__import__\s*\(", "Dynamic import"),
+        ("HIGH", "CODE", r"compile\s*\(.*exec", "Dynamic code compilation"),
+
+        # === CONTAINER: CONTAINER ESCAPE (Additional) ===
         ("CRITICAL", "CONTAINER", r"--privileged", "Privileged container"),
         ("CRITICAL", "CONTAINER", r"docker\.sock|/var/run/docker", "Docker socket access"),
         ("HIGH", "CONTAINER", r"/proc/self/root", "Container root escape"),
         ("HIGH", "CONTAINER", r"--cap-add\s*(SYS_ADMIN|ALL)", "Dangerous capability addition"),
         ("HIGH", "CONTAINER", r"--pid\s*=\s*host|--net\s*=\s*host", "Host namespace access"),
 
-        # === SUPPLY CHAIN ===
-        ("CRITICAL", "SUPPLY_CHAIN", r"pip install.*(--trusted-host|-i http://)", "Untrusted package source"),
-        ("CRITICAL", "SUPPLY_CHAIN", r"npm config set registry", "NPM registry override"),
-        ("HIGH", "SUPPLY_CHAIN", r"pip install.*(github\.com|git\+)", "Direct Git package installation"),
-        ("HIGH", "SUPPLY_CHAIN", r"npm install.*github:", "Direct GitHub npm install"),
-        ("HIGH", "SUPPLY_CHAIN", r"go get\s+github\.com", "Direct Go package from GitHub"),
-        ("HIGH", "SUPPLY_CHAIN", r"cargo install.*--git", "Direct Cargo install from Git"),
-        ("HIGH", "SUPPLY_CHAIN", r"gem install.*--source", "Ruby gem from custom source"),
+        # === FS: FILESYSTEM RISKS (Additional) ===
+        ("CRITICAL", "FS", r"rm -rf /[^a-z]|rm -rf /\$", "Recursive root deletion"),
+        ("HIGH", "FS", r"mkfs\.|dd if=.*of=/dev", "Disk formatting/direct write"),
+        ("HIGH", "FS", r">\s*/dev/sd[a-z]|>\s*/dev/nvme", "Direct disk write"),
 
-        # === FILESYSTEM RISKS ===
-        ("CRITICAL", "FILESYSTEM", r"rm -rf /[^a-z]|rm -rf /\$", "Recursive root deletion"),
-        ("HIGH", "FILESYSTEM", r"mkfs\.|dd if=.*of=/dev", "Disk formatting/direct write"),
-        ("HIGH", "FILESYSTEM", r">\s*/dev/sd[a-z]|>\s*/dev/nvme", "Direct disk write"),
-
-        # === CREDENTIALS ===
-        ("HIGH", "CREDENTIALS", r"(password|api_key|api-key|secret|token)\s*[=:]\s*['\"][^'\"]+['\"]", "Hardcoded credential"),
-        ("HIGH", "CREDENTIALS", r"~/.aws/(credentials|config)", "AWS credentials access"),
-        ("HIGH", "CREDENTIALS", r"AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID", "AWS key reference"),
-        ("HIGH", "CREDENTIALS", r"GITHUB_TOKEN|GH_TOKEN", "GitHub token reference"),
-        ("HIGH", "CREDENTIALS", r"OPENAI_API_KEY|ANTHROPIC_API_KEY", "AI API key reference"),
-        ("HIGH", "CREDENTIALS", r"~/.netrc|\.netrc", "Netrc credentials file"),
-        ("HIGH", "CREDENTIALS", r"~/.npmrc|\.npmrc", "NPM credentials file"),
-        ("MEDIUM", "CREDENTIALS", r"cat\s+.*\.(env|pem|key)", "Reading secrets file"),
-
-        # === INFO DISCLOSURE ===
-        ("HIGH", "INFO_DISCLOSURE", r"\bprintenv\b|/proc/self/environ", "Environment variable dump"),
-        ("HIGH", "INFO_DISCLOSURE", r"cat.*/etc/passwd", "User enumeration"),
-        ("HIGH", "INFO_DISCLOSURE", r"git config --list|git config -l", "Git config disclosure"),
-        ("MEDIUM", "INFO_DISCLOSURE", r"cat.*\.env\b|cat.*\.env\.", "Env file disclosure"),
-        ("MEDIUM", "INFO_DISCLOSURE", r"ls -la.*/\.", "Hidden file enumeration"),
-
-        # === PERSISTENCE ===
-        ("HIGH", "PERSISTENCE", r"\b(crontab|/etc/cron)", "Cron job manipulation"),
-        ("HIGH", "PERSISTENCE", r"launchctl|LaunchAgents|LaunchDaemons", "macOS launch agent/daemon"),
-        ("HIGH", "PERSISTENCE", r"systemctl.*enable", "Systemd service enabling"),
-        ("HIGH", "PERSISTENCE", r"/etc/init\.d/|update-rc\.d", "Init script modification"),
-        ("MEDIUM", "PERSISTENCE", r"\.(bashrc|zshrc|profile|bash_profile)\b", "Shell RC modification"),
+        # === PERSIST: PERSISTENCE (Additional) ===
+        ("HIGH", "PERSIST", r"\b(crontab|/etc/cron)", "Cron job manipulation"),
+        ("HIGH", "PERSIST", r"launchctl|LaunchAgents|LaunchDaemons", "macOS launch agent/daemon"),
+        ("HIGH", "PERSIST", r"systemctl.*enable", "Systemd service enabling"),
+        ("HIGH", "PERSIST", r"/etc/init\.d/|update-rc\.d", "Init script modification"),
+        ("MEDIUM", "PERSIST", r"\.(bashrc|zshrc|profile|bash_profile)\b", "Shell RC modification"),
     ]
 
     for idx, (severity, category, pattern, description) in enumerate(pattern_defs, start=1):
@@ -337,7 +403,30 @@ def print_patterns() -> None:
         "LOW": BLUE,
     }
     
+    # SkillScan taxonomy descriptions
+    category_desc = {
+        "P1": "Instruction Override",
+        "P2": "Hidden Instructions",
+        "P3": "Exfiltration Commands",
+        "P4": "Behavior Manipulation",
+        "E1": "External Transmission",
+        "E2": "Env Variable Harvesting",
+        "E3": "File System Enumeration",
+        "E4": "Context Leakage",
+        "PE1": "Excessive Permissions",
+        "PE2": "Sudo/Root Execution",
+        "PE3": "Credential Access",
+        "SC1": "Unpinned Dependencies",
+        "SC2": "External Script Fetch",
+        "SC3": "Obfuscated Code",
+        "CODE": "Code Injection",
+        "CONTAINER": "Container Escape",
+        "FS": "Filesystem Risks",
+        "PERSIST": "Persistence",
+    }
+    
     print(f"{BOLD}Vulnerability Patterns ({len(PATTERNS)} total){NC}")
+    print(f"{BOLD}Based on SkillScan taxonomy (arXiv:2601.10338){NC}")
     print(f"{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NC}")
     print()
     
@@ -345,7 +434,8 @@ def print_patterns() -> None:
     for p in PATTERNS:
         if p.category != current_category:
             current_category = p.category
-            print(f"{BOLD}{current_category}{NC}")
+            desc = category_desc.get(current_category, "")
+            print(f"{BOLD}{current_category}: {desc}{NC}")
         
         color = colors.get(p.severity, NC)
         print(f"  {color}{p.pattern_id:2d}. [{p.severity:8s}]{NC} {p.description}")

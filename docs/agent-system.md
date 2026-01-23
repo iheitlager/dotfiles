@@ -360,6 +360,94 @@ tmux send-keys -t claude-<project>:agents.N Enter  # Extra enter for visibility
 
 Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (1-based)
 
+### Session Task Management (Claude Code)
+
+Claude Code agents have built-in task tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`) that operate within a single conversation session. These complement—but don't replace—the file-based swarm task queue.
+
+**Two Task Systems:**
+
+| System | Scope | Persistence | Visibility | Purpose |
+|--------|-------|-------------|------------|---------|
+| Swarm (YAML files) | Cross-agent | Persistent on disk | All agents + humans | Coordination |
+| Claude Code (built-in) | Single session | In-memory | Only the agent | Personal tracking |
+
+**When to Use Each:**
+
+| Scenario | System |
+|----------|--------|
+| Creating work for other agents | Swarm (file-based) |
+| Breaking down my claimed task into steps | Claude Code (`TaskCreate`) |
+| Tracking progress within a session | Claude Code (`TaskUpdate`) |
+| Signaling completion to swarm | Swarm (move file + events.log) |
+| Seeing what work is available | Swarm (`ls pending/`) |
+
+**Integrated Workflow:**
+
+When an agent claims a swarm task:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. CLAIM (Swarm)                                            │
+│    mv pending/task-XXX.yaml → active/                       │
+│    Edit: claimed_by: agent-N, claimed_at: <timestamp>       │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 2. DECOMPOSE (Claude Code)                                  │
+│    TaskCreate: "Implement feature X"                        │
+│    TaskCreate: "Add tests for feature X"                    │
+│    TaskCreate: "Update documentation"                       │
+│    TaskUpdate: Set dependencies (blockedBy)                 │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 3. EXECUTE (Claude Code)                                    │
+│    TaskUpdate: status → in_progress                         │
+│    ... do work ...                                          │
+│    TaskUpdate: status → completed                           │
+│    TaskList: check for next subtask                         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 4. COMPLETE (Swarm)                                         │
+│    mv active/task-XXX.yaml → done/                          │
+│    Edit: completed_at, result summary                       │
+│    echo "... | DONE | task-XXX | ..." >> events.log         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Principles:**
+
+1. **Swarm tasks are source of truth** — Other agents can't see your Claude Code `TaskList`
+2. **Claude Code tasks are personal scratchpad** — Use them to stay organized on complex work
+3. **Always signal to swarm** — Move files and log events so other agents know what's happening
+4. **Don't duplicate** — If a task is simple enough to do directly, skip Claude Code task tracking
+
+**Example Session:**
+
+```bash
+# Agent claims swarm task
+$ mv ~/.local/state/agent-context/PROJECT/tasks/pending/task-001.yaml \
+     ~/.local/state/agent-context/PROJECT/tasks/active/
+
+# Agent uses Claude Code for subtask tracking (internal to session)
+> TaskCreate: "Parse input configuration"
+> TaskCreate: "Implement transformation logic"
+> TaskCreate: "Write unit tests"
+> TaskUpdate: task-1 status=in_progress
+
+# ... agent works through subtasks ...
+
+# Agent completes swarm task
+$ mv ~/.local/state/agent-context/PROJECT/tasks/active/task-001.yaml \
+     ~/.local/state/agent-context/PROJECT/tasks/done/
+$ echo "2025-01-20T12:00:00Z | agent-1 | DONE | task-001 | Implemented config parser" \
+     >> ~/.local/state/agent-context/PROJECT/events.log
+```
+
 ## Git Workflow
 
 Each agent works on its own branch (`agent-1`, `agent-2`, etc.):
@@ -432,6 +520,208 @@ When a user types "shut down" to any agent:
 2. Log shutdown event
 3. Exit process
 4. Run `launch-agents stop` to kill the tmux session
+
+## Future Enhancements
+
+### Task-Skill Binding
+
+Tasks can reference Claude Code skills for consistent execution:
+
+```yaml
+id: task-1737372800
+title: Document authentication architecture
+skill: adr-documentation          # References ~/.claude/skills/adr-documentation/
+skill_args: "authentication flow"
+# ... rest of task fields
+```
+
+When an agent claims this task, it loads the skill context automatically, ensuring consistent approach across agents.
+
+### Project-Specific Skills
+
+Extend the shared state directory with project skills:
+
+```
+~/.local/state/agent-context/<project>/
+├── tasks/
+├── events.log
+└── skills/                       # Project-specific skills
+    ├── api-patterns/
+    │   └── SKILLS.md             # How this project structures APIs
+    ├── testing-conventions/
+    │   └── SKILLS.md             # Project test patterns
+    └── deployment/
+        └── SKILLS.md             # Deployment procedures
+```
+
+**Skill Resolution Order:**
+1. Project skills (`~/.local/state/agent-context/<project>/skills/`)
+2. Global skills (`~/.claude/skills/`)
+
+### Agent Profiles
+
+Create `~/.claude/agents/` for agent-specific configurations:
+
+```
+~/.claude/agents/
+├── profiles.yaml                 # Agent specialization preferences
+└── capabilities.yaml             # Model-to-skill mapping
+```
+
+**profiles.yaml:**
+```yaml
+agent-1:
+  specializations:
+    - architecture
+    - security
+  preferred_skills:
+    - adr-documentation
+    - testing-strategy
+  avoid_tasks:
+    - formatting
+    - docs-only
+
+agent-4:
+  specializations:
+    - testing
+    - documentation
+  preferred_skills:
+    - testing-strategy
+  model: haiku
+```
+
+**capabilities.yaml:**
+```yaml
+# Which skills work best with which model tiers
+skills:
+  adr-documentation:
+    minimum_model: sonnet
+    recommended_model: opus
+  testing-strategy:
+    minimum_model: haiku
+    recommended_model: sonnet
+  git-commit:
+    minimum_model: haiku
+```
+
+### Task Templates
+
+Skills can define task templates for standardized task creation:
+
+```
+~/.claude/skills/adr-documentation/
+├── SKILLS.md
+└── task-template.yaml            # Template for ADR tasks
+```
+
+**task-template.yaml:**
+```yaml
+# Template variables: {{topic}}, {{context}}
+priority: medium
+complexity: moderate
+recommended_model: opus
+title: "Create ADR for {{topic}}"
+description: |
+  Document the architectural decision for {{topic}}.
+
+  Context: {{context}}
+
+  Follow the ADR documentation skill for structure and format.
+  Place in docs/adr/ with next available number.
+skill: adr-documentation
+```
+
+**Usage:**
+```bash
+# Future CLI command
+create-task --template adr-documentation \
+  --var topic="authentication" \
+  --var context="Need to choose between JWT and session tokens"
+```
+
+### Swarm Commands
+
+Custom slash commands for task workflow:
+
+**~/.claude/commands/create-task.md:**
+```markdown
+Create a new task in the swarm queue.
+
+Arguments: <title> [--priority low|medium|high] [--complexity simple|moderate|complex]
+
+1. Generate task ID from timestamp
+2. Create YAML file in ~/.local/state/agent-context/<project>/tasks/pending/
+3. Log creation to events.log
+```
+
+**~/.claude/commands/claim-task.md:**
+```markdown
+Claim a pending task from the swarm queue.
+
+Arguments: [task-id] (optional, claims highest priority if omitted)
+
+1. Find task in pending/
+2. Move to active/
+3. Set claimed_by and claimed_at
+4. Log claim to events.log
+5. Display task details
+```
+
+**~/.claude/commands/complete-task.md:**
+```markdown
+Mark current task as complete.
+
+Arguments: [result-summary]
+
+1. Move task from active/ to done/
+2. Set completed_at and result
+3. Log completion to events.log
+4. Show next available task
+```
+
+### Agent Registry
+
+Track active agents for intelligent coordination:
+
+```
+~/.local/state/agent-context/<project>/
+├── agents/
+│   ├── agent-1.yaml              # Heartbeat + current state
+│   ├── agent-2.yaml
+│   └── ...
+```
+
+**agent-N.yaml:**
+```yaml
+id: agent-1
+client: claude
+model: opus
+status: active                    # active, idle, offline
+current_task: task-1737372800
+last_heartbeat: 2025-01-20T10:45:00Z
+session_start: 2025-01-20T09:00:00Z
+tasks_completed: 3
+specializations:                  # From profile or learned
+  - architecture
+  - debugging
+```
+
+**Benefits:**
+- Detect stale claims (no heartbeat update)
+- Load balancing (route to idle agents)
+- Capability matching (assign complex tasks to capable agents)
+- Swarm health monitoring
+
+### Implementation Priority
+
+| Enhancement | Effort | Impact | Priority |
+|-------------|--------|--------|----------|
+| Swarm Commands | Low | High | 1 |
+| Task-Skill Binding | Low | Medium | 2 |
+| Project Skills | Medium | High | 3 |
+| Task Templates | Medium | Medium | 4 |
+| Agent Profiles | Medium | Medium | 5 |
+| Agent Registry | High | High | 6 |
 
 ## Summary
 

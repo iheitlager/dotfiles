@@ -1,10 +1,51 @@
 {
   "permissions": {
     "allow": [
-      "Bash",
       "Read",
-      "Write",
-      "Edit"
+      "Edit",
+      "Bash(tmux *)",
+      "Bash(gh *)",
+      "Bash(git *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(wc *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(awk *)",
+      "Bash(sed *)",
+      "Bash(mkdir *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(echo *)",
+      "Bash(date *)",
+      "Bash(pwd)",
+      "Bash(which *)",
+      "Bash(cd *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(curl*|*sh)",
+      "Bash(wget*|*sh)",
+      "Bash(*>/dev/tcp/*)",
+      "Bash(*base64*decode*)",
+      "Bash(chmod 777*)",
+      "Bash(sudo*)",
+      "Bash(nc -*)",
+      "Bash(crontab*)",
+      "Bash(*LaunchAgents*)",
+      "Bash(*LaunchDaemons*)",
+      "Write(~/.ssh/*)",
+      "Write(~/.aws/*)",
+      "Write(~/.config/secrets)",
+      "Write(/etc/*)",
+      "Write(~/.crontab)",
+      "Read(~/.ssh/*)",
+      "Read(~/.aws/*)",
+      "Read(~/.config/secrets)"
     ]
   }
 }
