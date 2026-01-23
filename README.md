@@ -84,4 +84,3 @@ See [docs/xdg_setup.md](docs/xdg_setup.md) for detailed documentation.
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles
 - More about the dotfile stuff: https://dotfiles.github.io/
-# test
