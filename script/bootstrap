@@ -10,12 +10,18 @@ starttime=$(date +"%s")
 
 # Flags
 FORCE_GIT=false
+SKIP_BREW=false
 
 # make sure we get the sudo password at the start
 sudo -v
 
 cd "$(dirname "$0")/.."
 export DOTFILES=$(pwd)
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+
 export PATH=/usr/local/bin:$PATH
 
 set -e
@@ -93,12 +99,24 @@ link_config_files () {
 
   local overwrite_all=false backup_all=false skip_all=false
 
-  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config')
+  # Link topic-specific config directories: ~/.dotfiles/<topic>/config/ → ~/.config/<topic>/
+  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config' ! -path "$DOTFILES/config")
   do
     local topic=$(basename $(dirname "$src"))
     local dst="$HOME/.config/$topic"
     link_file "$src" "$dst"
   done
+
+  # Link general config subdirectories: ~/.dotfiles/config/<app>/ → ~/.config/<app>/
+  if [ -d "$DOTFILES/config" ]; then
+    for src in "$DOTFILES/config"/*/
+    do
+      [ -d "$src" ] || continue
+      local app=$(basename "$src")
+      local dst="$HOME/.config/$app"
+      link_file "$src" "$dst"
+    done
+  fi
 }
 
 # create the actual symlink for a dotfile
@@ -228,6 +246,10 @@ while [[ $# -gt 0 ]]; do
       FORCE_GIT=true
       shift
       ;;
+    --no-brew)
+      SKIP_BREW=true
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -237,7 +259,9 @@ done
 
 setup_xdg_dirs
 setup_gitconfig $FORCE_GIT
-install_brew_packages
+if [ "$SKIP_BREW" != "true" ]; then
+  install_brew_packages
+fi
 install_dotfiles
 link_config_files
 run_installers

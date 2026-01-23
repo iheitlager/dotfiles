@@ -1,0 +1,24 @@
+# bat configuration
+# See: bat --help and https://github.com/sharkdp/bat
+
+# Theme - matches delta's Dracula theme
+--theme="Dracula"
+
+# Style components to display
+# numbers: line numbers
+# changes: git change markers in margin
+# header: filename header
+# grid: border lines (omitted for cleaner look)
+--style="numbers,changes,header"
+
+# Use italic text where supported
+--italic-text=always
+
+# Paging behavior: auto uses pager only when output exceeds screen
+--paging=auto
+
+# Wrap long lines instead of horizontal scroll
+--wrap=auto
+
+# Show tabs as 4 spaces
+--tabs=4

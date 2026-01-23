@@ -7,9 +7,6 @@ if [ ! -d $WORKON_DIR ] ; then
     mkdir $WORKON_DIR
 fi
 
-if [ ! -d ~/.pip ] ; then
-    echo "  creating ~/.pip directory"
-    mkdir ~/.pip
-fi
-ln -fs `pwd`/pip.conf ~/.pip/pip.conf
+# pip.conf is now XDG compliant at ~/.config/pip/pip.conf
+# (handled by config/pip/ via bootstrap link_config_files)
 

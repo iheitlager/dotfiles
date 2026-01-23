@@ -1,0 +1,6 @@
+# Docker XDG compliant
+export DOCKER_CONFIG="$XDG_CONFIG_HOME/docker"
+
+# Colima XDG-compliant home directory
+# Colima doesn't natively support XDG, so we set COLIMA_HOME
+export COLIMA_HOME="$XDG_DATA_HOME/colima"

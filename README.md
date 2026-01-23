@@ -8,8 +8,7 @@ My workflow is all about Homebrew, bash, iTerm2 and vim.
 I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
 I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although mine is bash centric instead of zsh. 
 This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management.
-While working with vim and tmux, I found that iTerm2 really is a better match
-due to better mouse handling.
+Modern CLI tools (eza, bat, ripgrep, fd, delta, fzf) provide rich colored output and better defaults.
 
 ## install
 
@@ -62,8 +61,25 @@ There's a few special files in the hierarchy.
 - **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
   your `$HOME`. This is to keep your files versioned in your dotfiles., while keeping them where they belong in your home directory. 
   These files get symlinked in when you run `script/bootstrap`.
+- **topic/config/**: Any directory named `config` inside a topic gets symlinked to `~/.config/<topic>/` for XDG compliance
+- **config/\<app\>/**: The central `config/` directory also gets linked: `config/<app>/` → `~/.config/<app>/`
 
-Do not forget to never checkin secrets in any of these files, use ~/.localrc for this (sourced by `.bash_profile`)
+Do not forget to never checkin secrets in any of these files, use `~/.config/secrets` for this (sourced by `.bash_profile`)
+
+## XDG Base Directory
+
+This dotfiles setup follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/):
+
+| Variable | Location | Purpose |
+|----------|----------|---------|
+| `XDG_CONFIG_HOME` | `~/.config` | User configuration files |
+| `XDG_DATA_HOME` | `~/.local/share` | User data files |
+| `XDG_STATE_HOME` | `~/.local/state` | User state (logs, history) |
+| `XDG_CACHE_HOME` | `~/.cache` | Non-essential cached data |
+
+Applications configured for XDG compliance include: vim, bat, ripgrep, tmux, pip, docker, colima, ipython, matplotlib, ollama, and history files for bash, python, psql, and less.
+
+See [docs/xdg_setup.md](docs/xdg_setup.md) for detailed documentation.
 
 ## credits
 - Main inspiration comes from https://github.com/holman/dotfiles

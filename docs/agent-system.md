@@ -2,7 +2,9 @@
 
 ## Overview
 
-Claude Swarm is a coordination system for running multiple Claude Code agents as equal peers working on a shared codebase. Agents collaborate through a shared task queue and state directory, with no fixed hierarchy. Any agent can receive user requests, create tasks, or execute work.
+Claude Swarm is a coordination system for running multiple AI coding agents as equal peers working on a shared codebase. Agents collaborate through a shared task queue and state directory, with no fixed hierarchy. Any agent can receive user requests, create tasks, or execute work.
+
+**Version 0.4.0** introduces multi-client support, allowing Claude, GitHub Copilot, and Gemini agents to work together in the same swarm.
 
 ## Design Principles
 
@@ -14,7 +16,7 @@ This avoids the complexity of role-based systems where you need to define bounda
 
 ### Capability Differentiation Without Role Differentiation
 
-Agents may run on different model tiers (Opus, Sonnet, Haiku) but they all follow the same workflow. A Haiku agent receiving a complex request doesn't refuse it—it creates a task tagged for a stronger model. An Opus agent finding only simple tasks in the queue doesn't wait—it helps clear them.
+Agents may run on different model tiers (Opus, Sonnet, Haiku for Claude; Codex for Copilot; Gemini Pro) but they all follow the same workflow. A Haiku agent receiving a complex request doesn't refuse it—it creates a task tagged for a stronger model. An Opus agent finding only simple tasks in the queue doesn't wait—it helps clear them.
 
 The model strength is a resource constraint, not an identity.
 
@@ -46,10 +48,12 @@ Project layout:
 ├── agent-1/                        # Git worktree on branch agent-1
 ├── agent-2/                        # Git worktree on branch agent-2
 ├── agent-3/                        # Git worktree on branch agent-3
-└── agent-4/                        # Git worktree on branch agent-4
+├── agent-4/                        # Git worktree on branch agent-4
+├── agent-5/                        # Git worktree on branch agent-5 (6-agent mode)
+└── agent-6/                        # Git worktree on branch agent-6 (6-agent mode)
 
 Shared state (XDG compliant):
-~/.local/state/agent-context/
+~/.local/state/agent-context/<project-name>/
 ├── tasks/
 │   ├── pending/                    # Unclaimed tasks
 │   ├── active/                     # Currently being worked
@@ -123,107 +127,71 @@ result: null
 
 The `recommended_model` field is advisory. An agent can work above or below its weight class based on queue depth and urgency.
 
-## Agent Scaling
+## Usage
 
-### Two Agents
+### Commands
 
-Best for focused work with clear separation:
-- Both run at full capability (Opus)
-- One might handle feature work, one handles integration
-- Low coordination overhead
+```bash
+launch-agents [OPTIONS] COMMAND
 
-### Three Agents
+Commands:
+    start           Launch agents in tmux (or attach if running)
+    stop            Kill tmux session
+    clean           Remove worktrees (if branches merged and clean)
+    info            Show status of agents, models, and tasks
 
-Introduces capability tiers:
-- Agent-1: Opus (complex reasoning, architecture)
-- Agent-2: Sonnet (standard implementation)
-- Agent-3: Sonnet (standard implementation)
-
-Two Sonnet agents can parallelize moderate work while Opus handles thorny problems.
-
-### Four Agents
-
-Full spectrum:
-- Agent-1: Opus (complex)
-- Agent-2: Opus (complex)
-- Agent-3: Sonnet (moderate)
-- Agent-4: Haiku (simple, high volume)
-
-Haiku clears routine tasks (docs, formatting, simple tests) cheaply, freeing expensive models for hard problems.
-
-## Workflow Patterns
-
-### Direct Execution
-
-User talks to agent, agent handles it immediately.
-
-```
-User: "Add a --verbose flag to the CLI"
-Agent-2: [assesses: simple, I can do this]
-         [implements, commits, done]
+Options:
+    -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
+    --equal         For n=6, use equal distribution instead of default
+    -v, --verbose   Print commands being executed
+    --force         Force clean even with uncommitted changes
+    --yolo          Skip permission prompts (Claude agents only)
+    -h, --help      Show this help message
+    --version       Show version number
 ```
 
-No task file created. Suitable for small, immediate requests.
+### Examples
 
-### Task Creation and Self-Claim
-
-User makes larger request, agent breaks it down and takes part of it.
-
-```
-User: "Refactor the data layer to support async"
-Agent-1: [assesses: complex, multi-part]
-         [creates task-001: design async interfaces (opus)]
-         [creates task-002: update data models (sonnet)]
-         [creates task-003: migrate callers (sonnet)]
-         [creates task-004: update tests (haiku)]
-         [claims task-001, starts work]
+```bash
+launch-agents start             # Start 2 agents (default)
+launch-agents -n 4 start        # Start 4 agents
+launch-agents -n 6 start        # Start 6 agents with multi-client
+launch-agents -n 6 --equal start # Start 6 agents with equal client distribution
+launch-agents info              # Show swarm status
+launch-agents stop              # Stop all agents
+launch-agents clean             # Remove merged worktrees
+launch-agents --force clean     # Remove all worktrees (even with changes)
 ```
 
-Other agents pick up remaining tasks as they become available.
+## Agent Scaling & Client Distribution
 
-### Pure Dispatch
+### Two Agents (Default)
 
-User creates task via CLI, doesn't talk to any agent.
+Both agents run Claude Opus for maximum capability:
 
-```
-$ ./new-task.sh "Fix memory leak in parser" --priority high --complexity complex
-Created: tasks/pending/task-1737372800.yaml
-```
+| Agent | Client | Model |
+|-------|--------|-------|
+| agent-1 | claude | opus |
+| agent-2 | claude | opus |
 
-Next idle Opus agent claims it.
-
-### Dependent Tasks
-
-Some tasks must wait for others.
-
-```yaml
-# task-002.yaml
-depends_on:
-  - task-001
-```
-
-Agents check dependencies before claiming. Task stays in pending until dependencies are in done.
-
-## Tmux Layout
-
-The system runs in a tmux session with a practical layout for monitoring and interaction. Layout adapts to agent count.
-
-### Window 1: Agent Grid
-
-**Two Agents — Horizontal Split**
-
+**Layout:**
 ```
 ┌─────────────────┬─────────────────┐
-│                 │                 │
 │ agent-1 (opus)  │ agent-2 (opus)  │
-│                 │                 │
 └─────────────────┴─────────────────┘
 ```
 
-Tmux: `split-window -h`
+### Three Agents
 
-**Three Agents — Left Panel + Right Stack**
+Introduces capability tiers with one Opus for complex work:
 
+| Agent | Client | Model |
+|-------|--------|-------|
+| agent-1 | claude | opus |
+| agent-2 | claude | sonnet |
+| agent-3 | claude | sonnet |
+
+**Layout:**
 ```
 ┌─────────────────┬─────────────────┐
 │                 │ agent-2 (sonnet)│
@@ -232,12 +200,18 @@ Tmux: `split-window -h`
 └─────────────────┴─────────────────┘
 ```
 
-Tmux: `split-window -h` then `split-window -v` on right pane
+### Four Agents
 
-Agent-1 gets more vertical space — natural for the agent receiving initial instructions or handling complex work. Agents 2 and 3 stack for parallel execution visibility.
+Full Claude spectrum from Opus to Haiku:
 
-**Four Agents — 2x2 Grid**
+| Agent | Client | Model |
+|-------|--------|-------|
+| agent-1 | claude | opus |
+| agent-2 | claude | opus |
+| agent-3 | claude | sonnet |
+| agent-4 | claude | haiku |
 
+**Layout:**
 ```
 ┌─────────────────┬─────────────────┐
 │ agent-1 (opus)  │ agent-2 (opus)  │
@@ -246,40 +220,118 @@ Agent-1 gets more vertical space — natural for the agent receiving initial ins
 └─────────────────┴─────────────────┘
 ```
 
-Tmux: `split-window -h`, `split-window -v` on left, `split-window -v` on right
+### Six Agents — Default Distribution
 
-Balanced grid. Top row for complex work, bottom row for moderate and simple tasks.
+Multi-client mode with Claude majority:
 
-### Windows 2+: Individual Shells
+| Agent | Client | Model |
+|-------|--------|-------|
+| agent-1 | claude | opus |
+| agent-2 | claude | opus |
+| agent-3 | claude | sonnet |
+| agent-4 | claude | sonnet |
+| agent-5 | copilot | 5.1-codex |
+| agent-6 | gemini | gemini-pro |
 
-One shell window per agent worktree for running tests, checking output, manual git operations.
+### Six Agents — Equal Distribution (`--equal`)
+
+Balanced pairs across all three clients:
+
+| Agent | Client | Model |
+|-------|--------|-------|
+| agent-1 | claude | opus |
+| agent-2 | claude | sonnet |
+| agent-3 | copilot | 5.1-codex |
+| agent-4 | copilot | 5.1-codex |
+| agent-5 | gemini | gemini-pro |
+| agent-6 | gemini | gemini-pro |
+
+**Layout (both 6-agent modes):**
+```
+┌─────────────────┬─────────────────┬─────────────────┐
+│ agent-1         │ agent-3         │ agent-5         │
+├─────────────────┼─────────────────┼─────────────────┤
+│ agent-2         │ agent-4         │ agent-6         │
+└─────────────────┴─────────────────┴─────────────────┘
+```
+
+## Tmux Session Structure
+
+### Window 1: Agent Grid (`agents`)
+
+All agents visible in a grid layout. Pane numbering is 1-based:
+- `agent-1` → pane 1
+- `agent-2` → pane 2
+- etc.
+
+### Windows 2+: Individual Shells (`shell-1`, `shell-2`, ...)
+
+One shell window per agent worktree for running tests, checking output, manual git operations. Virtual environment is auto-activated if present.
 
 ### Navigation
 
-- `Ctrl-b 1` through `Ctrl-b 5`: Jump to window
-- `Ctrl-b arrow`: Move between panes
-- `Ctrl-b z`: Zoom current pane to full screen
-- `Ctrl-b d`: Detach (agents keep running)
+| Keys | Action |
+|------|--------|
+| `Ctrl-b 1` | Jump to agents window |
+| `Ctrl-b 2-N` | Jump to shell windows |
+| `Alt ↑↓←→` | Move between panes |
+| `Ctrl-b z` | Zoom current pane |
+| `Ctrl-b d` | Detach (agents keep running) |
 
-## User Interaction Modes
+### Session Naming
 
-### Interactive
+Session is named `claude-<project-name>` where project name is derived from the git repository directory.
 
-Talk directly to any agent in its tmux pane. Good for exploration, discussion, immediate small tasks.
+## Agent Configuration
 
-### Task Queue
+### Per-Agent Files
 
-Create tasks via CLI or by asking any agent to plan work. Good for batched work, overnight runs, parallelizable tasks.
+Each agent worktree contains:
 
-### Hybrid
+- **AGENTS.md** — Auto-generated instructions injected via `--append-system-prompt`. Contains agent identity, task queue instructions, and peer communication protocols. This file is gitignored.
 
-Start with conversation to explore the problem, then ask the agent to formalize it into tasks for the swarm.
+- **CLAUDE.md** (symlinked) — Project-specific instructions from the main repository. Shared across all agents.
+
+- **.venv/** — Python virtual environment (created with `uv venv` if available).
+
+### Environment Variables
+
+Set in each agent's tmux pane:
+
+```bash
+AGENT_ID=agent-N
+AGENT_CLIENT=claude|copilot|gemini
+AGENT_MODEL=opus|sonnet|haiku|5.1-codex|gemini-pro
+```
+
+For Claude agents:
+```bash
+CLAUDE_SKIP_PERMISSION_PROMPTS=true
+CLAUDE_AUTO_APPROVE_FOLDERS=true
+```
+
+### Permission Modes
+
+| Flag | Claude CLI Flag | Behavior |
+|------|----------------|----------|
+| (default) | `--permission-mode acceptEdits` | Approve edits automatically |
+| `--yolo` | `--dangerously-skip-permissions` | Skip all permission prompts |
 
 ## Coordination Mechanisms
 
 ### Task Claiming
 
 Agents claim tasks by moving files from `pending/` to `active/` and writing their ID into the file. Filesystem move is atomic on POSIX systems, preventing double-claims.
+
+```bash
+# Find work
+ls ~/.local/state/agent-context/<project>/tasks/pending/
+
+# Claim a task
+mv ~/.local/state/agent-context/<project>/tasks/pending/task-XXX.yaml \
+   ~/.local/state/agent-context/<project>/tasks/active/
+# Edit file: set claimed_by: agent-N, claimed_at: <timestamp>
+```
 
 ### Event Log
 
@@ -291,17 +343,31 @@ All significant events append to `events.log`:
 2025-01-20T10:46:00Z | agent-3 | CLAIMED | task-002 | Update data models
 ```
 
-Agents can tail this to stay aware of swarm activity.
+Agents can tail this to stay aware of swarm activity:
+
+```bash
+tail -30 ~/.local/state/agent-context/<project>/events.log
+```
 
 ### Peer Notification
 
 For urgent coordination, agents can signal each other via tmux:
 
 ```bash
-tmux send-keys -t claude-agents:agent-2 "FYI: I updated the API interface, rebase recommended" C-m
+tmux send-keys -t claude-<project>:agents.N "Message here" Enter
+tmux send-keys -t claude-<project>:agents.N Enter  # Extra enter for visibility
 ```
 
-This is optional—polling the event log works for most cases.
+Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (1-based)
+
+## Git Workflow
+
+Each agent works on its own branch (`agent-1`, `agent-2`, etc.):
+
+1. Ensure branch is up to date: `git pull --rebase origin main`
+2. Make changes, commit with clear messages
+3. Create PR when complete: `gh pr create`
+4. Log completion to events.log
 
 ## Complexity Assessment Guide
 
@@ -318,7 +384,21 @@ When an agent receives a request or reviews a task, it assesses complexity:
 | Security-sensitive changes | Complex | Opus |
 | Multi-step, needs breakdown | Complex | Opus (for planning) |
 
-Agents include this assessment when creating tasks, but can override based on context.
+## Cleanup
+
+The `clean` command handles worktree removal intelligently:
+
+1. Stops tmux session if running
+2. For each agent worktree:
+   - Checks for uncommitted changes (blocks unless `--force`)
+   - Checks if branch is merged into main
+   - Removes worktree and branch if safe
+3. Removes shared state if no pending/active tasks (or `--force`)
+
+```bash
+launch-agents clean         # Safe cleanup (merged branches only)
+launch-agents --force clean # Force cleanup (removes everything)
+```
 
 ## Failure Handling
 
@@ -344,48 +424,17 @@ If an agent can't complete a task:
 3. Log the issue
 4. Another agent or human can pick it up with context
 
-## Extension Points
+## Graceful Shutdown
 
-### Webhooks
+When a user types "shut down" to any agent:
 
-Watch `events.log` or `tasks/done/` and trigger external actions:
-- Slack notification on task completion
-- Auto-merge PRs that pass CI
-- Spin up additional agents under load
-
-### Different Contexts
-
-The project name is derived from the current git repository directory. The launch script must be run from within a git clone:
-
-```bash
-cd ~/wc/project-a
-./launch-agents.sh 3    # Creates ~/.local/state/agent-context/project-a/
-
-cd ~/wc/project-b
-./launch-agents.sh 2    # Creates ~/.local/state/agent-context/project-b/
-```
-
-State directories are isolated per project:
-- `~/.local/state/agent-context/project-a/tasks/`
-- `~/.local/state/agent-context/project-b/tasks/`
-
-This convention matches the worktree structure which also derives from the git root:
-- `~/wc/project-a-worktree/agent-1/`
-- `~/wc/project-b-worktree/agent-1/`
-
-No configuration needed — location is implicit from where you launch.
-
-### Persistent Agents
-
-For long-running projects, agents could write checkpoints:
-- Current understanding of codebase
-- Decisions made and rationale
-- Known gotchas
-
-New agents read these to onboard faster.
+1. Finish current task
+2. Log shutdown event
+3. Exit process
+4. Run `launch-agents stop` to kill the tmux session
 
 ## Summary
 
-Claude Swarm treats agents as fungible workers differentiated only by capability tier. Users interact through conversation or task files. Coordination happens through filesystem primitives. The result is a system that scales from 2 to N agents without architectural changes, debuggable with `ls` and `cat`, and recoverable by editing YAML files.
+Claude Swarm treats agents as fungible workers differentiated only by capability tier and client. Users interact through conversation or task files. Coordination happens through filesystem primitives. The result is a system that scales from 2 to 6 agents without architectural changes, debuggable with `ls` and `cat`, and recoverable by editing YAML files.
 
 No dispatcher. No hierarchy. Just peers, tasks, and git.

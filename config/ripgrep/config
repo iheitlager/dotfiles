@@ -1,0 +1,20 @@
+# ripgrep configuration
+# See: rg --help
+
+# Smart case: case-insensitive unless pattern contains uppercase
+--smart-case
+
+# Color configuration
+--colors=match:fg:yellow
+--colors=match:style:bold
+--colors=path:fg:magenta
+--colors=line:fg:green
+
+# Show line numbers
+--line-number
+
+# Follow symlinks
+--follow
+
+# Add context lines (uncomment if desired)
+# --context=2

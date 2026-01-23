@@ -28,12 +28,21 @@ export EDITOR=`which vim`
 export MANPAGER="col -b | bat --plain --language=man"
 export CLICOLOR=1
 export LESS='-R --use-color'
+export LESSHISTFILE="$XDG_STATE_HOME/less/history"
+mkdir -p "$XDG_STATE_HOME/less" 2>/dev/null
 
+# Bash history - XDG compliant
+export HISTFILE="$XDG_STATE_HOME/bash/history"
+mkdir -p "$XDG_STATE_HOME/bash" 2>/dev/null
 export HISTCONTROL=ignoreboth:erasedups
 export HISTSIZE=5000
 export HISTFILESIZE=1000
 export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
 export HISTTIMEFORMAT="[%DT%T] " 
+
+# PostgreSQL history - XDG compliant
+export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
+mkdir -p "$XDG_STATE_HOME/psql" 2>/dev/null
 
 shopt -s cdspell #fix spelling
 shopt -s histappend # Append to history rather than overwrite
@@ -84,8 +93,8 @@ source_files () {
 
 # use .localrc for SUPER SECRET CRAP that you don't
 # want in your public, versioned repo.
-if [ -e ~/.localrc ] ; then
-  source ~/.localrc
+if [ -e $XDG_CONFIG_HOME/secrets ] ; then
+  source "$XDG_CONFIG_HOME/secrets"
 fi
 
 source_files "bash_aliases"

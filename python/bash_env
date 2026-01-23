@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 
-export WORKON_DIR=~/.virtualenv
+export WORKON_DIR="$XDG_DATA_HOME/virtualenv"
 
 # need this for python compilation
 export ARCHFLAGS=-Wno-error=unused-command-line-argument-hard-error-in-future
+
+# Python history - XDG compliant (Python 3.13+, or via PYTHONSTARTUP)
+export PYTHON_HISTORY="$XDG_STATE_HOME/python/history"
+mkdir -p "$XDG_STATE_HOME/python" 2>/dev/null
+
+# IPython XDG compliant
+export IPYTHONDIR="$XDG_CONFIG_HOME/ipython"
+
+# Matplotlib XDG compliant
+export MPLCONFIGDIR="$XDG_CONFIG_HOME/matplotlib"

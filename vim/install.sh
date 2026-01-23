@@ -1,21 +1,31 @@
 #!/usr/bin/env bash
 
-VIM_ROOT=$HOME/.vim
+# XDG-compliant vim directories
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+VIM_DATA="$XDG_DATA_HOME/vim"
 
-rm -rf $VIM_ROOT
-
-# install Vundle
-# taken from https://github.com/gmarik/Vundle.vim
-if [ ! -d "$VIM_ROOT/bundle/Vundle.vim" ]; then
-    git clone https://github.com/gmarik/Vundle.vim.git "$VIM_ROOT/bundle/Vundle.vim"
+# Clean old location if migrating
+if [ -d "$HOME/.vim" ]; then
+    echo "Migrating from ~/.vim to $VIM_DATA"
+    rm -rf "$HOME/.vim"
 fi
 
-yes | vim +PluginInstall +qall
+# Create XDG directory structure
+mkdir -p "$VIM_DATA/bundle"
+mkdir -p "$VIM_DATA/colors"
+
+# Install Vundle
+# taken from https://github.com/gmarik/Vundle.vim
+if [ ! -d "$VIM_DATA/bundle/Vundle.vim" ]; then
+    git clone --quiet https://github.com/gmarik/Vundle.vim.git "$VIM_DATA/bundle/Vundle.vim"
+fi
+
+# Run PluginInstall silently (headless vim)
+vim -es -u "$HOME/.vimrc" -i NONE -c "PluginInstall" -c "qa"
 
 # http://ethanschoonover.com/solarized/vim-colors-solarized
 # There is no other way?
-F=$VIM_ROOT/bundle/vim-colors-solarized/colors/solarized.vim
+F=$VIM_DATA/bundle/vim-colors-solarized/colors/solarized.vim
 if [ -f "$F" ]; then
-    mkdir -p "$VIM_ROOT/colors"
-    ln -sf "$F" $VIM_ROOT/colors/`basename "$F"`
+    ln -sf "$F" "$VIM_DATA/colors/$(basename "$F")"
 fi

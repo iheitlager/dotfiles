@@ -12,8 +12,4 @@ brew install colima || brew upgrade colima
 brew install podman || brew upgrade podman
 brew install ctop || brew upgrade ctop
 
-mkdir -p ~/.docker/cli-plugins
-ln -sfn $(which docker-buildx) ~/.docker/cli-plugins/docker-buildx
-docker buildx install
-
 export PATH=$TMPPATH

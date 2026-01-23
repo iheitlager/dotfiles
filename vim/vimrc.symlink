@@ -1,5 +1,30 @@
 "Taken from: http://bilalquadri.com/blog/2012/12/17/getting-started-with-vim/"
 
+" XDG Base Directory Support
+" See: https://wiki.archlinux.org/title/XDG_Base_Directory
+if empty($XDG_CONFIG_HOME) | let $XDG_CONFIG_HOME = $HOME . '/.config' | endif
+if empty($XDG_DATA_HOME)   | let $XDG_DATA_HOME = $HOME . '/.local/share' | endif
+if empty($XDG_STATE_HOME)  | let $XDG_STATE_HOME = $HOME . '/.local/state' | endif
+if empty($XDG_CACHE_HOME)  | let $XDG_CACHE_HOME = $HOME . '/.cache' | endif
+
+" Create XDG directories for vim
+let s:vim_state = $XDG_STATE_HOME . '/vim'
+let s:vim_data  = $XDG_DATA_HOME . '/vim'
+let s:vim_cache = $XDG_CACHE_HOME . '/vim'
+for s:dir in [s:vim_state, s:vim_data, s:vim_cache,
+            \ s:vim_state . '/swap', s:vim_state . '/backup', s:vim_state . '/undo']
+    if !isdirectory(s:dir)
+        call mkdir(s:dir, 'p', 0700)
+    endif
+endfor
+
+" Move state files out of $HOME
+set viminfofile=$XDG_STATE_HOME/vim/viminfo
+set directory=$XDG_STATE_HOME/vim/swap//
+set backupdir=$XDG_STATE_HOME/vim/backup//
+set undodir=$XDG_STATE_HOME/vim/undo//
+set undofile
+
 " Basic settings
 set nocompatible "Fixes old Vi bugs
 syntax on
@@ -68,8 +93,9 @@ au FileType xml setlocal equalprg=xmllint\ --format\ --recover\ -\ 2>/dev/null
 "Setup vundle
 filetype off    " Required
 
-set rtp+=~/.vim/bundle/Vundle.vim
-call vundle#begin()
+" Use XDG data directory for plugins
+set rtp+=$XDG_DATA_HOME/vim/bundle/Vundle.vim
+call vundle#begin($XDG_DATA_HOME . '/vim/bundle')
 
 Plugin 'gmarik/Vundle.vim'    " Required
 Plugin 'altercation/vim-colors-solarized'

@@ -110,3 +110,22 @@ alias localip='ipconfig getifaddr en0'
 # perl works best for this command
 alias ports='lsof -iTCP -sTCP:LISTEN -n -P | bat -p --language=perl'
 
+__brew_clean() {
+    echo "Cleaning up Homebrew..."
+    brew cleanup --prune=all
+    echo "✓ Old versions and outdated downloads removed."
+    
+    echo "Clearing Homebrew cache..."
+    rm -rf "$(brew --cache)"
+    echo "✓ Cache cleared."
+    
+    echo "Removing old brew logs..."
+    rm -rf ~/Library/Logs/Homebrew/*
+    echo "✓ Logs removed."
+    
+    echo "Homebrew cleanup completed."
+    brew doctor
+}
+
+alias brewclean=__brew_clean
+
