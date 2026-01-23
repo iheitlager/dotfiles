@@ -1,3 +1,6 @@
+[include]
+    path = ~/.local/gitconfig
+
 [user]
 	email = iheitlager@schubergphilis.com
 	name = Ilja Heitlager
@@ -63,7 +66,6 @@
 
 [gpg "ssh"]
   program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"
-  defaultKeyCommand = ssh-add -L
 
 [commit]
   gpgsign = true

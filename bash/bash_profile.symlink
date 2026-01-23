@@ -26,17 +26,6 @@ export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 export BASH_SILENCE_DEPRECATION_WARNING=1
 
-# Disable the default virtual environment prompt modification
-export VIRTUAL_ENV_DISABLE_PROMPT=1
-
-# Configure git prompt to show all the information
-export GIT_PS1_SHOWDIRTYSTATE=1      # * and + for unstaged/staged changes
-export GIT_PS1_SHOWSTASHSTATE=1      # $ for stashes
-export GIT_PS1_SHOWUNTRACKEDFILES=1  # % for untracked files
-#export GIT_PS1_SHOWUPSTREAM="auto"   # <, >, = for upstream comparison
-export GIT_PS1_SHOWCOLORHINTS=1      # Enable color hints
-export GIT_PAGER="delta --dark --line-numbers --side-by-side"
-
 export PAGER=less
 export EDITOR=vim
 export MANPAGER="col -b | bat --plain --language=man"
