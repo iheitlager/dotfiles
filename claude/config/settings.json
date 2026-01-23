@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Read",
+      "Read(*)",
       "Edit",
       "Bash(tmux *)",
       "Bash(gh *)",

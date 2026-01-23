@@ -81,7 +81,9 @@ alias unv='deactivate'
 
 # Virtual environment activation function with caching
 venv_activate() {
-    local CACHE_FILE="$HOME/.venv_latest"
+    local CACHE_DIR="$XDG_STATE_HOME/python"
+    local CACHE_FILE="$CACHE_DIR/venv_latest"
+    mkdir -p "$CACHE_DIR" 2>/dev/null
     
     # Handle -v option to clear cache
     if [[ "$1" == "-v" ]]; then

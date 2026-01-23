@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.4.1
+# Version: 0.4.2
 #
 # Changelog:
+# 0.4.2 Clarified tmux inter-agent communication (two separate send-keys required)
 # 0.4.1 Improved skill handling and instructions
 # 0.4.0 Multi-client support with copilot and gemini
 # 0.3.0 Improved agent manifest and instructions
@@ -436,8 +437,17 @@ Check swarm activity:
 tail -30 $SHARED_CONTEXT/events.log
 \`\`\`
 
-Signal another agent (optional, always send an extra tmux with a clear Enter, otherwise it will not be processed):
+Signal another agent via tmux:
 \`\`\`bash
+# IMPORTANT: Must be TWO separate commands - first types text, second submits
+tmux send-keys -t $SESSION:agents.N "Message here" Enter
+tmux send-keys -t $SESSION:agents.N Enter
+\`\`\`
+
+Alternative (if the agent appears stuck in idle/Enchanting state):
+\`\`\`bash
+# Send Escape first to break idle state, then message with separate Enter
+tmux send-keys -t $SESSION:agents.N Escape
 tmux send-keys -t $SESSION:agents.N "Message here" Enter
 tmux send-keys -t $SESSION:agents.N Enter
 \`\`\`
@@ -647,7 +657,7 @@ cmd_stop() {
         else
             echo -e "${YELLOW}Sending shutdown to agents...${NC}"
             
-            # Send graceful shutdown message to each agent
+            # Send graceful shutdown message to each agent (two commands required)
             for i in $(seq 1 $pane_count); do
                 debug "Sending shutdown to agent-$i"
                 tmux send-keys -t "$SESSION:agents.$i" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter
