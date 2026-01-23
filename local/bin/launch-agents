@@ -68,7 +68,8 @@ FORCE=false
 VERBOSE=false
 EQUAL_DISTRIBUTION=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
-ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
+ALLOWED_TOOLS=''
+# ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
 
 debug() {
     if [[ "$VERBOSE" == true ]]; then
@@ -238,8 +239,7 @@ create_agent() {
         echo -e "  ${GREEN}✓${NC} agent-$agent ready"
     fi
 
-    # Generate agents manifest and instructions (always)
-    create_agents_manifest $agent $client $model
+    # Generate agent instructions (always regenerated)
     create_agent_instructions $agent $client $model
 }
 
@@ -311,39 +311,8 @@ setup_worktree() {
     fi
 }
 
-create_agents_manifest() {
-    local agent=$1
-    local model=$2
-    local worktree_path="$WORKTREE_ROOT/agent-$agent"
-
-    cat > "$worktree_path/AGENTS.md" << EOF
-# Agents in Swarm
-
-This document lists all agents in the $REPO_NAME swarm.
-
-## Current Agent
-
-- **ID**: agent-$agent
-- **Model**: $model
-- **Worktree**: $worktree_path
-- **Shared State**: $SHARED_CONTEXT
-
-## All Agents
-
-To see all agents, check worktrees:
-
-\`\`\`bash
-git worktree list
-\`\`\`
-
-Or view the swarm layout:
-
-\`\`\`bash
-launch-agents info
-\`\`\`
-EOF
-
-    # Ensure AGENTS.md is in .gitignore
+ensure_gitignore_agents() {
+    # Ensure AGENTS.md is in .gitignore (called once during setup)
     pushd "$REPO_ROOT" > /dev/null
     if [[ ! -f .gitignore ]]; then
         echo "AGENTS.md" > .gitignore
@@ -369,6 +338,9 @@ setup_shared_state() {
         echo "" >> "$SHARED_CONTEXT/events.log"
     fi
 
+    # Ensure AGENTS.md is gitignored
+    ensure_gitignore_agents
+
     echo -e "${GREEN}✓${NC} Shared state ready"
 }
 
@@ -378,10 +350,9 @@ create_agent_instructions() {
     local model=$3
     local worktree_path="$WORKTREE_ROOT/agent-$agent"
 
-    local filename="INSTRUCTIONS.md"
-    [[ "$client" == "claude" ]] && filename="CLAUDE.md"
-
-    cat > "$worktree_path/$filename" << EOF
+    # Always write to AGENTS.md - injected via --append-system-prompt for Claude
+    # CLAUDE.md in repo root remains for project-specific instructions
+    cat > "$worktree_path/AGENTS.md" << EOF
 # Agent Instructions
 
 You are agent-$agent running $model (via $client) in a peer swarm for project: $REPO_NAME
@@ -476,7 +447,7 @@ If the customer types shut down, gracefully wind down:
 launch-agents stop
 \`\`\`
 
-Pane mapping: agent-1=0, agent-2=1, agent-3=2, agent-4=3
+Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (it is 1-based)
 
 ## Git Workflow
 
@@ -542,32 +513,28 @@ create_tmux_layout() {
         local client=$(get_client $i $count)
         local model=$(get_model $i $count)
         
-        sleep 0.3
         debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_ID=agent-$i' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_ID=agent-$i" C-m
-        sleep 0.1
         debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_CLIENT=$client' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_CLIENT=$client" C-m
-        sleep 0.1
         debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_MODEL=$model' C-m"
         tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_MODEL=$model" C-m
-        sleep 0.1
         
         if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
             debug "tmux send-keys -t $SESSION:agents.$pane 'source .venv/bin/activate' C-m"
             tmux send-keys -t "$SESSION:agents.$pane" "source .venv/bin/activate" C-m
-            sleep 0.1
         fi
         
         # Start the appropriate agent based on client
         case $client in
             claude)
                 tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
-                sleep 0.1
                 tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
-                sleep 0.1
-                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
-                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+                # Inject AGENTS.md via --append-system-prompt (CLAUDE.md is auto-read for project info)
+                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
+                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
+                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
                 ;;
             copilot)
                 tmux send-keys -t "$SESSION:agents.$pane" "export COPILOT_MODEL=$model" C-m

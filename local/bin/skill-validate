@@ -1,0 +1,385 @@
+#!/usr/bin/python3
+"""
+skill-validate - Security validation for AI agent skills and instructions.
+Version: 0.2.0
+
+Based on vulnerability patterns from SkillScan research (arXiv:2601.10338)
+
+Usage:
+    skill-validate [OPTIONS] [PATH...]
+    skill-validate                    # Scan default skill locations
+    skill-validate ./my-skills/       # Scan specific directory
+    skill-validate --strict file.md   # Strict mode (fail on medium+)
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterator
+
+# ANSI Colors
+RED = "\033[0;31m"
+YELLOW = "\033[0;33m"
+GREEN = "\033[0;32m"
+BLUE = "\033[0;34m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+NC = "\033[0m"
+
+# Default scan paths
+DEFAULT_PATHS = [
+    Path.home() / ".claude" / "skills",
+    Path.home() / ".config" / "claude" / "skills",
+    Path.home() / ".dotfiles" / "claude" / "config" / "skills",
+    Path.home() / ".dotfiles" / "claude" / "config" / "commands",
+]
+
+# File extensions to scan
+SKILL_EXTENSIONS = {".md", ".yaml", ".yml", ".json", ".txt", ".skill"}
+SKILL_FILENAMES = {"CLAUDE.md", "AGENTS.md", "SKILLS.md"}
+
+
+@dataclass
+class Finding:
+    severity: str
+    category: str
+    file: str
+    line: int
+    description: str
+    match: str
+
+
+@dataclass
+class Pattern:
+    severity: str
+    category: str
+    regex: re.Pattern
+    description: str
+
+
+@dataclass
+class ScanResults:
+    total_files: int = 0
+    findings: list = field(default_factory=list)
+
+    @property
+    def critical_count(self) -> int:
+        return sum(1 for f in self.findings if f.severity == "CRITICAL")
+
+    @property
+    def high_count(self) -> int:
+        return sum(1 for f in self.findings if f.severity == "HIGH")
+
+    @property
+    def medium_count(self) -> int:
+        return sum(1 for f in self.findings if f.severity == "MEDIUM")
+
+    @property
+    def low_count(self) -> int:
+        return sum(1 for f in self.findings if f.severity == "LOW")
+
+
+# Compile all patterns once at module load
+PATTERNS: list[Pattern] = []
+
+
+def _init_patterns():
+    """Initialize compiled regex patterns."""
+    pattern_defs = [
+        # === PROMPT INJECTION ===
+        ("HIGH", "PROMPT_INJECTION", r"ignore.*(previous|all|above|prior).*instructions", "Instruction override attempt"),
+        ("HIGH", "PROMPT_INJECTION", r"disregard.*(instructions|rules|guidelines)", "Instruction override attempt"),
+        ("HIGH", "PROMPT_INJECTION", r"you are now|you're now|from now on you", "Role hijacking attempt"),
+        ("HIGH", "PROMPT_INJECTION", r"new system prompt|new prompt:", "System prompt injection"),
+        ("HIGH", "PROMPT_INJECTION", r"forget (everything|what|your)", "Memory manipulation"),
+        ("MEDIUM", "PROMPT_INJECTION", r"\b(bypass|jailbreak)\b", "Security bypass mention"),
+
+        # === DATA EXFILTRATION ===
+        ("CRITICAL", "DATA_EXFIL", r"curl.*\|.*bash|wget.*\|.*sh|curl.*\|.*sh", "Remote code execution (curl|bash)"),
+        ("HIGH", "DATA_EXFIL", r"curl.*(--data|--upload|-d |-F )", "Data upload via curl"),
+        ("HIGH", "DATA_EXFIL", r"curl.*(-X POST|-X PUT)", "HTTP POST/PUT request"),
+        ("HIGH", "DATA_EXFIL", r"\bnc -", "Netcat usage (potential reverse shell)"),
+        ("HIGH", "DATA_EXFIL", r"base64.*\|.*(curl|wget)", "Encoded data exfiltration"),
+        ("MEDIUM", "DATA_EXFIL", r"\b(webhook|ngrok|pastebin)\b", "External service reference"),
+
+        # === PRIVILEGE ESCALATION ===
+        ("CRITICAL", "PRIV_ESC", r"NOPASSWD", "Passwordless sudo configuration"),
+        ("HIGH", "PRIV_ESC", r"sudo -S", "Sudo with stdin password"),
+        ("HIGH", "PRIV_ESC", r"chmod 777|chmod \+s", "Dangerous permission change"),
+        ("HIGH", "PRIV_ESC", r"chown root", "Ownership change to root"),
+        ("HIGH", "PRIV_ESC", r"visudo|/etc/sudoers", "Sudoers modification"),
+        ("HIGH", "PRIV_ESC", r"/etc/passwd|/etc/shadow", "System password file access"),
+        ("HIGH", "PRIV_ESC", r"\.ssh/(authorized_keys|id_rsa|id_ed25519)", "SSH key manipulation"),
+
+        # === SUPPLY CHAIN ===
+        ("CRITICAL", "SUPPLY_CHAIN", r"pip install.*(--trusted-host|-i http://)", "Untrusted package source"),
+        ("CRITICAL", "SUPPLY_CHAIN", r"npm config set registry", "NPM registry override"),
+        ("HIGH", "SUPPLY_CHAIN", r"pip install.*(github\.com|git\+)", "Direct Git package installation"),
+        ("HIGH", "SUPPLY_CHAIN", r"npm install.*github:", "Direct GitHub npm install"),
+
+        # === FILESYSTEM RISKS ===
+        ("CRITICAL", "FILESYSTEM", r"rm -rf /[^a-z]|rm -rf /\$", "Recursive root deletion"),
+        ("HIGH", "FILESYSTEM", r"mkfs\.|dd if=.*of=/dev", "Disk formatting/direct write"),
+
+        # === CREDENTIALS ===
+        ("HIGH", "CREDENTIALS", r"(password|api_key|api-key|secret|token)\s*[=:]\s*['\"][^'\"]+['\"]", "Hardcoded credential"),
+
+        # === PERSISTENCE ===
+        ("HIGH", "PERSISTENCE", r"\b(crontab|/etc/cron)", "Cron job manipulation"),
+        ("HIGH", "PERSISTENCE", r"launchctl|LaunchAgents|LaunchDaemons", "macOS launch agent/daemon"),
+        ("HIGH", "PERSISTENCE", r"systemctl.*enable", "Systemd service enabling"),
+        ("MEDIUM", "PERSISTENCE", r"\.(bashrc|zshrc|profile|bash_profile)\b", "Shell RC modification"),
+    ]
+
+    for severity, category, pattern, description in pattern_defs:
+        try:
+            PATTERNS.append(Pattern(
+                severity=severity,
+                category=category,
+                regex=re.compile(pattern, re.IGNORECASE),
+                description=description,
+            ))
+        except re.error as e:
+            print(f"Warning: Invalid pattern '{pattern}': {e}", file=sys.stderr)
+
+
+_init_patterns()
+
+
+def is_skill_file(path: Path) -> bool:
+    """Check if file should be scanned."""
+    return path.suffix.lower() in SKILL_EXTENSIONS or path.name in SKILL_FILENAMES
+
+
+def find_skill_files(root: Path) -> Iterator[Path]:
+    """Recursively find all skill files in directory."""
+    if root.is_file():
+        if is_skill_file(root):
+            yield root
+        return
+
+    if not root.is_dir():
+        return
+
+    for item in root.rglob("*"):
+        if item.is_file() and is_skill_file(item):
+            yield item
+
+
+def scan_file(filepath: Path, results: ScanResults) -> None:
+    """Scan a single file for security patterns."""
+    results.total_files += 1
+
+    try:
+        content = filepath.read_text(encoding="utf-8", errors="ignore")
+    except (OSError, IOError) as e:
+        print(f"Warning: Could not read {filepath}: {e}", file=sys.stderr)
+        return
+
+    for line_num, line in enumerate(content.splitlines(), start=1):
+        for pattern in PATTERNS:
+            match = pattern.regex.search(line)
+            if match:
+                results.findings.append(Finding(
+                    severity=pattern.severity,
+                    category=pattern.category,
+                    file=str(filepath),
+                    line=line_num,
+                    description=pattern.description,
+                    match=match.group(0)[:80],
+                ))
+
+
+def print_finding(finding: Finding, verbose: bool = False) -> None:
+    """Print a single finding."""
+    colors = {
+        "CRITICAL": RED,
+        "HIGH": RED,
+        "MEDIUM": YELLOW,
+        "LOW": BLUE,
+    }
+    color = colors.get(finding.severity, NC)
+
+    print(f"{color}[{finding.severity}]{NC} {BOLD}{finding.category}{NC}")
+    print(f"  File: {finding.file}:{finding.line}")
+    print(f"  Issue: {finding.description}")
+    if verbose:
+        print(f"  {DIM}Match: {finding.match}{NC}")
+    print()
+
+
+def print_summary(results: ScanResults) -> None:
+    """Print scan summary."""
+    print(f"{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NC}")
+    print(f"{BOLD}Skill Validation Summary{NC}")
+    print(f"{BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{NC}")
+    print()
+    print(f"Files scanned:  {results.total_files}")
+    print(f"Total findings: {len(results.findings)}")
+    print()
+
+    if results.findings:
+        print("By severity:")
+        if results.critical_count:
+            print(f"  {RED}CRITICAL: {results.critical_count}{NC}")
+        if results.high_count:
+            print(f"  {RED}HIGH:     {results.high_count}{NC}")
+        if results.medium_count:
+            print(f"  {YELLOW}MEDIUM:   {results.medium_count}{NC}")
+        if results.low_count:
+            print(f"  {BLUE}LOW:      {results.low_count}{NC}")
+        print()
+
+    if results.critical_count or results.high_count:
+        print(f"{RED}⚠ Critical/High severity findings require immediate review{NC}")
+    elif not results.findings:
+        print(f"{GREEN}✓ No security findings detected{NC}")
+    else:
+        print(f"{YELLOW}Review medium/low findings for context-specific risks{NC}")
+
+
+def output_json(results: ScanResults) -> None:
+    """Output results as JSON."""
+    output = [
+        {
+            "severity": f.severity,
+            "category": f.category,
+            "file": f.file,
+            "line": f.line,
+            "description": f.description,
+            "match": f.match,
+        }
+        for f in results.findings
+    ]
+    print(json.dumps(output, indent=2))
+
+
+def generate_hashes(paths: list[Path]) -> None:
+    """Generate SHA256 hashes for skill files."""
+    for path in paths:
+        for filepath in find_skill_files(path):
+            try:
+                content = filepath.read_bytes()
+                file_hash = hashlib.sha256(content).hexdigest()
+                print(f"{file_hash}  {filepath}")
+            except (OSError, IOError):
+                pass
+
+
+def check_integrity(hash_file: Path) -> None:
+    """Check file integrity against baseline."""
+    if not hash_file.exists():
+        print(f"{YELLOW}No integrity baseline found at {hash_file}{NC}")
+        print("Generate with: skill-validate --generate-hashes > ~/.local/state/skill-hashes.sha256")
+        return
+
+    print(f"{BLUE}Checking file integrity...{NC}")
+    changed = 0
+
+    for line in hash_file.read_text().splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("  ", 1)
+        if len(parts) != 2:
+            continue
+
+        expected_hash, file_path = parts
+        filepath = Path(file_path)
+
+        if filepath.exists():
+            current_hash = hashlib.sha256(filepath.read_bytes()).hexdigest()
+            if current_hash != expected_hash:
+                print(f"{RED}[MODIFIED]{NC} {file_path}")
+                changed += 1
+        else:
+            print(f"{YELLOW}[MISSING]{NC} {file_path}")
+            changed += 1
+
+    if changed == 0:
+        print(f"{GREEN}✓ All skill files match integrity baseline{NC}")
+    else:
+        print(f"{RED}✗ {changed} file(s) differ from baseline{NC}")
+    print()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Validate AI agent skills for security vulnerabilities.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Vulnerability Categories:
+    1. Prompt Injection    - Attempts to override system instructions
+    2. Data Exfiltration   - Unauthorized data transmission
+    3. Privilege Escalation - Elevated permission acquisition
+    4. Supply Chain        - Malicious dependency introduction
+
+Examples:
+    skill-validate                          # Scan default locations
+    skill-validate ~/.claude/skills/        # Scan specific directory
+    skill-validate --strict --verbose .     # Strict scan with details
+    skill-validate --json > report.json     # JSON output for CI/CD
+        """,
+    )
+    parser.add_argument("paths", nargs="*", help="Paths to scan (default: common skill locations)")
+    parser.add_argument("--strict", action="store_true", help="Exit with error on medium+ severity")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show matched patterns")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--integrity", action="store_true", help="Check file integrity")
+    parser.add_argument("--generate-hashes", action="store_true", help="Generate integrity hashes")
+
+    args = parser.parse_args()
+
+    # Determine paths to scan
+    scan_paths = [Path(p) for p in args.paths] if args.paths else DEFAULT_PATHS
+
+    # Handle hash generation
+    if args.generate_hashes:
+        generate_hashes(scan_paths)
+        return 0
+
+    # Header
+    if not args.json:
+        print(f"{BOLD}Skill Security Validator{NC}")
+        print(f"{DIM}Based on SkillScan vulnerability taxonomy (arXiv:2601.10338){NC}")
+        print()
+
+    # Integrity check
+    if args.integrity:
+        check_integrity(Path.home() / ".local" / "state" / "skill-hashes.sha256")
+
+    # Scan
+    results = ScanResults()
+
+    for path in scan_paths:
+        if path.exists():
+            if not args.json:
+                print(f"{BLUE}Scanning: {path}{NC}")
+            for filepath in find_skill_files(path):
+                scan_file(filepath, results)
+
+    # Output
+    if args.json:
+        output_json(results)
+    else:
+        for finding in results.findings:
+            print_finding(finding, verbose=args.verbose)
+        print_summary(results)
+
+    # Exit code
+    if args.strict:
+        if results.critical_count or results.high_count or results.medium_count:
+            return 1
+    else:
+        if results.critical_count or results.high_count:
+            return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
