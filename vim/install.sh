@@ -4,12 +4,6 @@
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 VIM_DATA="$XDG_DATA_HOME/vim"
 
-# Clean old location if migrating
-if [ -d "$HOME/.vim" ]; then
-    echo "Migrating from ~/.vim to $VIM_DATA"
-    rm -rf "$HOME/.vim"
-fi
-
 # Create XDG directory structure
 mkdir -p "$VIM_DATA/bundle"
 mkdir -p "$VIM_DATA/colors"
@@ -21,7 +15,7 @@ if [ ! -d "$VIM_DATA/bundle/Vundle.vim" ]; then
 fi
 
 # Run PluginInstall silently (headless vim)
-vim -es -u "$HOME/.vimrc" -i NONE -c "PluginInstall" -c "qa"
+vim -es -u "$XDG_CONFIG_HOME/vim/vimrc" -i NONE -c "PluginInstall" -c "qa"
 
 # http://ethanschoonover.com/solarized/vim-colors-solarized
 # There is no other way?

@@ -95,8 +95,6 @@ setup_gitconfig () {
 
 # Link XDG config directories
 link_config_files () {
-  info 'linking config directories\n'
-
   local overwrite_all=false backup_all=false skip_all=false
 
   # Link topic-specific config directories: ~/.dotfiles/<topic>/config/ → ~/.config/<topic>/
@@ -117,6 +115,8 @@ link_config_files () {
       link_file "$src" "$dst"
     done
   fi
+
+  success 'linking config directories'
 }
 
 # create the actual symlink for a dotfile
