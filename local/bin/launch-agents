@@ -111,7 +111,6 @@ Options:
     -d, --daemon    Run task-watcher daemon (monitors queue, notifies agents)
     -r              Shortcut for 'restart'
     -a              Shortcut for 'attach'
-    -w              Shortcut for 'workspace'
     --equal         For n=6, use equal distribution (Option 5) instead of default
     -v, --verbose   Print commands being executed
     --force         Force restart or clean (skips prompts)
@@ -135,7 +134,6 @@ Examples:
     launch-agents -d start          Start with task-watcher daemon
     launch-agents -r                Restart session
     launch-agents workspace         Simple workspace (claude + shell)
-    launch-agents -w                Shortcut for workspace
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
     launch-agents clean             Remove merged worktrees
@@ -1008,10 +1006,6 @@ while [[ $# -gt 0 ]]; do
             DAEMON_MODE=true
             shift
             ;;
-        -w|--workspace)
-            COMMAND="workspace"
-            shift
-            ;;
         -r)
             COMMAND="restart"
             shift
@@ -1035,7 +1029,7 @@ while [[ $# -gt 0 ]]; do
             echo "  launch-agents          Start or attach (smart default)"
             echo "  launch-agents start    Start agents"
             echo "  launch-agents stop     Stop agents"
-            echo "  launch-agents -w       Simple workspace"
+            echo "  launch-agents workspace  Simple workspace"
             echo "  launch-agents info     Show status"
             echo ""
             exit 1

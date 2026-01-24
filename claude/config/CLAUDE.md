@@ -61,6 +61,17 @@ I use ADRs to document significant design decisions:
 - No need to ask permission for Bash or git actions
 - Be cautious with destructive git operations (no force pushes or hard resets unless explicitly requested)
 
+### GitHub Comment Attribution
+
+When posting comments to GitHub issues or PRs using `gh issue comment` or `gh pr comment`, **always end the comment with an attribution signature**:
+
+```
+---
+🤖 *Analysis by Claude*
+```
+
+This ensures comments posted through your account are clearly identified as AI-generated analysis.
+
 ### Feature Development Workflow
 
 #### Starting a New Feature

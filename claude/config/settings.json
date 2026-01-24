@@ -29,8 +29,8 @@
     ],
     "deny": [
       "Bash(rm -rf:*)",
-      "Bash(curl:*|*sh)",
-      "Bash(wget:*|*sh)",
+      "Bash(curl|*sh:*)",
+      "Bash(wget|*sh:*)",
       "Bash(*>/dev/tcp/*)",
       "Bash(*base64*decode*)",
       "Bash(chmod 777:*)",

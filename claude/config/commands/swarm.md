@@ -2,10 +2,10 @@ Show and manage the swarm task queue for multi-agent coordination.
 
 ## Usage
 
-- `/tasks` - Show queue overview + pending tasks with capability scores
-- `/tasks active` - Show tasks currently being worked on
-- `/tasks done` - Show recently completed tasks
-- `/tasks create <title>` - Create a new task for the swarm
+- `/swarm` - Show queue overview + pending tasks with capability scores
+- `/swarm active` - Show tasks currently being worked on
+- `/swarm done` - Show recently completed tasks
+- `/swarm create <title>` - Create a new task for the swarm
 
 ## Default: Queue Overview
 
@@ -81,5 +81,5 @@ result: null
 After showing status, suggest next actions:
 - `claim-task` - Claim the best matching task
 - `claim-task <id>` - Claim a specific task
-- `/tasks create <title>` - Add work to the queue
+- `/swarm create <title>` - Add work to the queue
 - `tail -20 $SHARED_CONTEXT/events.log` - View recent activity
