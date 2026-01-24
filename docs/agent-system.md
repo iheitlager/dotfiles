@@ -4,7 +4,7 @@
 
 Claude Swarm is a coordination system for running multiple AI coding agents as equal peers working on a shared codebase. Agents collaborate through a shared task queue and state directory, with no fixed hierarchy. Any agent can receive user requests, create tasks, or execute work.
 
-**Version 0.4.0** introduces multi-client support, allowing Claude, GitHub Copilot, and Gemini agents to work together in the same swarm.
+**Version 0.5.2** introduces improved resilience with smart defaults, restart command, workspace mode, and better session handling. Multi-client support allows Claude, GitHub Copilot, and Gemini agents to work together in the same swarm.
 
 ## Design Principles
 
@@ -129,22 +129,37 @@ The `recommended_model` field is advisory. An agent can work above or below its 
 
 ## Usage
 
+### Smart Default
+
+Running `launch-agents` without a command will:
+- **Attach** to an existing session if one is running
+- **Start** a new swarm if no session exists
+
+This makes it easy to jump back into your swarm without remembering which command to use.
+
 ### Commands
 
 ```bash
-launch-agents [OPTIONS] COMMAND
+launch-agents [OPTIONS] [COMMAND]
 
 Commands:
-    start           Launch agents in tmux (or attach if running)
+    (none)          Smart default: start or attach if already running
+    start           Launch agents in tmux (prompt if already running)
     stop            Kill tmux session
+    restart         Stop and restart the session
+    attach          Attach to existing session
+    workspace       Simple workspace: claude (opus) left, shell right
     clean           Remove worktrees (if branches merged and clean)
     info            Show status of agents, models, and tasks
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
+    -r              Shortcut for 'restart'
+    -a              Shortcut for 'attach'
+    -w              Shortcut for 'workspace'
     --equal         For n=6, use equal distribution instead of default
     -v, --verbose   Print commands being executed
-    --force         Force clean even with uncommitted changes
+    --force         Force restart or clean (skips prompts)
     --yolo          Skip permission prompts (Claude agents only)
     -h, --help      Show this help message
     --version       Show version number
@@ -153,10 +168,11 @@ Options:
 ### Examples
 
 ```bash
-launch-agents start             # Start 2 agents (default)
+launch-agents                   # Smart default: start or attach
 launch-agents -n 4 start        # Start 4 agents
-launch-agents -n 6 start        # Start 6 agents with multi-client
-launch-agents -n 6 --equal start # Start 6 agents with equal client distribution
+launch-agents -r                # Restart session
+launch-agents workspace         # Simple workspace (claude + shell)
+launch-agents -w                # Shortcut for workspace
 launch-agents info              # Show swarm status
 launch-agents stop              # Stop all agents
 launch-agents clean             # Remove merged worktrees
@@ -222,7 +238,7 @@ Full Claude spectrum from Opus to Haiku:
 
 ### Six Agents — Default Distribution
 
-Multi-client mode with Claude majority:
+Multi-client mode with Claude majority (4 Claude + 1 Copilot + 1 Gemini):
 
 | Agent | Client | Model |
 |-------|--------|-------|
@@ -255,6 +271,18 @@ Balanced pairs across all three clients:
 └─────────────────┴─────────────────┴─────────────────┘
 ```
 
+### Workspace Mode
+
+For simpler tasks, use workspace mode (`-w` or `workspace`) which creates a single Claude (opus) session with a shell:
+
+```
+┌─────────────────┬─────────────────┐
+│ claude (opus)   │ shell           │
+└─────────────────┴─────────────────┘
+```
+
+This runs in the current directory without worktrees, ideal for quick tasks or single-agent work.
+
 ## Tmux Session Structure
 
 ### Window 1: Agent Grid (`agents`)
@@ -280,7 +308,8 @@ One shell window per agent worktree for running tests, checking output, manual g
 
 ### Session Naming
 
-Session is named `claude-<project-name>` where project name is derived from the git repository directory.
+- **Swarm sessions**: Named `claude-<project-name>` where project name is derived from the git repository directory.
+- **Workspace sessions**: Named `ws-<directory-name>` for the simpler workspace mode.
 
 ## Agent Configuration
 
@@ -476,16 +505,17 @@ When an agent receives a request or reviews a task, it assesses complexity:
 
 The `clean` command handles worktree removal intelligently:
 
-1. Stops tmux session if running
-2. For each agent worktree:
+1. If `--force`: kills tmux and all agent processes (claude, gemini, copilot)
+2. Stops tmux session if running
+3. For each agent worktree:
    - Checks for uncommitted changes (blocks unless `--force`)
    - Checks if branch is merged into main
    - Removes worktree and branch if safe
-3. Removes shared state if no pending/active tasks (or `--force`)
+4. Removes shared state if no pending/active tasks (or `--force`)
 
 ```bash
 launch-agents clean         # Safe cleanup (merged branches only)
-launch-agents --force clean # Force cleanup (removes everything)
+launch-agents --force clean # Force cleanup (kills processes, removes everything)
 ```
 
 ## Failure Handling
@@ -520,6 +550,12 @@ When a user types "shut down" to any agent:
 2. Log shutdown event
 3. Exit process
 4. Run `launch-agents stop` to kill the tmux session
+
+To restart the swarm quickly:
+```bash
+launch-agents restart    # or -r
+launch-agents --force start  # equivalent
+```
 
 ## Future Enhancements
 
