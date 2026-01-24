@@ -1,4 +1,12 @@
-Create a feature plan document in `./docs/plans/`.
+Create planning documents: feature plans or architectural decision records (ADRs).
+
+## Usage
+
+```
+/plan                    Interactive feature plan
+/plan <feature>          Plan specific feature → docs/plans/
+/plan adr <decision>     Architectural decision → docs/adr/
+```
 
 ## Process
 
@@ -87,5 +95,84 @@ After gathering info:
 2. Create file at `./docs/plans/NNN-feature-name.md`
 3. Suggest creating related branch: `feat/feature-name`
 4. Suggest creating GitHub issue if none exists
+
+Ask user to confirm before creating.
+
+---
+
+## ADR Mode (`/plan adr`)
+
+Create an Architectural Decision Record for significant design decisions.
+
+### When to Write an ADR
+
+- Choosing between technologies or approaches
+- Establishing patterns that affect multiple components
+- Making decisions that are hard to reverse
+- Documenting why something is the way it is
+
+### ADR Template
+
+```markdown
+# ADR-NNNN: [Title]
+
+**Date**: [Today's date]
+**Status**: Proposed | Accepted | Deprecated | Superseded by ADR-XXXX
+**Deciders**: [who was involved]
+
+## Context
+
+[What is the issue that we're seeing that is motivating this decision?]
+
+## Decision
+
+[What is the change that we're proposing and/or doing?]
+
+## Consequences
+
+### Positive
+- [benefit 1]
+- [benefit 2]
+
+### Negative
+- [drawback 1]
+- [drawback 2]
+
+### Neutral
+- [side effect that is neither good nor bad]
+
+## Alternatives Considered
+
+### [Alternative 1]
+- Pros: ...
+- Cons: ...
+- Why rejected: ...
+
+### [Alternative 2]
+- Pros: ...
+- Cons: ...
+- Why rejected: ...
+
+## References
+
+- [Link to relevant documentation]
+- [Link to related ADRs]
+```
+
+### ADR Naming
+
+Format: `NNNN-short-title.md`
+
+1. Check existing ADRs: `ls docs/adr/`
+2. Use next sequential number (4 digits, zero-padded)
+3. Use lowercase, hyphenated title
+
+### ADR Output
+
+After gathering context:
+1. Show ADR preview
+2. Create file at `./docs/adr/NNNN-title.md`
+3. Update ADR index if one exists
+4. Suggest linking from relevant code comments
 
 Ask user to confirm before creating.
