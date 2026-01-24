@@ -1,4 +1,6 @@
 [include]
+    # be sure to add the local keys in this file
+    # it is excluded from version control
     path = ~/.local/gitconfig
 
 [user]
@@ -13,7 +15,7 @@
 
 [core]
     excludesfile = ~/.config/git/gitignore
-    editor = $EDITOR
+    editor = nano
     pager = delta
 
 [push]
