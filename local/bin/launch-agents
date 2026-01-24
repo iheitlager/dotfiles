@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.5.1
+# Version: 0.5.2
 #
 # Changelog:
+# 0.5.2 Improved resilience: smart defaults, restart command, better session handling
 # 0.5.1 Force clean now kills tmux and agent processes (claude/gemini/copilot)
 # 0.5.0 Added -w/--workspace mode for simple claude + shell layout
 # 0.4.2 Clarified tmux inter-agent communication (two separate send-keys required)
@@ -88,22 +89,28 @@ show_help() {
     fi
     
     $HELP << EOF
-Usage: launch-agents [OPTIONS] COMMAND
+Usage: launch-agents [OPTIONS] [COMMAND]
 
 Launch and manage a Claude Code agent swarm.
 
 Commands:
-    start           Launch agents in tmux (or attach if running)
+    (none)          Smart default: start or attach if already running
+    start           Launch agents in tmux (prompt if already running)
     stop            Kill tmux session
+    restart         Stop and restart the session
+    attach          Attach to existing session
+    workspace       Simple workspace: claude (opus) left, shell right
     clean           Remove worktrees (if branches merged and clean)
     info            Show status of agents, models, and tasks
-    -w, --workspace Simple workspace: claude (opus) left, shell right
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
+    -r              Shortcut for 'restart'
+    -a              Shortcut for 'attach'
+    -w              Shortcut for 'workspace'
     --equal         For n=6, use equal distribution (Option 5) instead of default
     -v, --verbose   Print commands being executed
-    --force         Force clean even with uncommitted changes
+    --force         Force restart or clean (skips prompts)
     --yolo          Skip permission prompts (Claude agents only)
     -h, --help      Show this help message
 
@@ -119,10 +126,11 @@ Clients & Models:
     gemini          gemini-pro (agents 5-6)
 
 Examples:
-    launch-agents start             Start 2 agents (default)
+    launch-agents                   Smart default: start or attach
     launch-agents -n 4 start        Start 4 agents
-    launch-agents -n 6 start        Start 6 agents with multi-client
-    launch-agents -w                Simple workspace (claude + shell)
+    launch-agents -r                Restart session
+    launch-agents workspace         Simple workspace (claude + shell)
+    launch-agents -w                Shortcut for workspace
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
     launch-agents clean             Remove merged worktrees
@@ -593,15 +601,32 @@ create_tmux_layout() {
 }
 
 cmd_workspace() {
-    local ws_session="ws-$(basename "$PWD")"
+    # Sanitize session name: replace dots and special chars with underscores
+    local dir_name=$(basename "$PWD")
+    local ws_session="ws-${dir_name//[^a-zA-Z0-9_-]/_}"
     
     if tmux has-session -t "$ws_session" 2>/dev/null; then
-        echo -e "${YELLOW}Workspace exists, attaching...${NC}"
-        tmux attach -t "$ws_session"
-        exit 0
+        if [[ "$FORCE" == true ]]; then
+            echo -e "${YELLOW}Workspace exists, restarting...${NC}"
+            tmux kill-session -t "$ws_session"
+        else
+            echo -e "${YELLOW}Workspace '$ws_session' already running${NC}"
+            echo ""
+            echo "Options:"
+            echo "  launch-agents -w               Attach to existing workspace"
+            echo "  launch-agents --force -w       Kill and restart workspace"
+            echo ""
+            read -p "Attach to existing workspace? [Y/n] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                exit 0
+            fi
+            tmux attach -t "$ws_session"
+            exit 0
+        fi
     fi
 
-    echo -e "${BLUE}Creating workspace in: $(basename "$PWD")${NC}"
+    echo -e "${BLUE}Creating workspace: $ws_session${NC}"
 
     # Create session with first pane (claude)
     tmux new-session -d -s "$ws_session" -n "workspace" -c "$PWD"
@@ -643,9 +668,27 @@ cmd_workspace() {
 
 cmd_start() {
     if tmux has-session -t "$SESSION" 2>/dev/null; then
-        echo -e "${YELLOW}Session exists, attaching...${NC}"
-        tmux attach -t "$SESSION"
-        exit 0
+        if [[ "$FORCE" == true ]]; then
+            echo -e "${YELLOW}Session exists, restarting...${NC}"
+            tmux kill-session -t "$SESSION"
+        else
+            echo -e "${YELLOW}Session '$SESSION' already running${NC}"
+            echo ""
+            echo "Options:"
+            echo "  launch-agents start          Attach to existing session"
+            echo "  launch-agents --force start  Kill and restart session"
+            echo "  launch-agents restart        Alias for --force start"
+            echo "  launch-agents stop           Stop session"
+            echo "  launch-agents info           Show status"
+            echo ""
+            read -p "Attach to existing session? [Y/n] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                exit 0
+            fi
+            tmux attach -t "$SESSION"
+            exit 0
+        fi
     fi
 
     echo -e "${BLUE}Setting up $AGENT_COUNT agents for: $REPO_NAME${NC}"
@@ -937,17 +980,32 @@ while [[ $# -gt 0 ]]; do
             COMMAND="workspace"
             shift
             ;;
+        -r)
+            COMMAND="restart"
+            shift
+            ;;
+        -a)
+            COMMAND="attach"
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
             ;;
-        start|stop|clean|info)
+        start|stop|clean|info|restart|attach|workspace)
             COMMAND=$1
             shift
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            show_help
+            echo ""
+            echo "Did you mean one of these?"
+            echo "  launch-agents          Start or attach (smart default)"
+            echo "  launch-agents start    Start agents"
+            echo "  launch-agents stop     Stop agents"
+            echo "  launch-agents -w       Simple workspace"
+            echo "  launch-agents info     Show status"
+            echo ""
             exit 1
             ;;
     esac
@@ -970,9 +1028,30 @@ case ${COMMAND:-} in
     workspace)
         cmd_workspace
         ;;
+    restart)
+        # Restart is just stop + start with force
+        FORCE=true
+        cmd_stop 2>/dev/null || true
+        sleep 0.5
+        cmd_start
+        ;;
+    attach)
+        if tmux has-session -t "$SESSION" 2>/dev/null; then
+            tmux attach -t "$SESSION"
+        else
+            echo -e "${RED}No session '$SESSION' running${NC}"
+            echo "Run 'launch-agents start' to create one"
+            exit 1
+        fi
+        ;;
     "")
-        show_help
-        exit 0
+        # Smart default: start or attach if already running
+        if tmux has-session -t "$SESSION" 2>/dev/null; then
+            echo -e "${GREEN}Session exists, attaching...${NC}"
+            tmux attach -t "$SESSION"
+        else
+            cmd_start
+        fi
         ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}"

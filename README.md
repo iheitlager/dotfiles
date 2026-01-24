@@ -2,11 +2,11 @@
 
 ## dotfiles
 
-Your dotfiles are how you personalize your system. These are mine specific for working on OSX.
-My workflow is all about Homebrew, bash, iTerm2 and vim.
+Your dotfiles are how you personalize your system. These are mine, specific for working on OSX.
+My workflow is all about Homebrew, bash, iTerm2, vscode and claude. It is also very XDG inspired. 
 
-I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). 
-I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although mine is bash centric instead of zsh. 
+I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. That way it also becomes shareable between various workstations like your private and workmachines. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although I am very much bash centric instead of zsh. Do not really know the value of another shell.
+
 This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management.
 Modern CLI tools (eza, bat, ripgrep, fd, delta, fzf) provide rich colored output and better defaults.
 
@@ -20,13 +20,9 @@ $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/
 $ eval "$(/opt/homebrew/bin/brew shellenv)"    # make sure homebrew is known
 
 $ git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
-$ chsh -s /bin/bash                            # we love to run bash instead of zshell
-$ cd ~/.dotfiles
-$ script/bootstrap                             # run this once to configure dotfile
+$ ~/.dotfiles/script/bootstrap                 # run this once to configure dotfile
 $ dot                                          # run anywhere to install or upgrade packages
 ```
-
-NB: be sure to setup ssh and add your keys in your `.ssh/config`
 
 There are two commands to run every now and then:
 * `dot` to upgrade homebrew
@@ -39,14 +35,14 @@ You have to run your npm, pip, etc updates yourself
 Everything is configured and tweaked within `~/.dotfiles`. The actual dotfiles are symlinked from this folder during the bootstrap.
 This should remain on your system, and offers one place for versioning of your dotfiles, and for example allows .ssh to be excluded.
 Everything's built around topic areas. If you're adding a new area to your
-forked dotfiles — say, "Java" — you can simply add a `java` directory and put files in there. 
+forked dotfiles — say, "Python" — you can simply add a `python` directory and put files in there. 
 The complete dotfiles system consists of install time and runtime parts, in total four parts:
 
-1. symlinks to dotfiles
+1. create an XDG compliant .config structure
+1. symlinks to dotfiles into .config and .local
 2. topical extensions to be loaded by `.bash_profile`
-3. topical brew based installers during `script\bootstrap` (run these with `dot`)
-4. topical installers during `script\bootstrap`
-
+3. topical brew based installers during `script\bootstrap [--no-brew]` (run these with `dot`)
+4. `install.sh` scripts to finalize
 
 ## components
 
@@ -63,8 +59,9 @@ There's a few special files in the hierarchy.
   These files get symlinked in when you run `script/bootstrap`.
 - **topic/config/**: Any directory named `config` inside a topic gets symlinked to `~/.config/<topic>/` for XDG compliance
 - **config/\<app\>/**: The central `config/` directory also gets linked: `config/<app>/` → `~/.config/<app>/`
+- **local/bin/**: The central `.local/` directory also gets linked: `local/bin/<app>` → `~/.local/bin/<app>`
 
-Do not forget to never checkin secrets in any of these files, use `~/.config/secrets` for this (sourced by `.bash_profile`)
+Do not forget to never checkin secrets in any of these files, use `~/.config/secrets` for this (sourced by `.bash_profile`). This file is excluded from version control for that reason.
 
 ## XDG Base Directory
 
