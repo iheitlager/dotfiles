@@ -57,6 +57,8 @@ Work is managed at two distinct layers:
 - `/take #123` — Direct mode: single agent implements immediately
 - `/take #123 queue` — Queue mode: creates swarm task(s) for multi-agent work
 
+See [commands.md](commands.md) for the complete command reference.
+
 This separation keeps project tracking (permanent) distinct from session coordination (ephemeral).
 
 ### Symmetry Over Hierarchy
