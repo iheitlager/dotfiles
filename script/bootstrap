@@ -69,28 +69,63 @@ setup_xdg_dirs () {
   success "setting up XDG directories"
 }
 
-# git gitconfig generator, drop the file to generate a new one
+# git gitconfig generator - creates local config with user info and signing key
 setup_gitconfig () {
-  local gitconfig_path="$HOME/.gitconfig"
+  local local_gitconfig="$HOME/.local/gitconfig"
   local force=$1
 
-  if [ -f "$gitconfig_path" ] && [ "$force" != "true" ]; then
-    success "gitconfig already exists at $gitconfig_path"
+  if [ -f "$local_gitconfig" ] && [ "$force" != "true" ]; then
+    success "local gitconfig already exists at $local_gitconfig"
     return
   fi
 
-  if ! [ -f git/gitconfig.symlink ] || [ "$force" = "true" ]; then
-    info 'setup gitconfig\n'
+  info 'setup local gitconfig\n'
 
-    user ' - What is your github author name?'
-    read -e git_authorname
-    user ' - What is your github author email?'
-    read -e git_authoremail
+  user ' - What is your git author name?'
+  read -e git_authorname
+  user ' - What is your git author email?'
+  read -e git_authoremail
 
-    sed -e "s/AUTHORNAME/$git_authorname/g" -e "s/AUTHOREMAIL/$git_authoremail/g" git/gitconfig.symlink.example > git/gitconfig.symlink
-
-    success 'gitconfig'
+  # Try to get SSH signing key from 1Password agent
+  local ssh_key=""
+  if ssh-add -L &>/dev/null; then
+    local available_keys=$(ssh-add -L)
+    local key_count=$(echo "$available_keys" | wc -l | tr -d ' ')
+    
+    if [ "$key_count" -eq 1 ]; then
+      ssh_key="$available_keys"
+      info "Found SSH key from agent\n"
+    elif [ "$key_count" -gt 1 ]; then
+      echo ""
+      info "Multiple SSH keys found:\n"
+      echo "$available_keys" | nl
+      user ' - Enter the number of the key to use for signing:'
+      read -e key_num
+      ssh_key=$(echo "$available_keys" | sed -n "${key_num}p")
+    fi
   fi
+
+  if [ -z "$ssh_key" ]; then
+    user ' - Paste your SSH public key for commit signing (or leave empty to skip):'
+    read -e ssh_key
+  fi
+
+  # Create the local gitconfig
+  mkdir -p "$(dirname "$local_gitconfig")"
+  cat > "$local_gitconfig" << EOF
+# Local git config - machine specific, not committed
+[user]
+    name = $git_authorname
+    email = $git_authoremail
+EOF
+
+  if [ -n "$ssh_key" ]; then
+    cat >> "$local_gitconfig" << EOF
+    signingKey = "$ssh_key"
+EOF
+  fi
+
+  success "created $local_gitconfig"
 }
 
 # Link XDG config directories

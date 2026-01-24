@@ -3,12 +3,11 @@
 ## dotfiles
 
 Your dotfiles are how you personalize your system. These are mine, specific for working on OSX.
-My workflow is all about Homebrew, bash, iTerm2, vscode and claude. It is also very XDG inspired. 
+My workflow is all about Homebrew, bash, iTerm2, vscode and Claude. It is also very XDG inspired. 
 
-I believe everything should be versioned and scripted.  Your laptop is your personal workstation for which you have to tweak your personal workflow. That way it also becomes shareable between various workstations like your private and workmachines. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). I therefore started with [holmans dotfiles](https://github.com/holman/dotfiles) and created my own, although I am very much bash centric instead of zsh. Do not really know the value of another shell.
+I believe everything should be versioned and scripted. Your laptop is your personal workstation for which you have to tweak your personal workflow. That way it can also become shareable between various workstations like your private and workmachines. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). Therefore, I once started with [holmans dotfiles](https://github.com/holman/dotfiles) and did create my own. Mine however, isvery much `bash` centric instead of `zsh`. Do not really know the value of another shell. 
 
-This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management.
-Modern CLI tools (eza, bat, ripgrep, fd, delta, fzf) provide rich colored output and better defaults.
+This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management. Over the years the system became infected by the use of IA. Modern CLI tools (eza, bat, ripgrep, fd, delta, fzf) provide rich colored output and better defaults. And some lengthy scripts where nicely produced by Claude. Nowadays it also contains my agent system.
 
 ## install
 
@@ -61,7 +60,7 @@ There's a few special files in the hierarchy.
 - **config/\<app\>/**: The central `config/` directory also gets linked: `config/<app>/` → `~/.config/<app>/`
 - **local/bin/**: The central `.local/` directory also gets linked: `local/bin/<app>` → `~/.local/bin/<app>`
 
-Do not forget to never checkin secrets in any of these files, use `~/.config/secrets` for this (sourced by `.bash_profile`). This file is excluded from version control for that reason.
+Do not forget to never checkin secrets in any of these files, use `~/.config/secrets` for this (sourced by `.bash_profile`). This file is excluded from version control for that reason. Also git secrets are generated into `.local/gitconfig`.
 
 ## XDG Base Directory
 
@@ -74,7 +73,7 @@ This dotfiles setup follows the [XDG Base Directory Specification](https://speci
 | `XDG_STATE_HOME` | `~/.local/state` | User state (logs, history) |
 | `XDG_CACHE_HOME` | `~/.cache` | Non-essential cached data |
 
-Applications configured for XDG compliance include: vim, bat, ripgrep, tmux, pip, docker, colima, ipython, matplotlib, ollama, and history files for bash, python, psql, and less.
+Applications configured for XDG compliance include: vim, bat, ripgrep, tmux, pip, docker, colima, ipython, matplotlib, ollama, and history files for bash, python, psql, and less. One could basically ask what is not XDG compliant.
 
 See [docs/xdg_setup.md](docs/xdg_setup.md) for detailed documentation.
 

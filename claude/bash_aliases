@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # launch-agents aliases
-alias law='launch-agents --workspace'
+alias law='launch-agents workspace'
 alias la2='launch-agents -n 2 start'
 alias la4='launch-agents -n 4 start'
 alias la6='launch-agents -n 6 start'

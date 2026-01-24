@@ -3,10 +3,6 @@
     # it is excluded from version control
     path = ~/.local/gitconfig
 
-[user]
-	email = iheitlager@schubergphilis.com
-	name = Ilja Heitlager
-
 [color]
     diff = auto
     status = auto
