@@ -1,0 +1,323 @@
+#!/usr/bin/env bash
+# claim-task - Atomic task claiming for agent swarm
+# Version: 1.0.0
+#
+# Usage: claim-task [OPTIONS] [TASK_ID]
+#
+# Claims a task from the pending queue atomically using flock.
+# If no TASK_ID specified, selects best matching task based on agent capability.
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Get project context
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo -e "${RED}Error: Not in a git repository${NC}" >&2
+    exit 1
+}
+
+# Handle worktree paths
+local_repo_name=$(basename "$REPO_ROOT")
+local_repo_parent=$(dirname "$REPO_ROOT")
+
+if [[ "$local_repo_parent" =~ ^(.+)-worktree$ ]]; then
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+elif [[ "$local_repo_name" =~ ^(.+)-worktree$ ]]; then
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+else
+    REPO_NAME="$local_repo_name"
+fi
+
+SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
+PENDING_DIR="$SHARED_CONTEXT/tasks/pending"
+ACTIVE_DIR="$SHARED_CONTEXT/tasks/active"
+LOCK_DIR="$SHARED_CONTEXT/tasks/.locks"
+EVENTS_LOG="$SHARED_CONTEXT/events.log"
+
+# Agent identity from environment
+AGENT_ID="${AGENT_ID:-unknown}"
+AGENT_MODEL="${AGENT_MODEL:-sonnet}"
+
+# Model capability tiers (higher = more capable)
+get_model_tier() {
+    case "$1" in
+        opus)       echo 3 ;;
+        sonnet)     echo 2 ;;
+        haiku)      echo 1 ;;
+        *)          echo 2 ;;  # Default to sonnet tier
+    esac
+}
+
+# Complexity to recommended tier
+get_complexity_tier() {
+    case "$1" in
+        complex)    echo 3 ;;
+        moderate)   echo 2 ;;
+        simple)     echo 1 ;;
+        *)          echo 2 ;;
+    esac
+}
+
+# Extract field from YAML (simple grep-based, avoids yq dependency)
+yaml_get() {
+    local file="$1"
+    local field="$2"
+    grep "^${field}:" "$file" 2>/dev/null | sed "s/^${field}:[[:space:]]*//" | tr -d '"'
+}
+
+# Score a task for this agent (higher = better match)
+# Prefers tasks at or below agent's capability level
+score_task() {
+    local task_file="$1"
+    local agent_tier=$(get_model_tier "$AGENT_MODEL")
+
+    local recommended=$(yaml_get "$task_file" "recommended_model")
+    local complexity=$(yaml_get "$task_file" "complexity")
+    local priority=$(yaml_get "$task_file" "priority")
+
+    # Get task tier from recommended_model or complexity
+    local task_tier
+    if [[ -n "$recommended" ]]; then
+        task_tier=$(get_model_tier "$recommended")
+    elif [[ -n "$complexity" ]]; then
+        task_tier=$(get_complexity_tier "$complexity")
+    else
+        task_tier=2  # Default moderate
+    fi
+
+    # Score calculation:
+    # - Perfect match (task_tier == agent_tier): 100 + priority bonus
+    # - Agent can handle (task_tier < agent_tier): 50 + priority bonus (helps clear queue)
+    # - Agent underpowered (task_tier > agent_tier): 0 (should not claim)
+
+    local score=0
+    if [[ $task_tier -eq $agent_tier ]]; then
+        score=100
+    elif [[ $task_tier -lt $agent_tier ]]; then
+        score=50  # Can help with simpler tasks
+    else
+        score=0   # Too complex for this agent
+    fi
+
+    # Priority bonus
+    case "$priority" in
+        urgent) score=$((score + 40)) ;;
+        high)   score=$((score + 30)) ;;
+        medium) score=$((score + 20)) ;;
+        low)    score=$((score + 10)) ;;
+    esac
+
+    echo $score
+}
+
+# Find best task for this agent
+find_best_task() {
+    local best_task=""
+    local best_score=0
+
+    for task_file in "$PENDING_DIR"/*.yaml; do
+        [[ -f "$task_file" ]] || continue
+
+        local score=$(score_task "$task_file")
+        if [[ $score -gt $best_score ]]; then
+            best_score=$score
+            best_task=$(basename "$task_file" .yaml)
+        fi
+    done
+
+    # Only return if score > 0 (agent can handle it)
+    if [[ $best_score -gt 0 ]]; then
+        echo "$best_task"
+    fi
+}
+
+# Atomic claim using flock
+claim_task() {
+    local task_id="$1"
+    local task_file="$PENDING_DIR/${task_id}.yaml"
+    local active_file="$ACTIVE_DIR/${task_id}.yaml"
+    local lock_file="$LOCK_DIR/${task_id}.lock"
+
+    # Ensure directories exist
+    mkdir -p "$ACTIVE_DIR" "$LOCK_DIR"
+
+    # Check if task exists in pending
+    if [[ ! -f "$task_file" ]]; then
+        echo -e "${YELLOW}Task $task_id not found in pending queue${NC}" >&2
+        return 1
+    fi
+
+    # Atomic claim with flock
+    (
+        # Try to get exclusive lock (non-blocking)
+        if ! flock -n 200; then
+            echo -e "${YELLOW}Task $task_id is being claimed by another agent${NC}" >&2
+            exit 1
+        fi
+
+        # Double-check task still exists (another agent might have claimed it)
+        if [[ ! -f "$task_file" ]]; then
+            echo -e "${YELLOW}Task $task_id already claimed${NC}" >&2
+            exit 1
+        fi
+
+        # Move task to active (atomic on POSIX)
+        mv "$task_file" "$active_file"
+
+        # Update claim fields
+        local timestamp=$(date -Iseconds)
+
+        # Use sed to update fields in place
+        if [[ "$(uname)" == "Darwin" ]]; then
+            # macOS sed
+            sed -i '' "s/^claimed_by:.*/claimed_by: $AGENT_ID/" "$active_file"
+            sed -i '' "s/^claimed_at:.*/claimed_at: $timestamp/" "$active_file"
+        else
+            # GNU sed
+            sed -i "s/^claimed_by:.*/claimed_by: $AGENT_ID/" "$active_file"
+            sed -i "s/^claimed_at:.*/claimed_at: $timestamp/" "$active_file"
+        fi
+
+        # Log to events
+        local title=$(yaml_get "$active_file" "title")
+        echo "$timestamp | $AGENT_ID | CLAIMED | $task_id | $title" >> "$EVENTS_LOG"
+
+        echo -e "${GREEN}✓${NC} Claimed: $task_id"
+        echo -e "  Title: $title"
+
+    ) 200>"$lock_file"
+
+    return $?
+}
+
+# Show usage
+show_help() {
+    cat << EOF
+Usage: claim-task [OPTIONS] [TASK_ID]
+
+Atomically claim a task from the swarm queue.
+
+Arguments:
+    TASK_ID         Specific task to claim (without .yaml extension)
+                    If omitted, selects best task for agent's capability
+
+Options:
+    -l, --list      List pending tasks with scores
+    -n, --dry-run   Show what would be claimed without claiming
+    -h, --help      Show this help
+
+Environment:
+    AGENT_ID        Agent identifier (e.g., agent-1)
+    AGENT_MODEL     Model tier: opus, sonnet, haiku
+
+Examples:
+    claim-task                     # Claim best matching task
+    claim-task task-1737372800     # Claim specific task
+    claim-task --list              # Show pending tasks with scores
+    claim-task --dry-run           # Preview what would be claimed
+EOF
+}
+
+# List pending tasks with scores
+list_tasks() {
+    echo -e "${BLUE}Pending tasks for $AGENT_ID ($AGENT_MODEL):${NC}"
+    echo ""
+
+    local found=false
+    for task_file in "$PENDING_DIR"/*.yaml; do
+        [[ -f "$task_file" ]] || continue
+        found=true
+
+        local task_id=$(basename "$task_file" .yaml)
+        local title=$(yaml_get "$task_file" "title")
+        local priority=$(yaml_get "$task_file" "priority")
+        local complexity=$(yaml_get "$task_file" "complexity")
+        local recommended=$(yaml_get "$task_file" "recommended_model")
+        local score=$(score_task "$task_file")
+
+        local score_color="$RED"
+        if [[ $score -ge 100 ]]; then
+            score_color="$GREEN"
+        elif [[ $score -ge 50 ]]; then
+            score_color="$YELLOW"
+        fi
+
+        printf "  %s (score: ${score_color}%3d${NC}) [%s/%s] %s\n" \
+            "$task_id" "$score" "${priority:-medium}" "${complexity:-moderate}" "$title"
+    done
+
+    if [[ "$found" == false ]]; then
+        echo "  (no pending tasks)"
+    fi
+}
+
+# Parse arguments
+DRY_RUN=false
+LIST_ONLY=false
+TASK_ID=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -l|--list)
+            LIST_ONLY=true
+            shift
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -*)
+            echo -e "${RED}Unknown option: $1${NC}" >&2
+            exit 1
+            ;;
+        *)
+            TASK_ID="$1"
+            shift
+            ;;
+    esac
+done
+
+# Ensure shared context exists
+if [[ ! -d "$PENDING_DIR" ]]; then
+    echo -e "${YELLOW}No task queue found at $PENDING_DIR${NC}" >&2
+    exit 1
+fi
+
+# List mode
+if [[ "$LIST_ONLY" == true ]]; then
+    list_tasks
+    exit 0
+fi
+
+# Find task to claim
+if [[ -z "$TASK_ID" ]]; then
+    TASK_ID=$(find_best_task)
+    if [[ -z "$TASK_ID" ]]; then
+        echo -e "${YELLOW}No suitable tasks found for $AGENT_ID ($AGENT_MODEL)${NC}"
+        exit 0
+    fi
+fi
+
+# Dry run mode
+if [[ "$DRY_RUN" == true ]]; then
+    echo -e "${BLUE}Would claim:${NC} $TASK_ID"
+    task_file="$PENDING_DIR/${TASK_ID}.yaml"
+    if [[ -f "$task_file" ]]; then
+        echo -e "  Title: $(yaml_get "$task_file" "title")"
+        echo -e "  Score: $(score_task "$task_file")"
+    fi
+    exit 0
+fi
+
+# Claim the task
+claim_task "$TASK_ID"

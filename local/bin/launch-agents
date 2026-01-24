@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.5.2
+# Version: 0.6.0
 #
 # Changelog:
+# 0.6.0 Added --daemon/-d flag for task-watcher integration
 # 0.5.2 Improved resilience: smart defaults, restart command, better session handling
 # 0.5.1 Force clean now kills tmux and agent processes (claude/gemini/copilot)
 # 0.5.0 Added -w/--workspace mode for simple claude + shell layout
@@ -64,7 +65,8 @@ else
 fi
 
 # Paths derived from repo
-SESSION="claude-$REPO_NAME"
+# Sanitize session name: tmux doesn't allow dots
+SESSION="claude-${REPO_NAME//[.]/_}"
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 
 # Defaults
@@ -72,6 +74,7 @@ AGENT_COUNT=2
 FORCE=false
 VERBOSE=false
 EQUAL_DISTRIBUTION=false
+DAEMON_MODE=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
@@ -105,6 +108,7 @@ Commands:
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
+    -d, --daemon    Run task-watcher daemon (monitors queue, notifies agents)
     -r              Shortcut for 'restart'
     -a              Shortcut for 'attach'
     -w              Shortcut for 'workspace'
@@ -128,6 +132,7 @@ Clients & Models:
 Examples:
     launch-agents                   Smart default: start or attach
     launch-agents -n 4 start        Start 4 agents
+    launch-agents -d start          Start with task-watcher daemon
     launch-agents -r                Restart session
     launch-agents workspace         Simple workspace (claude + shell)
     launch-agents -w                Shortcut for workspace
@@ -398,16 +403,17 @@ Users may talk to you directly. When receiving a request:
 
 ## Task Queue
 
-Find work:
-\`\`\`bash
-ls $SHARED_CONTEXT/tasks/pending/
-\`\`\`
+Use the \`claim-task\` helper for atomic task claiming with capability matching:
 
-Claim a task:
 \`\`\`bash
-mv $SHARED_CONTEXT/tasks/pending/task-XXX.yaml \\
-   $SHARED_CONTEXT/tasks/active/
-# Edit file: set claimed_by: agent-$agent, claimed_at: <timestamp>
+# List pending tasks with scores for your capability
+claim-task --list
+
+# Claim best matching task for your model tier
+claim-task
+
+# Claim specific task
+claim-task task-XXX
 \`\`\`
 
 Complete a task:
@@ -422,6 +428,15 @@ Log completion:
 echo "\$(date -Iseconds) | agent-$agent | DONE | task-XXX | <summary>" \\
   >> $SHARED_CONTEXT/events.log
 \`\`\`
+
+## Capability Matching
+
+Your model tier: $model
+- opus (tier 3): complex tasks, architecture, debugging
+- sonnet (tier 2): moderate tasks, standard features
+- haiku (tier 1): simple tasks, docs, formatting
+
+Claim tasks at or below your tier. Higher-tier agents can help clear simpler tasks.
 
 ## Task File Format
 
@@ -588,11 +603,19 @@ create_tmux_layout() {
     for i in $(seq 1 $count); do
         tmux new-window -t "$SESSION" -n "shell-$i" -c "$WORKTREE_ROOT/agent-$i"
         sleep 0.2
-        
+
         if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
             tmux send-keys -t "$SESSION:shell-$i" "source .venv/bin/activate" C-m
         fi
     done
+
+    # Add watcher window if daemon mode enabled
+    if [[ "$DAEMON_MODE" == true ]]; then
+        tmux new-window -t "$SESSION" -n "watcher" -c "$REPO_ROOT"
+        sleep 0.2
+        tmux send-keys -t "$SESSION:watcher" "task-watcher" C-m
+        echo -e "${GREEN}✓ Task watcher started${NC}"
+    fi
 
     tmux select-window -t "$SESSION:agents"
     tmux select-pane -t "$SESSION:agents.1"
@@ -979,6 +1002,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --yolo)
             SKIP_PERMISSIONS="--dangerously-skip-permissions"
+            shift
+            ;;
+        -d|--daemon)
+            DAEMON_MODE=true
             shift
             ;;
         -w|--workspace)

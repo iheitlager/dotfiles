@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+# task-watcher - Task queue monitor daemon for agent swarm
+# Version: 1.0.0
+#
+# Monitors pending tasks and notifies capable agents.
+# Ctrl-C triggers graceful swarm shutdown.
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Poll interval in seconds
+POLL_INTERVAL="${POLL_INTERVAL:-5}"
+
+# Get project context
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo -e "${RED}Error: Not in a git repository${NC}" >&2
+    exit 1
+}
+
+# Handle worktree paths
+local_repo_name=$(basename "$REPO_ROOT")
+local_repo_parent=$(dirname "$REPO_ROOT")
+
+if [[ "$local_repo_parent" =~ ^(.+)-worktree$ ]]; then
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+elif [[ "$local_repo_name" =~ ^(.+)-worktree$ ]]; then
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+else
+    REPO_NAME="$local_repo_name"
+fi
+
+# Sanitize session name: tmux doesn't allow dots
+SESSION="claude-${REPO_NAME//[.]/_}"
+SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
+PENDING_DIR="$SHARED_CONTEXT/tasks/pending"
+ACTIVE_DIR="$SHARED_CONTEXT/tasks/active"
+EVENTS_LOG="$SHARED_CONTEXT/events.log"
+
+# Track seen tasks to avoid duplicate notifications
+declare -A SEEN_TASKS
+
+# Model capability tiers
+get_model_tier() {
+    case "$1" in
+        opus)       echo 3 ;;
+        sonnet)     echo 2 ;;
+        haiku)      echo 1 ;;
+        5.1-codex)  echo 2 ;;
+        gemini-pro) echo 2 ;;
+        *)          echo 2 ;;
+    esac
+}
+
+# Extract field from YAML
+yaml_get() {
+    local file="$1"
+    local field="$2"
+    grep "^${field}:" "$file" 2>/dev/null | sed "s/^${field}:[[:space:]]*//" | tr -d '"'
+}
+
+# Get task's required tier
+get_task_tier() {
+    local task_file="$1"
+    local recommended=$(yaml_get "$task_file" "recommended_model")
+    local complexity=$(yaml_get "$task_file" "complexity")
+
+    if [[ -n "$recommended" ]]; then
+        get_model_tier "$recommended"
+    else
+        case "$complexity" in
+            complex)  echo 3 ;;
+            moderate) echo 2 ;;
+            simple)   echo 1 ;;
+            *)        echo 2 ;;
+        esac
+    fi
+}
+
+# Get agents capable of handling a task
+get_capable_agents() {
+    local task_tier="$1"
+    local capable=""
+
+    # Check each agent pane in tmux
+    local pane_count=$(tmux list-panes -t "$SESSION:agents" 2>/dev/null | wc -l | tr -d ' ')
+
+    for i in $(seq 1 $pane_count); do
+        # Get agent's model from environment (captured during setup)
+        local agent_model=$(tmux show-environment -t "$SESSION" "AGENT_${i}_MODEL" 2>/dev/null | cut -d= -f2)
+
+        # Fallback: infer from agent count and position
+        if [[ -z "$agent_model" ]]; then
+            case $pane_count in
+                2) agent_model="opus" ;;
+                3) [[ $i -eq 1 ]] && agent_model="opus" || agent_model="sonnet" ;;
+                4)
+                    case $i in
+                        1|2) agent_model="opus" ;;
+                        3)   agent_model="sonnet" ;;
+                        4)   agent_model="haiku" ;;
+                    esac
+                    ;;
+                6)
+                    case $i in
+                        1|2) agent_model="opus" ;;
+                        3|4) agent_model="sonnet" ;;
+                        5)   agent_model="5.1-codex" ;;
+                        6)   agent_model="gemini-pro" ;;
+                    esac
+                    ;;
+            esac
+        fi
+
+        local agent_tier=$(get_model_tier "$agent_model")
+
+        # Agent can handle task if their tier >= task tier
+        if [[ $agent_tier -ge $task_tier ]]; then
+            capable="$capable $i"
+        fi
+    done
+
+    echo $capable
+}
+
+# Notify agents about a new task
+notify_agents() {
+    local task_id="$1"
+    local task_file="$2"
+    local agents="$3"
+
+    local title=$(yaml_get "$task_file" "title")
+    local priority=$(yaml_get "$task_file" "priority")
+
+    for agent in $agents; do
+        # Send notification to agent via tmux
+        # Use Escape first in case agent is idle, then message
+        tmux send-keys -t "$SESSION:agents.$agent" Escape 2>/dev/null || true
+        sleep 0.1
+        tmux send-keys -t "$SESSION:agents.$agent" \
+            "New task available: $task_id [$priority] - $title. Run: claim-task $task_id" Enter 2>/dev/null || true
+        tmux send-keys -t "$SESSION:agents.$agent" Enter 2>/dev/null || true
+    done
+}
+
+# Log message with timestamp
+log() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%H:%M:%S')
+
+    case "$level" in
+        INFO)  echo -e "${DIM}[$timestamp]${NC} ${CYAN}INFO${NC}  $message" ;;
+        TASK)  echo -e "${DIM}[$timestamp]${NC} ${GREEN}TASK${NC}  $message" ;;
+        NOTIFY) echo -e "${DIM}[$timestamp]${NC} ${BLUE}NOTIFY${NC} $message" ;;
+        WARN)  echo -e "${DIM}[$timestamp]${NC} ${YELLOW}WARN${NC}  $message" ;;
+        ERROR) echo -e "${DIM}[$timestamp]${NC} ${RED}ERROR${NC} $message" ;;
+    esac
+}
+
+# Log to events.log
+log_event() {
+    local action="$1"
+    local task_id="$2"
+    local summary="$3"
+    local timestamp=$(date -Iseconds)
+
+    echo "$timestamp | task-watcher | $action | $task_id | $summary" >> "$EVENTS_LOG"
+}
+
+# Graceful shutdown handler
+shutdown_handler() {
+    echo ""
+    log INFO "Shutdown requested - stopping swarm..."
+    log_event "SHUTDOWN" "-" "Task watcher initiated swarm shutdown"
+
+    # Give a moment for the log to be written
+    sleep 0.5
+
+    # Trigger swarm shutdown
+    exec launch-agents --force stop
+}
+
+# Set up signal handler
+trap shutdown_handler SIGINT SIGTERM
+
+# Check a single task
+check_task() {
+    local task_file="$1"
+    local task_id=$(basename "$task_file" .yaml)
+
+    # Skip if already seen
+    if [[ -n "${SEEN_TASKS[$task_id]}" ]]; then
+        return
+    fi
+
+    # Mark as seen
+    SEEN_TASKS[$task_id]=1
+
+    local title=$(yaml_get "$task_file" "title")
+    local priority=$(yaml_get "$task_file" "priority")
+    local complexity=$(yaml_get "$task_file" "complexity")
+    local task_tier=$(get_task_tier "$task_file")
+
+    log TASK "New: ${BOLD}$task_id${NC} [$priority/$complexity] $title"
+    log_event "DETECTED" "$task_id" "$title"
+
+    # Find capable agents
+    local capable=$(get_capable_agents $task_tier)
+
+    if [[ -n "$capable" ]]; then
+        local agent_list=$(echo $capable | tr ' ' ',')
+        log NOTIFY "Notifying agents:$capable (tier >= $task_tier)"
+        notify_agents "$task_id" "$task_file" "$capable"
+        log_event "NOTIFIED" "$task_id" "Agents: $agent_list"
+    else
+        log WARN "No capable agents for tier $task_tier task"
+    fi
+}
+
+# Main watch loop
+watch_loop() {
+    log INFO "Watching: $PENDING_DIR"
+    log INFO "Session: $SESSION"
+    log INFO "Poll interval: ${POLL_INTERVAL}s"
+    log INFO "Press Ctrl-C to stop swarm"
+    echo ""
+
+    # Initial scan - mark existing tasks as seen (don't notify)
+    shopt -s nullglob
+    for task_file in "$PENDING_DIR"/*.yaml; do
+        [[ -f "$task_file" ]] || continue
+        local task_id=$(basename "$task_file" .yaml)
+        SEEN_TASKS[$task_id]=1
+        log INFO "Existing task: $task_id"
+    done
+    shopt -u nullglob
+
+    local active_count=$(ls -1 "$ACTIVE_DIR"/*.yaml 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "$active_count" -gt 0 ]]; then
+        log INFO "Active tasks: $active_count"
+    fi
+
+    echo ""
+    log INFO "Monitoring for new tasks..."
+
+    while true; do
+        # Check for new pending tasks
+        shopt -s nullglob
+        for task_file in "$PENDING_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            check_task "$task_file"
+        done
+        shopt -u nullglob
+
+        # Clean up seen tasks that were claimed (no longer in pending)
+        for task_id in "${!SEEN_TASKS[@]}"; do
+            if [[ ! -f "$PENDING_DIR/${task_id}.yaml" ]]; then
+                unset "SEEN_TASKS[$task_id]"
+            fi
+        done
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+# Show help
+show_help() {
+    cat << EOF
+Usage: task-watcher [OPTIONS]
+
+Monitor the task queue and notify capable agents.
+
+Options:
+    -i, --interval SEC   Poll interval in seconds (default: 5)
+    -h, --help           Show this help
+
+Environment:
+    POLL_INTERVAL        Poll interval (default: 5)
+
+Behavior:
+    - Monitors tasks/pending/ for new task files
+    - Notifies capable agents via tmux based on task complexity
+    - Logs activity to events.log
+    - Ctrl-C triggers 'launch-agents --force stop' (swarm shutdown)
+
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -i|--interval)
+            POLL_INTERVAL="$2"
+            shift 2
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Verify environment
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    echo -e "${RED}Error: No tmux session '$SESSION' found${NC}" >&2
+    echo "Run 'launch-agents start' first" >&2
+    exit 1
+fi
+
+if [[ ! -d "$PENDING_DIR" ]]; then
+    mkdir -p "$PENDING_DIR"
+fi
+
+# Banner
+echo -e "${BOLD}${CYAN}"
+echo "  ╔═══════════════════════════════════════╗"
+echo "  ║         TASK WATCHER DAEMON           ║"
+echo "  ║     Ctrl-C = Graceful Shutdown        ║"
+echo "  ╚═══════════════════════════════════════╝"
+echo -e "${NC}"
+
+# Start watching
+watch_loop
