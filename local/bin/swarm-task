@@ -1,0 +1,592 @@
+#!/usr/bin/env bash
+# swarm-task - Unified task management for agent swarm
+# Version: 1.0.0
+#
+# Usage: swarm-task <command> [options]
+#
+# Commands:
+#   new      Create a new task
+#   claim    Claim a task from the queue
+#   complete Mark a task as done
+#   list     List tasks by status
+
+set -e
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Get project context
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo -e "${RED}Error: Not in a git repository${NC}" >&2
+    exit 1
+}
+
+# Handle worktree paths
+local_repo_name=$(basename "$REPO_ROOT")
+local_repo_parent=$(dirname "$REPO_ROOT")
+
+if [[ "$local_repo_parent" =~ ^(.+)-worktree$ ]]; then
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+elif [[ "$local_repo_name" =~ ^(.+)-worktree$ ]]; then
+    REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+else
+    REPO_NAME="$local_repo_name"
+fi
+
+SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
+PENDING_DIR="$SHARED_CONTEXT/tasks/pending"
+ACTIVE_DIR="$SHARED_CONTEXT/tasks/active"
+DONE_DIR="$SHARED_CONTEXT/tasks/done"
+LOCK_DIR="$SHARED_CONTEXT/tasks/.locks"
+EVENTS_LOG="$SHARED_CONTEXT/events.log"
+
+# Agent identity from environment
+AGENT_ID="${AGENT_ID:-unknown}"
+AGENT_MODEL="${AGENT_MODEL:-sonnet}"
+
+# Ensure directories exist
+ensure_dirs() {
+    mkdir -p "$PENDING_DIR" "$ACTIVE_DIR" "$DONE_DIR" "$LOCK_DIR"
+}
+
+# Extract field from YAML
+yaml_get() {
+    local file="$1"
+    local field="$2"
+    grep "^${field}:" "$file" 2>/dev/null | sed "s/^${field}:[[:space:]]*//" | tr -d '"'
+}
+
+# Model capability tiers
+get_model_tier() {
+    case "$1" in
+        opus)       echo 3 ;;
+        sonnet)     echo 2 ;;
+        haiku)      echo 1 ;;
+        *)          echo 2 ;;
+    esac
+}
+
+# Complexity to tier
+get_complexity_tier() {
+    case "$1" in
+        complex)    echo 3 ;;
+        moderate)   echo 2 ;;
+        simple)     echo 1 ;;
+        *)          echo 2 ;;
+    esac
+}
+
+# Score a task for this agent
+score_task() {
+    local task_file="$1"
+    local agent_tier=$(get_model_tier "$AGENT_MODEL")
+
+    local recommended=$(yaml_get "$task_file" "recommended_model")
+    local complexity=$(yaml_get "$task_file" "complexity")
+    local priority=$(yaml_get "$task_file" "priority")
+
+    local task_tier
+    if [[ -n "$recommended" ]]; then
+        task_tier=$(get_model_tier "$recommended")
+    elif [[ -n "$complexity" ]]; then
+        task_tier=$(get_complexity_tier "$complexity")
+    else
+        task_tier=2
+    fi
+
+    local score=0
+    if [[ $task_tier -eq $agent_tier ]]; then
+        score=100
+    elif [[ $task_tier -lt $agent_tier ]]; then
+        score=50
+    else
+        score=0
+    fi
+
+    case "$priority" in
+        urgent) score=$((score + 40)) ;;
+        high)   score=$((score + 30)) ;;
+        medium) score=$((score + 20)) ;;
+        low)    score=$((score + 10)) ;;
+    esac
+
+    echo $score
+}
+
+# ============================================================================
+# NEW command
+# ============================================================================
+cmd_new() {
+    local title=""
+    local priority="medium"
+    local complexity="moderate"
+    local description=""
+    local depends_on=""
+    local edit_after=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -p|--priority)    priority="$2"; shift 2 ;;
+            -c|--complexity)  complexity="$2"; shift 2 ;;
+            -d|--description) description="$2"; shift 2 ;;
+            -D|--depends)     depends_on="$2"; shift 2 ;;
+            -e|--edit)        edit_after=true; shift ;;
+            -h|--help)        help_new; exit 0 ;;
+            -*)               echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
+            *)
+                if [[ -z "$title" ]]; then
+                    title="$1"
+                else
+                    echo -e "${RED}Unexpected argument: $1${NC}" >&2; exit 1
+                fi
+                shift ;;
+        esac
+    done
+
+    if [[ -z "$title" ]]; then
+        echo -e "${RED}Error: Title is required${NC}" >&2
+        help_new
+        exit 1
+    fi
+
+    # Validate priority
+    case $priority in
+        low|medium|high|urgent) ;;
+        *) echo -e "${RED}Invalid priority: $priority${NC}" >&2; exit 1 ;;
+    esac
+
+    # Validate complexity
+    case $complexity in
+        simple|moderate|complex) ;;
+        *) echo -e "${RED}Invalid complexity: $complexity${NC}" >&2; exit 1 ;;
+    esac
+
+    # Map complexity to model
+    local recommended_model
+    case $complexity in
+        simple)   recommended_model="haiku" ;;
+        moderate) recommended_model="sonnet" ;;
+        complex)  recommended_model="opus" ;;
+    esac
+
+    ensure_dirs
+
+    local task_id="task-$(date +%s)-$$"
+    local task_file="$PENDING_DIR/$task_id.yaml"
+
+    # Format depends_on
+    local depends_block
+    if [[ -n "$depends_on" ]]; then
+        local depends_yaml=$(echo "$depends_on" | tr ',' '\n' | sed 's/^/  - /')
+        depends_block="depends_on:
+$depends_yaml"
+    else
+        depends_block="depends_on: []"
+    fi
+
+    [[ -z "$description" ]] && description="TODO: Add detailed description"
+
+    cat > "$task_file" << EOF
+id: $task_id
+created: $(date -Iseconds)
+created_by: ${AGENT_ID:-user}
+priority: $priority
+complexity: $complexity
+recommended_model: $recommended_model
+title: $title
+description: |
+  $description
+$depends_block
+claimed_by: null
+claimed_at: null
+completed_at: null
+result: null
+EOF
+
+    echo -e "${GREEN}✓ Task created${NC}"
+    echo ""
+    echo "  ID:         $task_id"
+    echo "  Priority:   $priority"
+    echo "  Complexity: $complexity → $recommended_model"
+    echo ""
+
+    # Log creation
+    echo "$(date -Iseconds) | ${AGENT_ID:-user} | CREATED | $task_id | $title" >> "$EVENTS_LOG"
+
+    if [[ "$edit_after" == true ]]; then
+        ${EDITOR:-vim} "$task_file"
+    fi
+}
+
+help_new() {
+    cat << EOF
+Usage: swarm-task new "title" [OPTIONS]
+
+Create a new task for the agent swarm.
+
+Options:
+    -p, --priority      low, medium, high, urgent (default: medium)
+    -c, --complexity    simple, moderate, complex (default: moderate)
+    -d, --description   Task description
+    -D, --depends       Comma-separated task IDs this depends on
+    -e, --edit          Open in \$EDITOR after creation
+    -h, --help          Show this help
+
+Complexity → Model:
+    simple    → haiku   (docs, formatting, simple tests)
+    moderate  → sonnet  (standard features, refactors)
+    complex   → opus    (architecture, design, tricky bugs)
+
+Examples:
+    swarm-task new "Add --verbose flag to CLI"
+    swarm-task new "Refactor data layer" -c complex -p high
+    swarm-task new "Update tests" -D task-123,task-124
+EOF
+}
+
+# ============================================================================
+# CLAIM command
+# ============================================================================
+cmd_claim() {
+    local task_id=""
+    local dry_run=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -n|--dry-run) dry_run=true; shift ;;
+            -h|--help)    help_claim; exit 0 ;;
+            -*)           echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
+            *)            task_id="$1"; shift ;;
+        esac
+    done
+
+    ensure_dirs
+
+    # Find best task if none specified
+    if [[ -z "$task_id" ]]; then
+        local best_task=""
+        local best_score=0
+
+        for task_file in "$PENDING_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            local score=$(score_task "$task_file")
+            if [[ $score -gt $best_score ]]; then
+                best_score=$score
+                best_task=$(basename "$task_file" .yaml)
+            fi
+        done
+
+        if [[ $best_score -gt 0 ]]; then
+            task_id="$best_task"
+        else
+            echo -e "${YELLOW}No suitable tasks for $AGENT_ID ($AGENT_MODEL)${NC}"
+            exit 0
+        fi
+    fi
+
+    local task_file="$PENDING_DIR/${task_id}.yaml"
+    local active_file="$ACTIVE_DIR/${task_id}.yaml"
+    local lock_file="$LOCK_DIR/${task_id}.lock"
+
+    if [[ ! -f "$task_file" ]]; then
+        echo -e "${YELLOW}Task $task_id not found in pending queue${NC}" >&2
+        return 1
+    fi
+
+    if [[ "$dry_run" == true ]]; then
+        echo -e "${BLUE}Would claim:${NC} $task_id"
+        echo -e "  Title: $(yaml_get "$task_file" "title")"
+        echo -e "  Score: $(score_task "$task_file")"
+        exit 0
+    fi
+
+    # Atomic claim with flock
+    (
+        if ! flock -n 200; then
+            echo -e "${YELLOW}Task $task_id is being claimed by another agent${NC}" >&2
+            exit 1
+        fi
+
+        if [[ ! -f "$task_file" ]]; then
+            echo -e "${YELLOW}Task $task_id already claimed${NC}" >&2
+            exit 1
+        fi
+
+        mv "$task_file" "$active_file"
+
+        local timestamp=$(date -Iseconds)
+        if [[ "$(uname)" == "Darwin" ]]; then
+            sed -i '' "s/^claimed_by:.*/claimed_by: $AGENT_ID/" "$active_file"
+            sed -i '' "s/^claimed_at:.*/claimed_at: $timestamp/" "$active_file"
+        else
+            sed -i "s/^claimed_by:.*/claimed_by: $AGENT_ID/" "$active_file"
+            sed -i "s/^claimed_at:.*/claimed_at: $timestamp/" "$active_file"
+        fi
+
+        local title=$(yaml_get "$active_file" "title")
+        echo "$timestamp | $AGENT_ID | CLAIMED | $task_id | $title" >> "$EVENTS_LOG"
+
+        echo -e "${GREEN}✓${NC} Claimed: $task_id"
+        echo -e "  Title: $title"
+
+    ) 200>"$lock_file"
+}
+
+help_claim() {
+    cat << EOF
+Usage: swarm-task claim [TASK_ID] [OPTIONS]
+
+Atomically claim a task from the pending queue.
+
+Arguments:
+    TASK_ID         Task to claim (auto-selects best match if omitted)
+
+Options:
+    -n, --dry-run   Show what would be claimed
+    -h, --help      Show this help
+
+Environment:
+    AGENT_ID        Agent identifier (e.g., agent-1)
+    AGENT_MODEL     Model tier: opus, sonnet, haiku
+
+Examples:
+    swarm-task claim                   # Claim best matching task
+    swarm-task claim task-1737372800   # Claim specific task
+    swarm-task claim --dry-run         # Preview selection
+EOF
+}
+
+# ============================================================================
+# COMPLETE command
+# ============================================================================
+cmd_complete() {
+    local task_id=""
+    local result=""
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -r|--result) result="$2"; shift 2 ;;
+            -h|--help)   help_complete; exit 0 ;;
+            -*)          echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
+            *)           task_id="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$task_id" ]]; then
+        echo -e "${RED}Error: TASK_ID required${NC}" >&2
+        help_complete
+        exit 1
+    fi
+
+    ensure_dirs
+
+    local active_file="$ACTIVE_DIR/${task_id}.yaml"
+    local done_file="$DONE_DIR/${task_id}.yaml"
+
+    if [[ ! -f "$active_file" ]]; then
+        if [[ -f "$PENDING_DIR/${task_id}.yaml" ]]; then
+            echo -e "${YELLOW}Task $task_id is still pending (not claimed)${NC}" >&2
+            return 1
+        fi
+        echo -e "${YELLOW}Task $task_id not found in active queue${NC}" >&2
+        return 1
+    fi
+
+    local title=$(yaml_get "$active_file" "title")
+    local claimed_by=$(yaml_get "$active_file" "claimed_by")
+
+    mv "$active_file" "$done_file"
+
+    local timestamp=$(date -Iseconds)
+    [[ -z "$result" ]] && result="success"
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        sed -i '' "s/^completed_at:.*/completed_at: $timestamp/" "$done_file"
+        sed -i '' "s/^result:.*/result: $result/" "$done_file"
+    else
+        sed -i "s/^completed_at:.*/completed_at: $timestamp/" "$done_file"
+        sed -i "s/^result:.*/result: $result/" "$done_file"
+    fi
+
+    echo "$timestamp | ${claimed_by:-$AGENT_ID} | COMPLETED | $task_id | $title" >> "$EVENTS_LOG"
+
+    echo -e "${GREEN}✓${NC} Completed: $task_id"
+    echo -e "  Title: $title"
+    echo -e "  By: ${claimed_by:-$AGENT_ID}"
+}
+
+help_complete() {
+    cat << EOF
+Usage: swarm-task complete <TASK_ID> [OPTIONS]
+
+Mark a task as completed.
+
+Arguments:
+    TASK_ID         Task to complete (required)
+
+Options:
+    -r, --result    Result status (default: success)
+    -h, --help      Show this help
+
+Examples:
+    swarm-task complete task-1737372800
+    swarm-task complete task-1737372800 -r "merged"
+EOF
+}
+
+# ============================================================================
+# LIST command
+# ============================================================================
+cmd_list() {
+    local filter="all"
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help) help_list; exit 0 ;;
+            pending|active|done|all) filter="$1"; shift ;;
+            -*)        echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
+            *)         echo -e "${RED}Unknown filter: $1${NC}" >&2; exit 1 ;;
+        esac
+    done
+
+    ensure_dirs
+
+    if [[ "$filter" == "all" || "$filter" == "pending" ]]; then
+        echo -e "${BOLD}${CYAN}Pending:${NC}"
+        local found=false
+        for task_file in "$PENDING_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            found=true
+            local task_id=$(basename "$task_file" .yaml)
+            local title=$(yaml_get "$task_file" "title")
+            local priority=$(yaml_get "$task_file" "priority")
+            local complexity=$(yaml_get "$task_file" "complexity")
+            local score=$(score_task "$task_file")
+
+            local score_color="$RED"
+            [[ $score -ge 100 ]] && score_color="$GREEN"
+            [[ $score -ge 50 && $score -lt 100 ]] && score_color="$YELLOW"
+
+            printf "  %s ${score_color}[%3d]${NC} [%s/%s] %s\n" \
+                "$task_id" "$score" "${priority:-med}" "${complexity:-mod}" "$title"
+        done
+        [[ "$found" == false ]] && echo "  (none)"
+        echo ""
+    fi
+
+    if [[ "$filter" == "all" || "$filter" == "active" ]]; then
+        echo -e "${BOLD}${YELLOW}Active:${NC}"
+        local found=false
+        for task_file in "$ACTIVE_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            found=true
+            local task_id=$(basename "$task_file" .yaml)
+            local title=$(yaml_get "$task_file" "title")
+            local claimed_by=$(yaml_get "$task_file" "claimed_by")
+
+            printf "  %s [%s] %s\n" "$task_id" "${claimed_by:-?}" "$title"
+        done
+        [[ "$found" == false ]] && echo "  (none)"
+        echo ""
+    fi
+
+    if [[ "$filter" == "all" || "$filter" == "done" ]]; then
+        echo -e "${BOLD}${GREEN}Done:${NC}"
+        local found=false
+        local count=0
+        for task_file in "$DONE_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            found=true
+            ((count++))
+            [[ $count -gt 5 ]] && continue  # Only show last 5
+
+            local task_id=$(basename "$task_file" .yaml)
+            local title=$(yaml_get "$task_file" "title")
+            local result=$(yaml_get "$task_file" "result")
+
+            printf "  %s [%s] %s\n" "$task_id" "${result:-done}" "$title"
+        done
+        [[ "$found" == false ]] && echo "  (none)"
+        [[ $count -gt 5 ]] && echo "  ... and $((count - 5)) more"
+    fi
+}
+
+help_list() {
+    cat << EOF
+Usage: swarm-task list [FILTER]
+
+List tasks by status.
+
+Filters:
+    pending     Show pending tasks only
+    active      Show active (claimed) tasks only
+    done        Show completed tasks only
+    all         Show all tasks (default)
+
+The score shown for pending tasks indicates match quality for current agent:
+    ${GREEN}[100+]${NC}  Perfect match for agent tier
+    ${YELLOW}[ 50+]${NC}  Agent can handle (simpler task)
+    ${RED}[  0 ]${NC}  Too complex for agent
+
+Environment:
+    AGENT_ID        Agent identifier
+    AGENT_MODEL     Model tier (affects scoring)
+EOF
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+show_help() {
+    cat << EOF
+Usage: swarm-task <command> [options]
+
+Task management for the Claude agent swarm.
+
+Commands:
+    new         Create a new task
+    claim       Claim a task from the queue
+    complete    Mark a task as done
+    list        List tasks by status
+
+Run 'swarm-task <command> --help' for command-specific options.
+
+Environment:
+    AGENT_ID        Agent identifier (e.g., agent-1)
+    AGENT_MODEL     Model tier: opus, sonnet, haiku
+
+Examples:
+    swarm-task new "Add feature X" -p high
+    swarm-task claim
+    swarm-task complete task-1737372800
+    swarm-task list pending
+EOF
+}
+
+# Parse command
+if [[ $# -eq 0 ]]; then
+    show_help
+    exit 0
+fi
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+    new)      cmd_new "$@" ;;
+    claim)    cmd_claim "$@" ;;
+    complete) cmd_complete "$@" ;;
+    list)     cmd_list "$@" ;;
+    -h|--help|help) show_help ;;
+    *)
+        echo -e "${RED}Unknown command: $COMMAND${NC}" >&2
+        show_help
+        exit 1
+        ;;
+esac

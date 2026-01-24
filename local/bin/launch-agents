@@ -401,31 +401,40 @@ Users may talk to you directly. When receiving a request:
 
 ## Task Queue
 
-Use the \`claim-task\` helper for atomic task claiming with capability matching:
+Use \`swarm-task\` for all task operations:
 
 \`\`\`bash
-# List pending tasks with scores for your capability
-claim-task --list
+# List all tasks (pending/active/done)
+swarm-task list
+
+# List only pending tasks with scores
+swarm-task list pending
 
 # Claim best matching task for your model tier
-claim-task
+swarm-task claim
 
 # Claim specific task
-claim-task task-XXX
+swarm-task claim task-XXX
+
+# Complete a task
+swarm-task complete task-XXX
+swarm-task complete task-XXX -r "merged to main"
+
+# Create a new task for others
+swarm-task new "Task title" -p high -c complex
 \`\`\`
 
-Complete a task:
+## Polling
+
+Check for new tasks periodically. When idle:
 \`\`\`bash
-mv $SHARED_CONTEXT/tasks/active/task-XXX.yaml \\
-   $SHARED_CONTEXT/tasks/done/
-# Edit file: set completed_at, result summary
+# Check every 30-60 seconds when not busy
+swarm-task list pending
 \`\`\`
 
-Log completion:
-\`\`\`bash
-echo "\$(date -Iseconds) | agent-$agent | DONE | task-XXX | <summary>" \\
-  >> $SHARED_CONTEXT/events.log
-\`\`\`
+The swarm-watcher daemon will also send notifications via tmux when:
+- New tasks are available for your tier
+- Tasks you depend on are completed (unblocked)
 
 ## Capability Matching
 
@@ -611,8 +620,8 @@ create_tmux_layout() {
     if [[ "$DAEMON_MODE" == true ]]; then
         tmux new-window -t "$SESSION" -n "watcher" -c "$REPO_ROOT"
         sleep 0.2
-        tmux send-keys -t "$SESSION:watcher" "task-watcher" C-m
-        echo -e "${GREEN}✓ Task watcher started${NC}"
+        tmux send-keys -t "$SESSION:watcher" "swarm-watcher" C-m
+        echo -e "${GREEN}✓ Swarm watcher started${NC}"
     fi
 
     tmux select-window -t "$SESSION:agents"

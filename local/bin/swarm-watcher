@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# task-watcher - Task queue monitor daemon for agent swarm
-# Version: 1.0.0
+# swarm-watcher - Task queue monitor daemon for agent swarm
+# Version: 1.1.0
 #
-# Monitors pending tasks and notifies capable agents.
+# Monitors task queue and broadcasts notifications to agents:
+# - New tasks: notifies capable agents
+# - Claimed tasks: logs pickup
+# - Completed tasks: broadcasts to all, checks unblocked
 # Ctrl-C triggers graceful swarm shutdown.
 
 set -e
@@ -43,10 +46,13 @@ SESSION="claude-${REPO_NAME//[.]/_}"
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 PENDING_DIR="$SHARED_CONTEXT/tasks/pending"
 ACTIVE_DIR="$SHARED_CONTEXT/tasks/active"
+DONE_DIR="$SHARED_CONTEXT/tasks/done"
 EVENTS_LOG="$SHARED_CONTEXT/events.log"
 
 # Track seen tasks to avoid duplicate notifications
 declare -A SEEN_TASKS
+declare -A ACTIVE_TASKS
+declare -A DONE_TASKS
 
 # Model capability tiers
 get_model_tier() {
@@ -131,7 +137,7 @@ get_capable_agents() {
     echo $capable
 }
 
-# Notify agents about a new task
+# Notify specific agents about a new task
 notify_agents() {
     local task_id="$1"
     local task_file="$2"
@@ -146,8 +152,22 @@ notify_agents() {
         tmux send-keys -t "$SESSION:agents.$agent" Escape 2>/dev/null || true
         sleep 0.1
         tmux send-keys -t "$SESSION:agents.$agent" \
-            "New task available: $task_id [$priority] - $title. Run: claim-task $task_id" Enter 2>/dev/null || true
+            "New task available: $task_id [$priority] - $title. Run: swarm-task claim $task_id" Enter 2>/dev/null || true
         tmux send-keys -t "$SESSION:agents.$agent" Enter 2>/dev/null || true
+    done
+}
+
+# Broadcast message to ALL agents (pub/sub style)
+broadcast_all() {
+    local message="$1"
+
+    local pane_count=$(tmux list-panes -t "$SESSION:agents" 2>/dev/null | wc -l | tr -d ' ')
+
+    for i in $(seq 1 $pane_count); do
+        tmux send-keys -t "$SESSION:agents.$i" Escape 2>/dev/null || true
+        sleep 0.05
+        tmux send-keys -t "$SESSION:agents.$i" "$message" Enter 2>/dev/null || true
+        tmux send-keys -t "$SESSION:agents.$i" Enter 2>/dev/null || true
     done
 }
 
@@ -158,11 +178,14 @@ log() {
     local timestamp=$(date '+%H:%M:%S')
 
     case "$level" in
-        INFO)  echo -e "${DIM}[$timestamp]${NC} ${CYAN}INFO${NC}  $message" ;;
-        TASK)  echo -e "${DIM}[$timestamp]${NC} ${GREEN}TASK${NC}  $message" ;;
-        NOTIFY) echo -e "${DIM}[$timestamp]${NC} ${BLUE}NOTIFY${NC} $message" ;;
-        WARN)  echo -e "${DIM}[$timestamp]${NC} ${YELLOW}WARN${NC}  $message" ;;
-        ERROR) echo -e "${DIM}[$timestamp]${NC} ${RED}ERROR${NC} $message" ;;
+        INFO)    echo -e "${DIM}[$timestamp]${NC} ${CYAN}INFO${NC}    $message" ;;
+        TASK)    echo -e "${DIM}[$timestamp]${NC} ${GREEN}TASK${NC}    $message" ;;
+        CLAIMED) echo -e "${DIM}[$timestamp]${NC} ${YELLOW}CLAIMED${NC} $message" ;;
+        DONE)    echo -e "${DIM}[$timestamp]${NC} ${GREEN}DONE${NC}    $message" ;;
+        UNBLOCK) echo -e "${DIM}[$timestamp]${NC} ${CYAN}UNBLOCK${NC} $message" ;;
+        NOTIFY)  echo -e "${DIM}[$timestamp]${NC} ${BLUE}NOTIFY${NC}  $message" ;;
+        WARN)    echo -e "${DIM}[$timestamp]${NC} ${YELLOW}WARN${NC}    $message" ;;
+        ERROR)   echo -e "${DIM}[$timestamp]${NC} ${RED}ERROR${NC}   $message" ;;
     esac
 }
 
@@ -226,6 +249,107 @@ check_task() {
     fi
 }
 
+# Check for newly claimed (active) tasks
+check_claimed_task() {
+    local task_file="$1"
+    local task_id=$(basename "$task_file" .yaml)
+
+    # Skip if already seen as active
+    if [[ -n "${ACTIVE_TASKS[$task_id]}" ]]; then
+        return
+    fi
+
+    # Mark as seen
+    ACTIVE_TASKS[$task_id]=1
+
+    local title=$(yaml_get "$task_file" "title")
+    local claimed_by=$(yaml_get "$task_file" "claimed_by")
+
+    log CLAIMED "${BOLD}$task_id${NC} picked up by ${BOLD}$claimed_by${NC}"
+    log_event "PICKED_UP" "$task_id" "Agent: $claimed_by - $title"
+}
+
+# Check for newly completed tasks
+check_completed_task() {
+    local task_file="$1"
+    local task_id=$(basename "$task_file" .yaml)
+
+    # Skip if already seen as done
+    if [[ -n "${DONE_TASKS[$task_id]}" ]]; then
+        return
+    fi
+
+    # Mark as seen
+    DONE_TASKS[$task_id]=1
+
+    local title=$(yaml_get "$task_file" "title")
+    local claimed_by=$(yaml_get "$task_file" "claimed_by")
+    local result=$(yaml_get "$task_file" "result")
+
+    log DONE "${BOLD}$task_id${NC} completed by ${BOLD}${claimed_by:-unknown}${NC} [${result:-success}]"
+    log_event "COMPLETED_SEEN" "$task_id" "By: $claimed_by - $title"
+
+    # Broadcast completion to all agents
+    broadcast_all "[swarm] Task completed: $task_id by ${claimed_by:-unknown}. Check queue: swarm-task list pending"
+
+    # Check for tasks that might be unblocked
+    check_unblocked_tasks "$task_id"
+}
+
+# Check if a task's dependencies are all resolved
+task_is_unblocked() {
+    local task_file="$1"
+
+    # Get depends_on list (simple parsing)
+    local depends=$(grep -A 100 "^depends_on:" "$task_file" 2>/dev/null | grep "^  - " | sed 's/^  - //')
+
+    if [[ -z "$depends" ]]; then
+        return 0  # No dependencies = unblocked
+    fi
+
+    # Check each dependency
+    for dep_id in $depends; do
+        # Dependency resolved if it's in done
+        if [[ ! -f "$DONE_DIR/${dep_id}.yaml" ]]; then
+            return 1  # Still blocked
+        fi
+    done
+
+    return 0  # All dependencies resolved
+}
+
+# Check for tasks unblocked by a completion
+check_unblocked_tasks() {
+    local completed_id="$1"
+
+    # Scan pending tasks for ones that depend on the completed task
+    for task_file in "$PENDING_DIR"/*.yaml; do
+        [[ -f "$task_file" ]] || continue
+
+        local task_id=$(basename "$task_file" .yaml)
+
+        # Check if this task depends on the completed one
+        if grep -q "  - $completed_id" "$task_file" 2>/dev/null; then
+            # Check if ALL dependencies are now resolved
+            if task_is_unblocked "$task_file"; then
+                local title=$(yaml_get "$task_file" "title")
+                local task_tier=$(get_task_tier "$task_file")
+
+                log UNBLOCK "${BOLD}$task_id${NC} is now unblocked: $title"
+                log_event "UNBLOCKED" "$task_id" "Unblocked by $completed_id - $title"
+
+                # Notify capable agents
+                local capable=$(get_capable_agents $task_tier)
+                if [[ -n "$capable" ]]; then
+                    local agent_list=$(echo $capable | tr ' ' ',')
+                    log NOTIFY "Notifying agents:$capable about unblocked task"
+                    notify_agents "$task_id" "$task_file" "$capable"
+                fi
+            fi
+        fi
+    done
+}
+
 # Main watch loop
 watch_loop() {
     log INFO "Watching: $PENDING_DIR"
@@ -244,9 +368,29 @@ watch_loop() {
     done
     shopt -u nullglob
 
-    local active_count=$(ls -1 "$ACTIVE_DIR"/*.yaml 2>/dev/null | wc -l | tr -d ' ')
-    if [[ "$active_count" -gt 0 ]]; then
-        log INFO "Active tasks: $active_count"
+    # Initial scan of active tasks - mark as seen (don't notify)
+    if [[ -d "$ACTIVE_DIR" ]]; then
+        for task_file in "$ACTIVE_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            local task_id=$(basename "$task_file" .yaml)
+            ACTIVE_TASKS[$task_id]=1
+            local claimed_by=$(yaml_get "$task_file" "claimed_by")
+            log INFO "Active task: $task_id (${claimed_by:-unknown})"
+        done
+    fi
+
+    # Initial scan of done tasks - mark as seen (don't notify)
+    if [[ -d "$DONE_DIR" ]]; then
+        local done_count=0
+        for task_file in "$DONE_DIR"/*.yaml; do
+            [[ -f "$task_file" ]] || continue
+            local task_id=$(basename "$task_file" .yaml)
+            DONE_TASKS[$task_id]=1
+            ((done_count++)) || true
+        done
+        if [[ $done_count -gt 0 ]]; then
+            log INFO "Completed tasks: $done_count"
+        fi
     fi
 
     echo ""
@@ -259,12 +403,35 @@ watch_loop() {
             [[ -f "$task_file" ]] || continue
             check_task "$task_file"
         done
+
+        # Check for newly claimed (active) tasks
+        if [[ -d "$ACTIVE_DIR" ]]; then
+            for task_file in "$ACTIVE_DIR"/*.yaml; do
+                [[ -f "$task_file" ]] || continue
+                check_claimed_task "$task_file"
+            done
+        fi
+
+        # Check for newly completed tasks
+        if [[ -d "$DONE_DIR" ]]; then
+            for task_file in "$DONE_DIR"/*.yaml; do
+                [[ -f "$task_file" ]] || continue
+                check_completed_task "$task_file"
+            done
+        fi
         shopt -u nullglob
 
         # Clean up seen tasks that were claimed (no longer in pending)
         for task_id in "${!SEEN_TASKS[@]}"; do
             if [[ ! -f "$PENDING_DIR/${task_id}.yaml" ]]; then
                 unset "SEEN_TASKS[$task_id]"
+            fi
+        done
+
+        # Clean up active tasks that were completed (no longer in active)
+        for task_id in "${!ACTIVE_TASKS[@]}"; do
+            if [[ ! -f "$ACTIVE_DIR/${task_id}.yaml" ]]; then
+                unset "ACTIVE_TASKS[$task_id]"
             fi
         done
 
@@ -322,6 +489,14 @@ fi
 
 if [[ ! -d "$PENDING_DIR" ]]; then
     mkdir -p "$PENDING_DIR"
+fi
+
+if [[ ! -d "$ACTIVE_DIR" ]]; then
+    mkdir -p "$ACTIVE_DIR"
+fi
+
+if [[ ! -d "$DONE_DIR" ]]; then
+    mkdir -p "$DONE_DIR"
 fi
 
 # Banner

@@ -4,7 +4,7 @@
 
 Claude Swarm is a coordination system for running multiple AI coding agents as equal peers working on a shared codebase. Agents collaborate through a shared task queue and state directory, with no fixed hierarchy. Any agent can receive user requests, create tasks, or execute work.
 
-**Version 0.5.2** introduces improved resilience with smart defaults, restart command, workspace mode, and better session handling. Multi-client support allows Claude, GitHub Copilot, and Gemini agents to work together in the same swarm.
+**Version 0.6.0** introduces the `swarm-task` CLI for unified task management and `swarm-watcher` daemon for queue monitoring with broadcast notifications. Previous versions added smart defaults, workspace mode, and multi-client support (Claude, GitHub Copilot, Gemini).
 
 ## Design Principles
 
@@ -154,6 +154,7 @@ Commands:
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
+    -d, --daemon    Start swarm-watcher daemon (monitors queue, broadcasts notifications)
     -r              Shortcut for 'restart'
     -a              Shortcut for 'attach'
     -w              Shortcut for 'workspace'
@@ -170,6 +171,7 @@ Options:
 ```bash
 launch-agents                   # Smart default: start or attach
 launch-agents -n 4 start        # Start 4 agents
+launch-agents -d start          # Start with swarm-watcher daemon
 launch-agents -r                # Restart session
 launch-agents workspace         # Simple workspace (claude + shell)
 launch-agents -w                # Shortcut for workspace
@@ -348,15 +350,44 @@ CLAUDE_AUTO_APPROVE_FOLDERS=true
 
 ## Coordination Mechanisms
 
-### Task Claiming
+### Task Management with swarm-task
 
-Agents claim tasks by moving files from `pending/` to `active/` and writing their ID into the file. Filesystem move is atomic on POSIX systems, preventing double-claims.
+The `swarm-task` CLI provides unified task management:
+
+```bash
+# List all tasks
+swarm-task list                    # Shows pending, active, done
+swarm-task list pending            # Only pending tasks with scores
+
+# Create a new task
+swarm-task new "Add feature X" -p high -c complex
+swarm-task new "Fix bug" -c simple
+swarm-task new "Blocked task" -D task-123,task-456  # Dependencies
+
+# Claim a task (atomic with flock)
+swarm-task claim                   # Auto-select best match for your tier
+swarm-task claim task-XXX          # Claim specific task
+swarm-task claim --dry-run         # Preview what would be claimed
+
+# Complete a task
+swarm-task complete task-XXX
+swarm-task complete task-XXX -r "merged to main"
+```
+
+**Task scoring:** When listing or claiming, tasks are scored based on capability match:
+- **100+** (green): Perfect match for agent tier
+- **50+** (yellow): Agent can handle (simpler task)
+- **0** (red): Too complex for agent
+
+### Legacy: Manual Task Claiming
+
+For debugging or manual intervention, tasks can still be managed directly:
 
 ```bash
 # Find work
 ls ~/.local/state/agent-context/<project>/tasks/pending/
 
-# Claim a task
+# Claim a task manually
 mv ~/.local/state/agent-context/<project>/tasks/pending/task-XXX.yaml \
    ~/.local/state/agent-context/<project>/tasks/active/
 # Edit file: set claimed_by: agent-N, claimed_at: <timestamp>
@@ -389,6 +420,51 @@ tmux send-keys -t claude-<project>:agents.N Enter  # Extra enter for visibility
 
 Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (1-based)
 
+### Swarm Watcher Daemon
+
+The `swarm-watcher` daemon monitors the task queue and broadcasts notifications:
+
+```bash
+swarm-watcher                      # Start daemon (usually via launch-agents -d)
+swarm-watcher -i 10                # Custom poll interval (10 seconds)
+```
+
+**What it monitors:**
+
+| Event | Action |
+|-------|--------|
+| New pending task | Notifies capable agents (by tier) |
+| Task claimed | Logs pickup with agent ID |
+| Task completed | Broadcasts to ALL agents |
+| Task unblocked | Notifies capable agents |
+
+**Output example:**
+```
+[14:32:10] INFO    Watching: ~/.local/state/agent-context/project/tasks/pending
+[14:32:15] TASK    New: task-123 [high/complex] Add authentication
+[14:32:15] NOTIFY  Notifying agents: 1,2 (tier >= 3)
+[14:33:20] CLAIMED task-123 picked up by agent-1
+[14:45:30] DONE    task-123 completed by agent-1 [success]
+[14:45:30] UNBLOCK task-456 is now unblocked: Add tests
+```
+
+**Graceful shutdown:** Press `Ctrl-C` to trigger swarm shutdown via `launch-agents stop`.
+
+### Communication Summary
+
+| Method | Type | Direction | Use Case |
+|--------|------|-----------|----------|
+| `swarm-task list` | Polling | Agent → Queue | Check for available work |
+| `tmux send-keys` | Direct | Agent → Agent | Peer-to-peer messaging |
+| Watcher notify | Async | Daemon → Capable | New/unblocked task alerts |
+| Watcher broadcast | Pub/sub | Daemon → All | Completion announcements |
+| `events.log` | Append-only | All → File | Audit trail, swarm awareness |
+
+**Recommended agent behavior:**
+- Poll `swarm-task list pending` every 30-60 seconds when idle
+- Watch for tmux notifications from watcher
+- Check `events.log` for recent swarm activity
+
 ### Session Task Management (Claude Code)
 
 Claude Code agents have built-in task tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`) that operate within a single conversation session. These complement—but don't replace—the file-based swarm task queue.
@@ -404,11 +480,12 @@ Claude Code agents have built-in task tools (`TaskCreate`, `TaskList`, `TaskGet`
 
 | Scenario | System |
 |----------|--------|
-| Creating work for other agents | Swarm (file-based) |
+| Creating work for other agents | Swarm (`swarm-task new`) |
+| Claiming a task | Swarm (`swarm-task claim`) |
 | Breaking down my claimed task into steps | Claude Code (`TaskCreate`) |
 | Tracking progress within a session | Claude Code (`TaskUpdate`) |
-| Signaling completion to swarm | Swarm (move file + events.log) |
-| Seeing what work is available | Swarm (`ls pending/`) |
+| Signaling completion to swarm | Swarm (`swarm-task complete`) |
+| Seeing what work is available | Swarm (`swarm-task list pending`) |
 
 **Integrated Workflow:**
 
@@ -417,8 +494,8 @@ When an agent claims a swarm task:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. CLAIM (Swarm)                                            │
-│    mv pending/task-XXX.yaml → active/                       │
-│    Edit: claimed_by: agent-N, claimed_at: <timestamp>       │
+│    swarm-task claim task-XXX                                │
+│    (or: swarm-task claim  to auto-select best match)        │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -442,9 +519,8 @@ When an agent claims a swarm task:
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 4. COMPLETE (Swarm)                                         │
-│    mv active/task-XXX.yaml → done/                          │
-│    Edit: completed_at, result summary                       │
-│    echo "... | DONE | task-XXX | ..." >> events.log         │
+│    swarm-task complete task-XXX -r "Implemented feature"    │
+│    (watcher broadcasts completion to all agents)            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -458,9 +534,15 @@ When an agent claims a swarm task:
 **Example Session:**
 
 ```bash
+# Agent checks for work
+$ swarm-task list pending
+Pending:
+  task-001 [120] [high/complex] Implement config parser
+
 # Agent claims swarm task
-$ mv ~/.local/state/agent-context/PROJECT/tasks/pending/task-001.yaml \
-     ~/.local/state/agent-context/PROJECT/tasks/active/
+$ swarm-task claim task-001
+✓ Claimed: task-001
+  Title: Implement config parser
 
 # Agent uses Claude Code for subtask tracking (internal to session)
 > TaskCreate: "Parse input configuration"
@@ -471,10 +553,12 @@ $ mv ~/.local/state/agent-context/PROJECT/tasks/pending/task-001.yaml \
 # ... agent works through subtasks ...
 
 # Agent completes swarm task
-$ mv ~/.local/state/agent-context/PROJECT/tasks/active/task-001.yaml \
-     ~/.local/state/agent-context/PROJECT/tasks/done/
-$ echo "2025-01-20T12:00:00Z | agent-1 | DONE | task-001 | Implemented config parser" \
-     >> ~/.local/state/agent-context/PROJECT/events.log
+$ swarm-task complete task-001 -r "Implemented config parser with validation"
+✓ Completed: task-001
+  Title: Implement config parser
+  By: agent-1
+
+# Watcher broadcasts: "[swarm] Task completed: task-001 by agent-1"
 ```
 
 ## Git Workflow
@@ -675,45 +759,24 @@ create-task --template adr-documentation \
   --var context="Need to choose between JWT and session tokens"
 ```
 
-### Swarm Commands
+### ~~Swarm Commands~~ (Implemented)
 
-Custom slash commands for task workflow:
+The `swarm-task` CLI now provides all task management commands:
 
-**~/.claude/commands/create-task.md:**
-```markdown
-Create a new task in the swarm queue.
-
-Arguments: <title> [--priority low|medium|high] [--complexity simple|moderate|complex]
-
-1. Generate task ID from timestamp
-2. Create YAML file in ~/.local/state/agent-context/<project>/tasks/pending/
-3. Log creation to events.log
+```bash
+swarm-task new "title" [-p priority] [-c complexity] [-D depends]
+swarm-task claim [task-id] [--dry-run]
+swarm-task complete <task-id> [-r result]
+swarm-task list [pending|active|done|all]
 ```
 
-**~/.claude/commands/claim-task.md:**
-```markdown
-Claim a pending task from the swarm queue.
+The `swarm-watcher` daemon provides queue monitoring and notifications:
 
-Arguments: [task-id] (optional, claims highest priority if omitted)
-
-1. Find task in pending/
-2. Move to active/
-3. Set claimed_by and claimed_at
-4. Log claim to events.log
-5. Display task details
+```bash
+swarm-watcher [-i interval]
 ```
 
-**~/.claude/commands/complete-task.md:**
-```markdown
-Mark current task as complete.
-
-Arguments: [result-summary]
-
-1. Move task from active/ to done/
-2. Set completed_at and result
-3. Log completion to events.log
-4. Show next available task
-```
+See [Task Management with swarm-task](#task-management-with-swarm-task) and [Swarm Watcher Daemon](#swarm-watcher-daemon) for details.
 
 ### Agent Registry
 
@@ -750,14 +813,14 @@ specializations:                  # From profile or learned
 
 ### Implementation Priority
 
-| Enhancement | Effort | Impact | Priority |
-|-------------|--------|--------|----------|
-| Swarm Commands | Low | High | 1 |
-| Task-Skill Binding | Low | Medium | 2 |
-| Project Skills | Medium | High | 3 |
-| Task Templates | Medium | Medium | 4 |
-| Agent Profiles | Medium | Medium | 5 |
-| Agent Registry | High | High | 6 |
+| Enhancement | Effort | Impact | Status |
+|-------------|--------|--------|--------|
+| Swarm Commands | Low | High | **Done** (swarm-task, swarm-watcher) |
+| Task-Skill Binding | Low | Medium | Planned |
+| Project Skills | Medium | High | Planned |
+| Task Templates | Medium | Medium | Planned |
+| Agent Profiles | Medium | Medium | Planned |
+| Agent Registry | High | High | Planned |
 
 ## Summary
 
