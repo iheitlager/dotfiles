@@ -2,10 +2,44 @@ Take ownership of a GitHub issue and begin implementation.
 
 ## Usage
 
-`/take #123` - Take issue number 123 and start working on it
-`/take` - Show suggested issues to take (from `/issues` output)
+```
+/take #123        Single agent: take and implement directly
+/take #123 queue  Multi-agent: load issue into swarm queue as task(s)
+/take             Show suggested issues to take
+```
 
-## Process
+## Modes
+
+### Direct Mode (default)
+
+For single-agent work. You take the issue and implement it yourself.
+
+### Queue Mode
+
+For multi-agent swarms. Loads the issue into the swarm queue so any capable agent can claim it.
+
+```bash
+# Queue mode creates swarm task(s) from the issue:
+swarm-task new "Issue title" \
+  -p <priority from labels> \
+  -c <complexity estimate> \
+  -d "From #123: <issue description summary>"
+```
+
+**Priority mapping from labels:**
+- `priority:urgent`, `critical`, `P0` → urgent
+- `priority:high`, `important`, `P1` → high
+- `priority:low`, `minor`, `P3` → low
+- Default → medium
+
+**Complexity estimation:**
+- Small issues, docs, typos → simple (haiku)
+- Standard features, bug fixes → moderate (sonnet)
+- Architecture, multi-file, design → complex (opus)
+
+**Output:** Reports created task ID and suggests `swarm-task list` to verify.
+
+## Process (Direct Mode)
 
 ### 1. Understand the Issue
 
@@ -51,6 +85,52 @@ Estimated complexity: [trivial/small/medium/large]
 - Stage changes and create commit following project conventions
 - Reference the issue: `fix: resolve hover bug in sidebar (#123)`
 - Summarize what was done and any follow-up needed
+
+## Process (Queue Mode)
+
+### 1. Fetch & Validate Issue
+
+```bash
+gh issue view #N
+```
+
+- Confirm the issue is actionable (not stale, not blocked)
+- Check for linked PRs (maybe already in progress)
+
+### 2. Assess Complexity
+
+Estimate based on:
+- Number of files likely affected
+- Architectural impact
+- Testing requirements
+- Dependencies on other work
+
+### 3. Create Swarm Task(s)
+
+For simple issues — one task:
+```bash
+swarm-task new "Issue title" -p medium -c moderate \
+  -d "From #123: <brief description>"
+```
+
+For complex issues — break into subtasks:
+```bash
+swarm-task new "Design API interface (#123)" -p high -c complex
+swarm-task new "Implement API handler (#123)" -p high -c moderate -D task-XXX
+swarm-task new "Add API tests (#123)" -p medium -c simple -D task-YYY
+```
+
+### 4. Report
+
+Output the created task(s):
+```
+Queued issue #123 as swarm task(s):
+  task-1737500000 [high/complex] Design API interface
+  task-1737500001 [high/moderate] Implement API handler (blocked by above)
+  task-1737500002 [medium/simple] Add API tests (blocked by above)
+
+Run: swarm-task list pending
+```
 
 ## Philosophy
 

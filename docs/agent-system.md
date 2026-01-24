@@ -8,6 +8,57 @@ Claude Swarm is a coordination system for running multiple AI coding agents as e
 
 ## Design Principles
 
+### Two-Layer Work Management
+
+Work is managed at two distinct layers:
+
+| Layer | Tool | Scope | Persistence | Purpose |
+|-------|------|-------|-------------|---------|
+| **Project Backlog** | GitHub Issues | All work | Permanent | Tracking, tracing, history |
+| **Session Queue** | Swarm Tasks | Current run | Ephemeral | Real-time coordination |
+
+**GitHub Issues** are the source of truth for *what needs to be done*:
+- Feature requests, bugs, analysis results
+- Human-readable descriptions and discussion
+- Linked to PRs and commits
+- Survives across sessions
+
+**Swarm Queue** coordinates *what we're doing now*:
+- Subset of issues selected for current work session
+- Agent-optimized format (YAML with capability matching)
+- Real-time claiming, completion, dependency tracking
+- Can be cleared after session ends
+
+**Workflow:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    GitHub Issues                            │
+│  (backlog: all work that needs doing)                       │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+                              │  /take #123 queue
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Swarm Queue                              │
+│  (sprint: work for this session)                            │
+│                                                             │
+│   pending/ ──claim──▶ active/ ──complete──▶ done/          │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+                              │  PR + close issue
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    GitHub (closed)                          │
+│  (history: traceable record)                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Commands:**
+- `/take #123` — Direct mode: single agent implements immediately
+- `/take #123 queue` — Queue mode: creates swarm task(s) for multi-agent work
+
+This separation keeps project tracking (permanent) distinct from session coordination (ephemeral).
+
 ### Symmetry Over Hierarchy
 
 All agents run identical instructions. There is no dispatcher, coordinator, or manager. When a user talks to any agent, that agent can either handle the request directly or break it into tasks for the swarm.
