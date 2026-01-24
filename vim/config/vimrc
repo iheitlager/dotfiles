@@ -24,6 +24,7 @@ set directory=$XDG_STATE_HOME/vim/swap//
 set backupdir=$XDG_STATE_HOME/vim/backup//
 set undodir=$XDG_STATE_HOME/vim/undo//
 set undofile
+let g:netrw_home = s:vim_state
 
 " Basic settings
 set nocompatible "Fixes old Vi bugs
