@@ -39,7 +39,7 @@ set history=500 "Sets undo history size
 set ruler "Sets up status bar
 set laststatus=2 "Always keeps the status bar active
 set number "Turns on line numbering
-set textwidth=80 " Make it obvious where 80 characters is
+set textwidth=120 "Make it obvious where 80 characters is
 set colorcolumn=+1
 
 " http://vim.wikia.com/wiki/Toggle_auto-indenting_for_code_paste
