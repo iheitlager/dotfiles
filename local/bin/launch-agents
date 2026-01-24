@@ -587,8 +587,8 @@ create_tmux_layout() {
                 tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
                 tmux send-keys -t "$SESSION:agents.$pane" "clear" C-m
                 # Inject AGENTS.md via --append-system-prompt (CLAUDE.md is auto-read for project info)
-                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
-                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
+                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
                 # debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
                 # tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
                 ;;
@@ -680,7 +680,7 @@ cmd_workspace() {
     tmux send-keys -t "$ws_session:workspace.1" "clear" C-m
     
     # Start claude in opus on the left pane
-    tmux send-keys -t "$ws_session:workspace.1" "claude --model opus $SKIP_PERMISSIONS" C-m
+    tmux send-keys -t "$ws_session:workspace.1" "claude --model opus --add-dir . $SKIP_PERMISSIONS" C-m
     
     # Select left pane (claude)
     tmux select-pane -t "$ws_session:workspace.1"
