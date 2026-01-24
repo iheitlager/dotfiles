@@ -38,7 +38,8 @@ else
     REPO_NAME="$local_repo_name"
 fi
 
-SESSION="claude-$REPO_NAME"
+# Sanitize session name: tmux doesn't allow dots
+SESSION="claude-${REPO_NAME//[.]/_}"
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 PENDING_DIR="$SHARED_CONTEXT/tasks/pending"
 ACTIVE_DIR="$SHARED_CONTEXT/tasks/active"

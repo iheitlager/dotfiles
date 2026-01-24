@@ -65,7 +65,8 @@ else
 fi
 
 # Paths derived from repo
-SESSION="claude-$REPO_NAME"
+# Sanitize session name: tmux doesn't allow dots
+SESSION="claude-${REPO_NAME//[.]/_}"
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 
 # Defaults
