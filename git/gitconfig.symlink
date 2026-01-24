@@ -12,7 +12,7 @@
     ui = true
 
 [core]
-    excludesfile = ~/.config/git/ignore
+    excludesfile = ~/.config/git/gitignore
     editor = $EDITOR
     pager = delta
 
