@@ -7,4 +7,4 @@ export GIT_PS1_SHOWSTASHSTATE=1      # $ for stashes
 export GIT_PS1_SHOWUNTRACKEDFILES=1  # % for untracked files
 #export GIT_PS1_SHOWUPSTREAM="auto"   # <, >, = for upstream comparison
 export GIT_PS1_SHOWCOLORHINTS=1      # Enable color hints
-export GIT_PAGER="delta --dark --line-numbers --side-by-side"q
+export GIT_PAGER="delta --dark --line-numbers --side-by-side"

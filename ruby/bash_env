@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Ruby Gem - XDG compliant
+export GEM_HOME="$XDG_DATA_HOME/gem"
+export GEM_SPEC_CACHE="$XDG_CACHE_HOME/gem"
+
 # Ruby IRB history - XDG compliant
 export IRBRC="$XDG_CONFIG_HOME/irb/irbrc"
 export IRB_HISTORY_FILE="$XDG_STATE_HOME/irb/history"

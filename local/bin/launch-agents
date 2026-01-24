@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # launch-agents
-# Version: 0.4.2
+# Version: 0.5.1
 #
 # Changelog:
+# 0.5.1 Force clean now kills tmux and agent processes (claude/gemini/copilot)
+# 0.5.0 Added -w/--workspace mode for simple claude + shell layout
 # 0.4.2 Clarified tmux inter-agent communication (two separate send-keys required)
 # 0.4.1 Improved skill handling and instructions
 # 0.4.0 Multi-client support with copilot and gemini
@@ -25,7 +27,7 @@ NC='\033[0m'
 
 show_version() {
     local version=$(sed -n '3p' "$0" | sed 's/.*Version: \([0-9.]*\).*/\1/')
-    echo "launch-agents version $version"
+    echo -e "${BOLD}launch-agents${NC} version ${GREEN}$version${NC}"
 }
 
 # Detect repo root and name
@@ -95,6 +97,7 @@ Commands:
     stop            Kill tmux session
     clean           Remove worktrees (if branches merged and clean)
     info            Show status of agents, models, and tasks
+    -w, --workspace Simple workspace: claude (opus) left, shell right
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
@@ -119,6 +122,7 @@ Examples:
     launch-agents start             Start 2 agents (default)
     launch-agents -n 4 start        Start 4 agents
     launch-agents -n 6 start        Start 6 agents with multi-client
+    launch-agents -w                Simple workspace (claude + shell)
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
     launch-agents clean             Remove merged worktrees
@@ -588,6 +592,55 @@ create_tmux_layout() {
     echo -e "${GREEN}✓ Tmux session created${NC}"
 }
 
+cmd_workspace() {
+    local ws_session="ws-$(basename "$PWD")"
+    
+    if tmux has-session -t "$ws_session" 2>/dev/null; then
+        echo -e "${YELLOW}Workspace exists, attaching...${NC}"
+        tmux attach -t "$ws_session"
+        exit 0
+    fi
+
+    echo -e "${BLUE}Creating workspace in: $(basename "$PWD")${NC}"
+
+    # Create session with first pane (claude)
+    tmux new-session -d -s "$ws_session" -n "workspace" -c "$PWD"
+    
+    # Split vertically: left claude, right shell
+    tmux split-window -h -t "$ws_session:workspace" -c "$PWD"
+    
+    # Set even split (50/50)
+    tmux select-layout -t "$ws_session:workspace" even-horizontal
+    
+    # Activate venv if present in both panes
+    if [[ -f ".venv/bin/activate" ]]; then
+        tmux send-keys -t "$ws_session:workspace.1" "source .venv/bin/activate" C-m
+        tmux send-keys -t "$ws_session:workspace.2" "source .venv/bin/activate" C-m
+        sleep 0.3
+    fi
+    
+    # Start claude in opus on the left pane
+    tmux send-keys -t "$ws_session:workspace.1" "claude --model opus $SKIP_PERMISSIONS" C-m
+    
+    # Select left pane (claude)
+    tmux select-pane -t "$ws_session:workspace.1"
+
+    echo ""
+    echo -e "${GREEN}${BOLD}Workspace Ready${NC}"
+    echo ""
+    echo "Directory:    $(basename "$PWD")"
+    echo "Left pane:    claude (opus)"
+    echo "Right pane:   shell"
+    echo ""
+    echo "Navigation:"
+    echo "  Alt ←→          Switch pane"
+    echo "  Ctrl-b z        Zoom pane"
+    echo "  Ctrl-b d        Detach"
+    echo ""
+
+    tmux attach -t "$ws_session"
+}
+
 cmd_start() {
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         echo -e "${YELLOW}Session exists, attaching...${NC}"
@@ -664,9 +717,6 @@ cmd_stop() {
                 tmux send-keys -t "$SESSION:agents.$i" Enter
             done
             
-            echo -e "${BLUE}Waiting 5s for agents to wind down...${NC}"
-            sleep 5
-            
             echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
             tmux kill-session -t "$SESSION"
             echo -e "${GREEN}✓ Session stopped${NC}"
@@ -677,6 +727,27 @@ cmd_stop() {
 }
 
 cmd_clean() {
+    # Force mode: kill all related processes
+    if [[ "$FORCE" == true ]]; then
+        echo -e "${YELLOW}Force mode: killing all related processes...${NC}"
+        
+        # Kill tmux sessions
+        if pgrep -x tmux > /dev/null; then
+            echo -e "  ${YELLOW}Killing tmux...${NC}"
+            pkill -x tmux 2>/dev/null || true
+            sleep 0.5
+        fi
+        
+        # Kill agent processes
+        for proc in claude gemini copilot; do
+            if pgrep -f "$proc" > /dev/null; then
+                echo -e "  ${YELLOW}Killing $proc...${NC}"
+                pkill -f "$proc" 2>/dev/null || true
+            fi
+        done
+        sleep 0.5
+    fi
+
     # Stop session first if running
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         echo -e "${YELLOW}Stopping session first...${NC}"
@@ -862,6 +933,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_PERMISSIONS="--dangerously-skip-permissions"
             shift
             ;;
+        -w|--workspace)
+            COMMAND="workspace"
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -891,6 +966,9 @@ case ${COMMAND:-} in
         ;;
     info)
         cmd_info
+        ;;
+    workspace)
+        cmd_workspace
         ;;
     "")
         show_help

@@ -3,3 +3,8 @@
 # Node.js REPL history - XDG compliant
 export NODE_REPL_HISTORY="$XDG_STATE_HOME/node/repl_history"
 mkdir -p "$XDG_STATE_HOME/node" 2>/dev/null
+
+# NPM - XDG compliant
+export NPM_CONFIG_USERCONFIG="$XDG_CONFIG_HOME/npm/npmrc"
+export npm_config_cache="$XDG_CACHE_HOME/npm"
+mkdir -p "$XDG_CONFIG_HOME/npm" 2>/dev/null
