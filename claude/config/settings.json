@@ -49,5 +49,5 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "additionalDirectories": ["."]
+  "additionalDirectories": [".", "~/.local/state/agent-context"]
 }
