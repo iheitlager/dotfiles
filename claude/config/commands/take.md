@@ -19,8 +19,8 @@ For single-agent work. You take the issue and implement it yourself.
 For multi-agent swarms. Loads the issue into the swarm queue so any capable agent can claim it.
 
 ```bash
-# Queue mode creates swarm task(s) from the issue:
-swarm-task new "Issue title" \
+# Queue mode creates swarm job(s) from the issue:
+swarm-job new "Issue title" \
   -p <priority from labels> \
   -c <complexity estimate> \
   -d "From #123: <issue description summary>"
@@ -37,7 +37,7 @@ swarm-task new "Issue title" \
 - Standard features, bug fixes → moderate (sonnet)
 - Architecture, multi-file, design → complex (opus)
 
-**Output:** Reports created task ID and suggests `swarm-task list` to verify.
+**Output:** Reports created job ID and suggests `swarm-job list` to verify.
 
 ## Process (Direct Mode)
 
@@ -109,27 +109,27 @@ Estimate based on:
 
 For simple issues — one task:
 ```bash
-swarm-task new "Issue title" -p medium -c moderate \
+swarm-job new "Issue title" -p medium -c moderate \
   -d "From #123: <brief description>"
 ```
 
 For complex issues — break into subtasks:
 ```bash
-swarm-task new "Design API interface (#123)" -p high -c complex
-swarm-task new "Implement API handler (#123)" -p high -c moderate -D task-XXX
-swarm-task new "Add API tests (#123)" -p medium -c simple -D task-YYY
+swarm-job new "Design API interface (#123)" -p high -c complex
+swarm-job new "Implement API handler (#123)" -p high -c moderate -D job-XXX
+swarm-job new "Add API tests (#123)" -p medium -c simple -D job-YYY
 ```
 
 ### 4. Report
 
-Output the created task(s):
+Output the created job(s):
 ```
-Queued issue #123 as swarm task(s):
-  task-1737500000 [high/complex] Design API interface
-  task-1737500001 [high/moderate] Implement API handler (blocked by above)
-  task-1737500002 [medium/simple] Add API tests (blocked by above)
+Queued issue #123 as swarm job(s):
+  job-1737500000 [high/complex] Design API interface
+  job-1737500001 [high/moderate] Implement API handler (blocked by above)
+  job-1737500002 [medium/simple] Add API tests (blocked by above)
 
-Run: swarm-task list pending
+Run: swarm-job list pending
 ```
 
 ## Philosophy

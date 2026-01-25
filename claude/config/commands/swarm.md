@@ -1,23 +1,29 @@
-Show and manage the swarm task queue for multi-agent coordination.
+Show and manage the swarm job queue for multi-agent coordination.
+
+## Terminology
+
+- **Issue** — GitHub issue (external tracking, source of truth)
+- **Job** — Swarm queue item (cross-agent coordination, ephemeral)
+- **Task** — LLM session item (in-agent execution, personal scratchpad)
 
 ## Usage
 
-- `/swarm` - Show queue overview + pending tasks with capability scores
-- `/swarm active` - Show tasks currently being worked on
-- `/swarm done` - Show recently completed tasks
-- `/swarm create <title>` - Create a new task for the swarm
+- `/swarm` - Show queue overview + pending jobs with capability scores
+- `/swarm active` - Show jobs currently being worked on
+- `/swarm done` - Show recently completed jobs
+- `/swarm create <title>` - Create a new job for the swarm
 
 ## Default: Queue Overview
 
-Show the swarm task queue status:
+Show the swarm job queue status:
 
 1. **Summary counts** - pending, active, done
-2. **Pending tasks** - Run `claim-task --list` to show tasks with capability scores
+2. **Pending jobs** - Run `swarm-job list` to show jobs with capability scores
 3. **Suggest actions** based on queue state
 
 ### Environment Setup
 
-Before running `claim-task`, ensure environment is set:
+Before running `swarm-job`, ensure environment is set:
 ```bash
 export AGENT_ID="${AGENT_ID:-agent-1}"
 export AGENT_MODEL="${AGENT_MODEL:-opus}"
@@ -31,36 +37,36 @@ REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 ```
 
-## Active Tasks
+## Active Jobs
 
-When argument is `active`, show tasks in `$SHARED_CONTEXT/tasks/active/`:
-- Task ID and title
+When argument is `active`, show jobs in `$SHARED_CONTEXT/jobs/active/`:
+- Job ID and title
 - Who claimed it (`claimed_by`)
 - When claimed (`claimed_at`)
 
-## Done Tasks
+## Done Jobs
 
-When argument is `done`, show recent tasks in `$SHARED_CONTEXT/tasks/done/`:
-- Task ID and title
+When argument is `done`, show recent jobs in `$SHARED_CONTEXT/jobs/done/`:
+- Job ID and title
 - Who completed it
 - Result summary (if present)
 
-Limit to last 10 tasks by default.
+Limit to last 10 jobs by default.
 
-## Create Task
+## Create Job
 
-When argument starts with `create`, create a new task:
+When argument starts with `create`, create a new job:
 
-1. Generate task ID: `task-$(date +%s)`
+1. Generate job ID: `job-$(date +%s)`
 2. Parse title from remaining arguments
 3. Ask for complexity/priority if not obvious
-4. Write YAML to `$SHARED_CONTEXT/tasks/pending/`
+4. Write YAML to `$SHARED_CONTEXT/jobs/pending/`
 5. Log creation to `events.log`
 
-### Task Template
+### Job Template
 
 ```yaml
-id: task-TIMESTAMP
+id: job-TIMESTAMP
 created: ISO_TIMESTAMP
 created_by: AGENT_ID
 priority: medium
@@ -79,7 +85,7 @@ result: null
 ## Output
 
 After showing status, suggest next actions:
-- `claim-task` - Claim the best matching task
-- `claim-task <id>` - Claim a specific task
+- `swarm-job claim` - Claim the best matching job
+- `swarm-job claim <id>` - Claim a specific job
 - `/swarm create <title>` - Add work to the queue
 - `tail -20 $SHARED_CONTEXT/events.log` - View recent activity

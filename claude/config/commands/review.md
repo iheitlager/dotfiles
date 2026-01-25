@@ -161,7 +161,7 @@ After review, offer to:
 
 4. **Queue work** for swarm execution
    ```bash
-   swarm-task new "Add missing tests for validators" -c simple -p medium
+   swarm-job new "Add missing tests for validators" -c simple -p medium
    ```
 
 ## Philosophy

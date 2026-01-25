@@ -2,20 +2,26 @@
 
 ## Overview
 
-Claude Swarm is a coordination system for running multiple AI coding agents as equal peers working on a shared codebase. Agents collaborate through a shared task queue and state directory, with no fixed hierarchy. Any agent can receive user requests, create tasks, or execute work.
+Claude Swarm is a coordination system for running multiple AI coding agents as equal peers working on a shared codebase. Agents collaborate through a shared job queue and state directory, with no fixed hierarchy. Any agent can receive user requests, create jobs, or execute work.
 
-**Version 0.6.0** introduces the `swarm-task` CLI for unified task management and `swarm-watcher` daemon for queue monitoring with broadcast notifications. Previous versions added smart defaults, workspace mode, and multi-client support (Claude, GitHub Copilot, Gemini).
+**Version 2.0.0** introduces the three-layer terminology model:
+- **Issue** — GitHub issue (external tracking, source of truth)
+- **Job** — Swarm queue item (cross-agent coordination, ephemeral)
+- **Task** — LLM session item (in-agent execution, personal scratchpad)
+
+Previous versions used "task" for both swarm coordination and in-agent tracking, causing confusion.
 
 ## Design Principles
 
-### Two-Layer Work Management
+### Three-Layer Work Management
 
-Work is managed at two distinct layers:
+Work is managed at three distinct layers:
 
-| Layer | Tool | Scope | Persistence | Purpose |
-|-------|------|-------|-------------|---------|
-| **Project Backlog** | GitHub Issues | All work | Permanent | Tracking, tracing, history |
-| **Session Queue** | Swarm Tasks | Current run | Ephemeral | Real-time coordination |
+| Layer | Term | Tool | Scope | Persistence | Purpose |
+|-------|------|------|-------|-------------|----------|
+| **External** | Issue | GitHub Issues | All work | Permanent | Tracking, tracing, history |
+| **Coordination** | Job | Swarm Queue | Current session | Ephemeral | Cross-agent coordination |
+| **Execution** | Task | Claude Code | Single agent | In-memory | Personal scratchpad |
 
 **GitHub Issues** are the source of truth for *what needs to be done*:
 - Feature requests, bugs, analysis results
@@ -55,7 +61,7 @@ Work is managed at two distinct layers:
 
 **Commands:**
 - `/take #123` — Direct mode: single agent implements immediately
-- `/take #123 queue` — Queue mode: creates swarm task(s) for multi-agent work
+- `/take #123 queue` — Queue mode: creates swarm job(s) for multi-agent work
 
 See [commands.md](commands.md) for the complete command reference.
 
@@ -63,13 +69,13 @@ This separation keeps project tracking (permanent) distinct from session coordin
 
 ### Symmetry Over Hierarchy
 
-All agents run identical instructions. There is no dispatcher, coordinator, or manager. When a user talks to any agent, that agent can either handle the request directly or break it into tasks for the swarm.
+All agents run identical instructions. There is no dispatcher, coordinator, or manager. When a user talks to any agent, that agent can either handle the request directly or break it into jobs for the swarm.
 
 This avoids the complexity of role-based systems where you need to define boundaries between "the planner" and "the executor" or decide which agent owns what responsibility.
 
 ### Capability Differentiation Without Role Differentiation
 
-Agents may run on different model tiers (Opus, Sonnet, Haiku for Claude; Codex for Copilot; Gemini Pro) but they all follow the same workflow. A Haiku agent receiving a complex request doesn't refuse it—it creates a task tagged for a stronger model. An Opus agent finding only simple tasks in the queue doesn't wait—it helps clear them.
+Agents may run on different model tiers (Opus, Sonnet, Haiku for Claude; Codex for Copilot; Gemini Pro) but they all follow the same workflow. A Haiku agent receiving a complex request doesn't refuse it—it creates a job tagged for a stronger model. An Opus agent finding only simple jobs in the queue doesn't wait—it helps clear them.
 
 The model strength is a resource constraint, not an identity.
 
@@ -80,14 +86,14 @@ Agents communicate through files in a shared state directory. No custom protocol
 This means:
 - Debugging is trivial (just read the files)
 - Recovery is simple (fix the file, restart the agent)
-- Humans can participate (create tasks by hand)
+- Humans can participate (create jobs by hand)
 
 ### Git Worktrees for Isolation
 
 Each agent operates in its own git worktree. This provides:
 - Independent working directories (no stepping on each other)
 - Separate branches for parallel work
-- Clean PR workflow (one branch per agent per task)
+- Clean PR workflow (one branch per agent per job)
 - Easy cleanup when done
 
 ## Architecture
@@ -107,15 +113,15 @@ Project layout:
 
 Shared state (XDG compliant):
 ~/.local/state/agent-context/<project-name>/
-├── tasks/
-│   ├── pending/                    # Unclaimed tasks
+├── jobs/
+│   ├── pending/                    # Unclaimed jobs
 │   ├── active/                     # Currently being worked
-│   └── done/                       # Completed tasks
+│   └── done/                       # Completed jobs
 ├── events.log                      # Append-only audit trail
 └── agents/                         # Agent heartbeats (optional)
 ```
 
-### Task Lifecycle
+### Job Lifecycle
 
 ```
                     ┌─────────────────┐
@@ -126,41 +132,41 @@ Shared state (XDG compliant):
               │                             │
               ▼                             ▼
     ┌─────────────────┐           ┌─────────────────┐
-    │ Talk to Agent   │           │ Create Task     │
+    │ Talk to Agent   │           │ Create Job      │
     │ (any agent)     │           │ (CLI tool)      │
     └────────┬────────┘           └────────┬────────┘
              │                             │
              │   Agent assesses:           │
              │   - Do it now?              │
-             │   - Create subtasks?        │
+             │   - Create sub-jobs?        │
              │                             │
              └──────────────┬──────────────┘
                             ▼
                   ┌─────────────────┐
-                  │ tasks/pending/  │
+                  │ jobs/pending/  │
                   └────────┬────────┘
                            │
                            │  Any agent claims
                            ▼
                   ┌─────────────────┐
-                  │ tasks/active/   │
+                  │ jobs/active/   │
                   │ (claimed_by: X) │
                   └────────┬────────┘
                            │
                            │  Agent completes work
                            ▼
                   ┌─────────────────┐
-                  │ tasks/done/     │
+                  │ jobs/done/     │
                   │ + events.log    │
                   └─────────────────┘
 ```
 
-### Task File Format
+### Job File Format
 
-Tasks are YAML files with enough metadata for agents to self-organize:
+Jobs are YAML files with enough metadata for agents to self-organize:
 
 ```yaml
-id: task-1737372800
+id: job-1737372800
 created: 2025-01-20T10:00:00Z
 created_by: agent-1          # or "user" if created via CLI
 priority: medium             # low, medium, high, urgent
@@ -171,7 +177,7 @@ description: |
   Add a caching layer between the API client and the data processing
   module. Use functools.lru_cache for in-memory caching initially.
   Include cache invalidation on config changes.
-depends_on: []               # task IDs this blocks on
+depends_on: []               # job IDs this blocks on
 claimed_by: null
 claimed_at: null
 completed_at: null
@@ -203,7 +209,7 @@ Commands:
     attach          Attach to existing session
     workspace       Simple workspace: claude (opus) left, shell right
     clean           Remove worktrees (if branches merged and clean)
-    info            Show status of agents, models, and tasks
+    info            Show status of agents, models, and jobs
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
@@ -328,7 +334,7 @@ Balanced pairs across all three clients:
 
 ### Workspace Mode
 
-For simpler tasks, use workspace mode (`-w` or `workspace`) which creates a single Claude (opus) session with a shell:
+For simpler work, use workspace mode (`-w` or `workspace`) which creates a single Claude (opus) session with a shell:
 
 ```
 ┌─────────────────┬─────────────────┐
@@ -336,7 +342,7 @@ For simpler tasks, use workspace mode (`-w` or `workspace`) which creates a sing
 └─────────────────┴─────────────────┘
 ```
 
-This runs in the current directory without worktrees, ideal for quick tasks or single-agent work.
+This runs in the current directory without worktrees, ideal for quick work or single-agent work.
 
 ## Tmux Session Structure
 
@@ -372,7 +378,7 @@ One shell window per agent worktree for running tests, checking output, manual g
 
 Each agent worktree contains:
 
-- **AGENTS.md** — Auto-generated instructions injected via `--append-system-prompt`. Contains agent identity, task queue instructions, and peer communication protocols. This file is gitignored.
+- **AGENTS.md** — Auto-generated instructions injected via `--append-system-prompt`. Contains agent identity, job queue instructions, and peer communication protocols. This file is gitignored.
 
 - **CLAUDE.md** (symlinked) — Project-specific instructions from the main repository. Shared across all agents.
 
@@ -403,46 +409,46 @@ CLAUDE_AUTO_APPROVE_FOLDERS=true
 
 ## Coordination Mechanisms
 
-### Task Management with swarm-task
+### Job Management with swarm-job
 
-The `swarm-task` CLI provides unified task management:
+The `swarm-job` CLI provides unified job management:
 
 ```bash
-# List all tasks
-swarm-task list                    # Shows pending, active, done
-swarm-task list pending            # Only pending tasks with scores
+# List all jobs
+swarm-job list                    # Shows pending, active, done
+swarm-job list pending            # Only pending jobs with scores
 
-# Create a new task
-swarm-task new "Add feature X" -p high -c complex
-swarm-task new "Fix bug" -c simple
-swarm-task new "Blocked task" -D task-123,task-456  # Dependencies
+# Create a new job
+swarm-job new "Add feature X" -p high -c complex
+swarm-job new "Fix bug" -c simple
+swarm-job new "Blocked job" -D job-123,job-456  # Dependencies
 
-# Claim a task (atomic with flock)
-swarm-task claim                   # Auto-select best match for your tier
-swarm-task claim task-XXX          # Claim specific task
-swarm-task claim --dry-run         # Preview what would be claimed
+# Claim a job (atomic with flock)
+swarm-job claim                   # Auto-select best match for your tier
+swarm-job claim job-XXX          # Claim specific job
+swarm-job claim --dry-run         # Preview what would be claimed
 
-# Complete a task
-swarm-task complete task-XXX
-swarm-task complete task-XXX -r "merged to main"
+# Complete a job
+swarm-job complete job-XXX
+swarm-job complete job-XXX -r "merged to main"
 ```
 
-**Task scoring:** When listing or claiming, tasks are scored based on capability match:
+**Job scoring:** When listing or claiming, jobs are scored based on capability match:
 - **100+** (green): Perfect match for agent tier
-- **50+** (yellow): Agent can handle (simpler task)
+- **50+** (yellow): Agent can handle (simpler job)
 - **0** (red): Too complex for agent
 
-### Legacy: Manual Task Claiming
+### Legacy: Manual Job Claiming
 
-For debugging or manual intervention, tasks can still be managed directly:
+For debugging or manual intervention, jobs can still be managed directly:
 
 ```bash
 # Find work
-ls ~/.local/state/agent-context/<project>/tasks/pending/
+ls ~/.local/state/agent-context/<project>/jobs/pending/
 
-# Claim a task manually
-mv ~/.local/state/agent-context/<project>/tasks/pending/task-XXX.yaml \
-   ~/.local/state/agent-context/<project>/tasks/active/
+# Claim a job manually
+mv ~/.local/state/agent-context/<project>/jobs/pending/job-XXX.yaml \
+   ~/.local/state/agent-context/<project>/jobs/active/
 # Edit file: set claimed_by: agent-N, claimed_at: <timestamp>
 ```
 
@@ -451,9 +457,9 @@ mv ~/.local/state/agent-context/<project>/tasks/pending/task-XXX.yaml \
 All significant events append to `events.log`:
 
 ```
-2025-01-20T10:00:00Z | agent-1 | CLAIMED | task-001 | Design async interfaces
-2025-01-20T10:45:00Z | agent-1 | DONE | task-001 | Created interface specs
-2025-01-20T10:46:00Z | agent-3 | CLAIMED | task-002 | Update data models
+2025-01-20T10:00:00Z | agent-1 | CLAIMED | job-001 | Design async interfaces
+2025-01-20T10:45:00Z | agent-1 | DONE | job-001 | Created interface specs
+2025-01-20T10:46:00Z | agent-3 | CLAIMED | job-002 | Update data models
 ```
 
 Agents can tail this to stay aware of swarm activity:
@@ -475,7 +481,7 @@ Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (
 
 ### Swarm Watcher Daemon
 
-The `swarm-watcher` daemon monitors the task queue and broadcasts notifications:
+The `swarm-watcher` daemon monitors the job queue and broadcasts notifications:
 
 ```bash
 swarm-watcher                      # Start daemon (usually via launch-agents -d)
@@ -486,19 +492,19 @@ swarm-watcher -i 10                # Custom poll interval (10 seconds)
 
 | Event | Action |
 |-------|--------|
-| New pending task | Notifies capable agents (by tier) |
-| Task claimed | Logs pickup with agent ID |
-| Task completed | Broadcasts to ALL agents |
-| Task unblocked | Notifies capable agents |
+| New pending job | Notifies capable agents (by tier) |
+| Job claimed | Logs pickup with agent ID |
+| Job completed | Broadcasts to ALL agents |
+| Job unblocked | Notifies capable agents |
 
 **Output example:**
 ```
-[14:32:10] INFO    Watching: ~/.local/state/agent-context/project/tasks/pending
-[14:32:15] TASK    New: task-123 [high/complex] Add authentication
+[14:32:10] INFO    Watching: ~/.local/state/agent-context/project/jobs/pending
+[14:32:15] TASK    New: job-123 [high/complex] Add authentication
 [14:32:15] NOTIFY  Notifying agents: 1,2 (tier >= 3)
-[14:33:20] CLAIMED task-123 picked up by agent-1
-[14:45:30] DONE    task-123 completed by agent-1 [success]
-[14:45:30] UNBLOCK task-456 is now unblocked: Add tests
+[14:33:20] CLAIMED job-123 picked up by agent-1
+[14:45:30] DONE    job-123 completed by agent-1 [success]
+[14:45:30] UNBLOCK job-456 is now unblocked: Add tests
 ```
 
 **Graceful shutdown:** Press `Ctrl-C` to trigger swarm shutdown via `launch-agents stop`.
@@ -507,20 +513,20 @@ swarm-watcher -i 10                # Custom poll interval (10 seconds)
 
 | Method | Type | Direction | Use Case |
 |--------|------|-----------|----------|
-| `swarm-task list` | Polling | Agent → Queue | Check for available work |
+| `swarm-job list` | Polling | Agent → Queue | Check for available work |
 | `tmux send-keys` | Direct | Agent → Agent | Peer-to-peer messaging |
-| Watcher notify | Async | Daemon → Capable | New/unblocked task alerts |
+| Watcher notify | Async | Daemon → Capable | New/unblocked job alerts |
 | Watcher broadcast | Pub/sub | Daemon → All | Completion announcements |
 | `events.log` | Append-only | All → File | Audit trail, swarm awareness |
 
 **Recommended agent behavior:**
-- Poll `swarm-task list pending` every 30-60 seconds when idle
+- Poll `swarm-job list pending` every 30-60 seconds when idle
 - Watch for tmux notifications from watcher
 - Check `events.log` for recent swarm activity
 
 ### Session Task Management (Claude Code)
 
-Claude Code agents have built-in task tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`) that operate within a single conversation session. These complement—but don't replace—the file-based swarm task queue.
+Claude Code agents have built-in task tools (`TaskCreate`, `TaskList`, `TaskGet`, `TaskUpdate`) that operate within a single conversation session. These complement—but don't replace—the file-based swarm job queue.
 
 **Two Task Systems:**
 
@@ -533,27 +539,27 @@ Claude Code agents have built-in task tools (`TaskCreate`, `TaskList`, `TaskGet`
 
 | Scenario | System |
 |----------|--------|
-| Creating work for other agents | Swarm (`swarm-task new`) |
-| Claiming a task | Swarm (`swarm-task claim`) |
+| Creating work for other agents | Swarm (`swarm-job new`) |
+| Claiming a task | Swarm (`swarm-job claim`) |
 | Breaking down my claimed task into steps | Claude Code (`TaskCreate`) |
 | Tracking progress within a session | Claude Code (`TaskUpdate`) |
-| Signaling completion to swarm | Swarm (`swarm-task complete`) |
-| Seeing what work is available | Swarm (`swarm-task list pending`) |
+| Signaling completion to swarm | Swarm (`swarm-job complete`) |
+| Seeing what work is available | Swarm (`swarm-job list pending`) |
 
 **Integrated Workflow:**
 
-When an agent claims a swarm task:
+When an agent claims a swarm job:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 1. CLAIM (Swarm)                                            │
-│    swarm-task claim task-XXX                                │
-│    (or: swarm-task claim  to auto-select best match)        │
+│ 1. CLAIM (Swarm Job)                                        │
+│    swarm-job claim job-XXX                                  │
+│    (or: swarm-job claim  to auto-select best match)         │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 2. DECOMPOSE (Claude Code)                                  │
+│ 2. DECOMPOSE (LLM Tasks)                                    │
 │    TaskCreate: "Implement feature X"                        │
 │    TaskCreate: "Add tests for feature X"                    │
 │    TaskCreate: "Update documentation"                       │
@@ -562,7 +568,7 @@ When an agent claims a swarm task:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 3. EXECUTE (Claude Code)                                    │
+│ 3. EXECUTE (LLM Tasks)                                      │
 │    TaskUpdate: status → in_progress                         │
 │    ... do work ...                                          │
 │    TaskUpdate: status → completed                           │
@@ -571,30 +577,30 @@ When an agent claims a swarm task:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 4. COMPLETE (Swarm)                                         │
-│    swarm-task complete task-XXX -r "Implemented feature"    │
+│ 4. COMPLETE (Swarm Job)                                     │
+│    swarm-job complete job-XXX -r "Implemented feature"      │
 │    (watcher broadcasts completion to all agents)            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Key Principles:**
 
-1. **Swarm tasks are source of truth** — Other agents can't see your Claude Code `TaskList`
-2. **Claude Code tasks are personal scratchpad** — Use them to stay organized on complex work
+1. **Swarm jobs are source of truth** — Other agents can't see your LLM `TaskList`
+2. **LLM tasks are personal scratchpad** — Use them to stay organized on complex work
 3. **Always signal to swarm** — Move files and log events so other agents know what's happening
-4. **Don't duplicate** — If a task is simple enough to do directly, skip Claude Code task tracking
+4. **Don't duplicate** — If a job is simple enough to do directly, skip LLM task tracking
 
 **Example Session:**
 
 ```bash
 # Agent checks for work
-$ swarm-task list pending
+$ swarm-job list pending
 Pending:
-  task-001 [120] [high/complex] Implement config parser
+  job-001 [120] [high/complex] Implement config parser
 
-# Agent claims swarm task
-$ swarm-task claim task-001
-✓ Claimed: task-001
+# Agent claims swarm job
+$ swarm-job claim job-001
+✓ Claimed: job-001
   Title: Implement config parser
 
 # Agent uses Claude Code for subtask tracking (internal to session)
@@ -605,13 +611,13 @@ $ swarm-task claim task-001
 
 # ... agent works through subtasks ...
 
-# Agent completes swarm task
-$ swarm-task complete task-001 -r "Implemented config parser with validation"
-✓ Completed: task-001
+# Agent completes swarm job
+$ swarm-job complete job-001 -r "Implemented config parser with validation"
+✓ Completed: job-001
   Title: Implement config parser
   By: agent-1
 
-# Watcher broadcasts: "[swarm] Task completed: task-001 by agent-1"
+# Watcher broadcasts: "[swarm] Job completed: job-001 by agent-1"
 ```
 
 ## Git Workflow
@@ -696,12 +702,12 @@ launch-agents --force start  # equivalent
 
 ## Future Enhancements
 
-### Task-Skill Binding
+### Job-Skill Binding
 
 Tasks can reference Claude Code skills for consistent execution:
 
 ```yaml
-id: task-1737372800
+id: job-1737372800
 title: Document authentication architecture
 skill: adr-documentation          # References ~/.claude/skills/adr-documentation/
 skill_args: "authentication flow"
@@ -784,10 +790,10 @@ Skills can define task templates for standardized task creation:
 ```
 ~/.claude/skills/adr-documentation/
 ├── SKILLS.md
-└── task-template.yaml            # Template for ADR tasks
+└── job-template.yaml            # Template for ADR jobs
 ```
 
-**task-template.yaml:**
+**job-template.yaml:**
 ```yaml
 # Template variables: {{topic}}, {{context}}
 priority: medium
@@ -814,13 +820,13 @@ create-task --template adr-documentation \
 
 ### ~~Swarm Commands~~ (Implemented)
 
-The `swarm-task` CLI now provides all task management commands:
+The `swarm-job` CLI now provides all task management commands:
 
 ```bash
-swarm-task new "title" [-p priority] [-c complexity] [-D depends]
-swarm-task claim [task-id] [--dry-run]
-swarm-task complete <task-id> [-r result]
-swarm-task list [pending|active|done|all]
+swarm-job new "title" [-p priority] [-c complexity] [-D depends]
+swarm-job claim [job-id] [--dry-run]
+swarm-job complete <job-id> [-r result]
+swarm-job list [pending|active|done|all]
 ```
 
 The `swarm-watcher` daemon provides queue monitoring and notifications:
@@ -829,7 +835,7 @@ The `swarm-watcher` daemon provides queue monitoring and notifications:
 swarm-watcher [-i interval]
 ```
 
-See [Task Management with swarm-task](#task-management-with-swarm-task) and [Swarm Watcher Daemon](#swarm-watcher-daemon) for details.
+See [Job Management with swarm-job](#job-management-with-swarm-job) and [Swarm Watcher Daemon](#swarm-watcher-daemon) for details.
 
 ### Agent Registry
 
@@ -849,7 +855,7 @@ id: agent-1
 client: claude
 model: opus
 status: active                    # active, idle, offline
-current_task: task-1737372800
+current_task: job-1737372800
 last_heartbeat: 2025-01-20T10:45:00Z
 session_start: 2025-01-20T09:00:00Z
 tasks_completed: 3
@@ -868,8 +874,8 @@ specializations:                  # From profile or learned
 
 | Enhancement | Effort | Impact | Status |
 |-------------|--------|--------|--------|
-| Swarm Commands | Low | High | **Done** (swarm-task, swarm-watcher) |
-| Task-Skill Binding | Low | Medium | Planned |
+| Swarm Commands | Low | High | **Done** (swarm-job, swarm-watcher) |
+| Job-Skill Binding | Low | Medium | Planned |
 | Project Skills | Medium | High | Planned |
 | Task Templates | Medium | Medium | Planned |
 | Agent Profiles | Medium | Medium | Planned |
