@@ -266,7 +266,260 @@ Both are valuable findings. The first prevents false positives from reaching dec
 
 ---
 
-## Part VI: The Synthesis
+## Part VI: The Limits of Warrant — Structure vs Behavior
+
+### The Testing Question
+
+A natural objection arises: "Why not use unit tests as warrants? If the tests pass, isn't that deterministic proof?"
+
+No. And understanding why illuminates something fundamental about the nature of software knowledge.
+
+Unit tests verify *behavior* against *expectations*. They sample the infinite input space — never exhaustively. They're assertions about what code *should do*, not what it *is*. A test suite that passes tells you "the code behaves as expected for these specific cases." A graph query tells you "these 47 call sites exist." The first is verification of expectation; the second is ground truth about structure.
+
+The epistemological gap is unbridgeable: tests operate in the domain of behavior, which is infinite. Code analyzers operate in the domain of structure, which is finite.
+
+### The Finite-Infinite Divide
+
+A codebase has a **finite** number of:
+- Call sites (enumerable)
+- Data flows (traceable)
+- Dependencies (graphable)
+- Symbols (parseable)
+- Files, classes, methods (countable)
+
+But it has an **infinite** number of:
+- Possible inputs
+- Execution paths through time
+- State combinations
+- Runtime behaviors
+
+You cannot enumerate infinity. Testing is always sampling. This isn't a limitation of current tools — it's a mathematical certainty. The halting problem proved this in 1936: you cannot, in general, determine what a program will do without running it on all possible inputs.
+
+Structure is knowable completely. Behavior is knowable only through sampling or formal proof.
+
+### Strengthening Behavioral Warrants
+
+If testing cannot provide deterministic warrant, can it provide *stronger* inductive warrant? Yes. The hierarchy:
+
+**Code coverage** — deterministic measurement, weak behavioral warrant:
+- 100% line coverage = "every line executed at least once"
+- But execution ≠ correctness
+- The line `if (balance > 0)` executes whether you test with `balance=100` or `balance=-50`
+- Coverage tells you *what ran*, not *what's right*
+
+**Mutation testing** — stronger inductive warrant:
+- "Did tests catch when I changed `>` to `>=`?"
+- High mutation score = tests are *sensitive* to changes
+- Proves tests aren't trivially passing
+- But still sampling from infinite mutation space
+- A 95% mutation score means "we tried N mutations and caught 95%" — not "all possible mutations would be caught"
+
+**Property-based testing** (QuickCheck, Hypothesis) — stronger still:
+- Generate thousands of random inputs
+- Test invariants rather than specific cases
+- "For all integers x and y, `add(x, y) == add(y, x)`"
+- Still inductive — couldn't find counterexample in N tries
+- But much stronger than example-based tests
+
+The difference is profound. Consider testing a function that sorts a list:
+
+```python
+# Example-based testing (weak inductive)
+def test_sort_specific_cases():
+    assert sort([3, 1, 2]) == [1, 2, 3]
+    assert sort([]) == []
+    assert sort([1]) == [1]
+    assert sort([1, 1, 1]) == [1, 1, 1]
+    # We tested 4 cases. What about the infinite others?
+
+# Property-based testing (strong inductive)
+from hypothesis import given
+import hypothesis.strategies as st
+
+@given(st.lists(st.integers()))
+def test_sort_properties(lst):
+    result = sort(lst)
+    # Property 1: Output has same length as input
+    assert len(result) == len(lst)
+    # Property 2: Output is ordered
+    assert all(result[i] <= result[i+1] for i in range(len(result)-1))
+    # Property 3: Output is a permutation of input
+    assert sorted(result) == sorted(lst)
+    # Hypothesis generates 100+ random lists automatically
+```
+
+The example-based test verifies 4 specific inputs. The property-based test verifies *properties that must hold for all inputs*, then generates hundreds of random inputs to hunt for violations. If Hypothesis finds a counterexample, it even shrinks it to the minimal failing case.
+
+This is still inductive — we haven't proven the properties hold for *all* lists, just that we couldn't find a counterexample. But it's dramatically stronger than hand-picked examples, which tend to reflect the developer's assumptions (and blind spots).
+
+**Formal verification** — the deductive endpoint:
+
+What if we want to *prove* the sort is correct for all possible inputs, not just the ones we tested? This requires formal methods. Here's the same example in Dafny, a verification-aware language:
+
+```dafny
+// Formal specification: what does "sorted" mean?
+predicate Sorted(s: seq<int>)
+{
+  forall i, j :: 0 <= i < j < |s| ==> s[i] <= s[j]
+}
+
+// Formal specification: s2 is a permutation of s1
+predicate Permutation(s1: seq<int>, s2: seq<int>)
+{
+  multiset(s1) == multiset(s2)
+}
+
+// The method with its contract
+method Sort(a: array<int>) returns (sorted: array<int>)
+  ensures Sorted(sorted[..])                    // Output is sorted
+  ensures Permutation(a[..], sorted[..])        // Output is permutation of input
+  ensures |sorted[..]| == |a[..]|               // Length preserved
+{
+  // ... implementation here ...
+  // Dafny's verifier PROVES these properties hold
+  // for ALL possible input arrays, not just tested ones
+}
+```
+
+The Dafny verifier uses SMT solvers (Z3) to mathematically prove that `Sort` satisfies its specification for *every possible input* — not billions of random samples, but the infinite set of all integer arrays. If the proof fails, Dafny shows exactly which case breaks the contract.
+
+The warrant progression for the same claim ("this function correctly sorts"):
+
+| Approach | Inputs Checked | Warrant Type | Confidence |
+|----------|---------------|--------------|------------|
+| Example-based tests | 4 hand-picked | Weak inductive | Low |
+| Property-based tests | ~1000 random | Strong inductive | Medium |
+| Formal verification | ∞ (all possible) | Deductive | Complete |
+
+The cost progression is inverse: example tests take minutes, property tests take hours to write well, formal verification takes days or weeks and requires specialized expertise. The enterprise chooses based on risk: payment processing might justify formal verification; internal tooling might not.
+
+### The Deductive Path: Formal Methods
+
+What *would* make behavioral claims deterministic? Formal methods — techniques that prove properties mathematically rather than testing them empirically.
+
+| Technique | What It Proves | Practical Limitation |
+|-----------|---------------|---------------------|
+| **Symbolic execution** | "This path is reachable with these constraints" | Limited scale, path explosion |
+| **Model checking** | "This property holds for all reachable states" | State space explosion |
+| **Theorem proving** (Coq, Isabelle, Lean) | "This implementation satisfies this specification" | Extremely expensive, requires expertise |
+| **Design by Contract** (SPARK Ada, Eiffel) | "Pre/postconditions hold at runtime" | Requires discipline, partial coverage |
+| **Dependent types** (Idris, Agda) | "This program is correct by construction" | Steep learning curve, limited adoption |
+
+Formal verification turns behavioral claims deductive — but at enormous cost. NASA uses it for spacecraft. Financial institutions use it for smart contracts. Most enterprises cannot afford it for general codebases.
+
+The pragmatist asks: when is the cost justified?
+
+### The Warrant Strength Hierarchy
+
+Not all warrants are equal. The enterprise must choose warrant level based on risk tolerance and cost constraints.
+
+```
+WARRANT STRENGTH
+──────────────────────────────────────────────────────────────────
+                              │ Complete │ Practical │ Cost
+──────────────────────────────────────────────────────────────────
+Structural analysis (graphs)  │    ✓     │     ✓     │  Low
+Formal verification           │    ✓     │     ✗     │  Very High
+Mutation + coverage combined  │    ✗     │     ✓     │  Medium
+Property-based testing        │    ✗     │     ✓     │  Medium
+Unit tests alone              │    ✗     │     ✓     │  Low
+LLM assertion                 │    ✗     │     ✓     │  Very Low
+──────────────────────────────────────────────────────────────────
+```
+
+Or visualized as warrant strength:
+
+```
+WARRANT STRENGTH SPECTRUM
+────────────────────────────────────────────────────────────────
+Structural analysis     │████████████████████│  Deductive (complete)
+Formal verification     │████████████████████│  Deductive (expensive)
+Mutation + coverage     │████████████████░░░░│  Strong inductive
+Property-based tests    │██████████████░░░░░░│  Strong inductive
+Unit tests alone        │████████░░░░░░░░░░░░│  Weak inductive
+LLM assertion           │████░░░░░░░░░░░░░░░░│  Abductive (hypothesis)
+────────────────────────────────────────────────────────────────
+```
+
+### Matching Warrant to Claim Type
+
+The insight: **different claims require different warrant types**.
+
+| Claim Type | Example | Appropriate Warrant |
+|------------|---------|---------------------|
+| **Structural** | "Service A calls Service B" | Graph analysis (deductive) |
+| **Dependency** | "Module X depends on library Y" | Dependency analysis (deductive) |
+| **Data flow** | "PII flows from input to external API" | Taint analysis (deductive) |
+| **Behavioral** | "This function handles edge cases correctly" | Mutation testing (strong inductive) |
+| **Correctness** | "This algorithm produces correct results" | Formal proof OR extensive testing |
+| **Semantic** | "This module implements payment processing" | LLM + human review (abductive + expertise) |
+
+The enterprise transformation use cases from Part IV map to this framework:
+
+- **Code rationalization** ("Is this dead code?") — Structural warrant (graph shows no incoming calls)
+- **Cloud transformation** ("Is this stateless?") — Data flow warrant (no persistent state detected)
+- **Compliance** ("Does PII leave the EU?") — Data flow warrant (trace shows external endpoint)
+- **Architecture** ("Is this a good extraction boundary?") — Structural + behavioral (coupling metrics + change coupling from git)
+
+### Dewey Revisited: Inquiry as Process
+
+This hierarchy illuminates Dewey's concept of warranted assertibility more deeply. Dewey never claimed all warrants are equal. He emphasized that warrant comes through **inquiry** — the systematic process of testing beliefs against evidence.
+
+The strength of a warrant depends on:
+1. **The rigor of the inquiry** — How thoroughly was the belief tested?
+2. **The completeness of the evidence** — Does it cover all cases or sample them?
+3. **The relevance to action** — Does the warrant support the decision being made?
+
+A structural claim warranted by graph analysis has undergone complete inquiry — every call site was examined. A behavioral claim warranted by unit tests has undergone partial inquiry — some inputs were tested. Both are warranted, but differently.
+
+The enterprise architect choosing to extract a microservice needs structural warrant (coupling metrics) more than behavioral warrant (test coverage). The compliance officer certifying data handling needs data flow warrant (PII tracing) more than semantic warrant (LLM interpretation).
+
+**Matching warrant type to decision type is the art of warranted intelligence.**
+
+### The Pragmatic Synthesis
+
+For enterprise transformation, the practical guidance:
+
+1. **Structural claims** → Use graph analysis. It's deterministic, complete, and relatively cheap. This is your foundation.
+
+2. **Behavioral claims** → Use mutation testing + coverage thresholds. Aim for >80% mutation score on critical paths. Accept that this is strong inductive, not deductive.
+
+3. **Semantic claims** → Use LLM hypotheses + human expert review. The LLM surfaces what to look at; the human provides domain warrant.
+
+4. **High-risk behavioral claims** → Consider formal methods for critical components. Payment processing, security boundaries, safety-critical code.
+
+5. **Accept the hierarchy** — Don't treat all warrants as equal. A graph-based structural finding is stronger than a high-coverage behavioral finding, which is stronger than an LLM assertion. Document the warrant type alongside the finding.
+
+The warranted intelligence system should track not just *whether* an assertion is warranted, but *how strongly* and *by what method*:
+
+```json
+{
+  "assertion": "PaymentService is stateless and cloud-ready",
+  "warrants": [
+    {
+      "type": "structural",
+      "method": "data_flow_analysis", 
+      "strength": "deductive",
+      "result": "no persistent state variables detected"
+    },
+    {
+      "type": "behavioral",
+      "method": "mutation_testing",
+      "strength": "strong_inductive", 
+      "result": "94% mutation score on state-related tests"
+    }
+  ],
+  "combined_confidence": "high",
+  "suitable_for": ["technical_decision", "architecture_review"],
+  "not_sufficient_for": ["formal_certification", "safety_critical"]
+}
+```
+
+This is epistemological honesty: we know what we know, we know how we know it, and we know the limits of that knowing.
+
+---
+
+## Part VII: The Synthesis
 
 ### What Changes
 
@@ -278,8 +531,12 @@ The warranted intelligence paradigm represents a genuine shift in how enterprise
 | LLMs are unreliable | LLMs are *unwarranted* (different claim) |
 | Code analysis is complete | Code analysis is *foundational* |
 | AI replaces analysts | AI hypothesizes, analysts verify, tools warrant |
+| All evidence is equal | Warrant strength varies by method |
+| Testing proves correctness | Testing strengthens inductive warrant |
 
 The shift from "unreliable" to "unwarranted" is crucial. Unreliable suggests random failure. Unwarranted suggests systematic incompleteness — the output is good but needs grounding. That's a solvable problem.
+
+The recognition that warrant strength varies is equally important. Not all verification is equal. Structural analysis provides complete, deductive warrant. Behavioral testing provides strong but incomplete inductive warrant. LLM assertions provide abductive hypotheses. Each has its place; none substitutes for the others.
 
 ### The Enterprise Value Proposition
 
@@ -299,7 +556,15 @@ We end where we began, but with fuller understanding. Peirce didn't just give us
 
 LLMs do (1) extraordinarily well. They form hypotheses about code at a scale and speed no human team can match. Code analyzers enable (2) and (3) — they derive the queries that would confirm or deny the hypothesis, and they execute those queries against the actual codebase.
 
-We're not replacing the scientific method with AI. We're *implementing* it, at scale, for the first time in the history of software engineering.
+But Peirce's triad reveals something deeper when we examine warrant strength:
+
+- **Structural analysis** completes the cycle with **deduction** — we derive what must be true and verify it completely
+- **Behavioral testing** completes it with **induction** — we sample and generalize, accepting incompleteness
+- **Formal methods** achieve **deductive warrant for behavior** — but at costs most cannot bear
+
+The enterprise choosing its warrant strategy is choosing where to invest in each leg of Peirce's triad. More investment in deduction (formal methods) yields stronger warrant but higher cost. More investment in induction (testing) yields weaker warrant but broader coverage. The art is matching investment to risk.
+
+We're not replacing the scientific method with AI. We're *implementing* it, at scale, for the first time in the history of software engineering. And we're doing so with clear-eyed recognition that different implementations of the method yield different strengths of warrant.
 
 ---
 
@@ -315,13 +580,23 @@ Not directly. Not as raw output. But we can **warrant** it.
 
 The code analyzer isn't competing with the LLM. It's not a replacement, not an alternative, not a fallback. It's the epistemological foundation that transforms probabilistic inference into actionable intelligence. It provides what Rorty said we lack and Dewey said we need: a basis for warranted belief.
 
+But warranting isn't binary. We've seen that:
+
+- **Structural warrants** are deductive and complete — the graph contains all the facts
+- **Behavioral warrants** are inductive and partial — tests sample the infinite space of execution  
+- **Semantic warrants** are abductive and human-mediated — experts interpret what the code means
+
+The mature enterprise doesn't ask "Is this warranted?" but "How strongly is this warranted, and is that strength sufficient for this decision?"
+
+A $50 million migration decision needs stronger warrant than a refactoring suggestion. A compliance certification needs different warrant than an architecture discussion. The warranted intelligence system should make these distinctions explicit, traceable, and auditable.
+
 Peirce gave us the guess — abduction, the creative leap, the only logical operation that introduces new ideas.
 
 Dewey gave us the warrant — the process of inquiry that transforms assertion into justified belief.
 
-The synthesis gives us **warranted intelligence**: AI reasoning that enterprises can actually use, because it's been tested, verified, and grounded in deterministic truth.
+The synthesis gives us **warranted intelligence**: AI reasoning that enterprises can actually use, because it's been tested, verified, and grounded in evidence whose strength we understand and can defend.
 
-That's not a limitation of AI. That's AI, properly deployed.
+That's not a limitation of AI. That's AI, properly deployed — with epistemological honesty about what we know, how we know it, and how strongly we can claim to know it.
 
 ---
 
@@ -336,6 +611,11 @@ That's not a limitation of AI. That's AI, properly deployed.
 - Ryle, G. — *The Concept of Mind* (1949), knowing-how vs knowing-that
 - Gadamer, H-G. — *Truth and Method* (1960), hermeneutics
 - Rorty, R. — *Philosophy and the Mirror of Nature* (1979)
+- Turing, A. — "On Computable Numbers" (1936), the halting problem
+- DeMillo, R., Lipton, R., Perlis, A. — "Social Processes and Proofs of Theorems and Programs" (1979)
+- Dijkstra, E. — "Program Testing Can Be Used To Show The Presence Of Bugs, But Never To Show Their Absence"
+- Claessen, K., Hughes, J. — "QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs" (2000)
+- Jia, Y., Harman, M. — "An Analysis and Survey of the Development of Mutation Testing" (2011)
 
 ---
 
