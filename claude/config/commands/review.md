@@ -10,79 +10,128 @@ Review codebase, documentation, and issues to identify gaps and verify completen
 /review <path>       Review specific file or directory
 ```
 
+## Agent Strategy
+
+This skill delegates heavy scanning to agents, then synthesizes results interactively.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  /review                                                    │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Explore      │  │ Explore      │  │ Bash         │      │
+│  │ Agent        │  │ Agent        │  │ Agent        │      │
+│  │              │  │              │  │              │      │
+│  │ Code scan    │  │ Doc scan     │  │ GH issues    │      │
+│  │ TODOs, gaps  │  │ Stale docs   │  │ Stale/dupe   │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+│         │                 │                 │               │
+│         └────────────┬────┴────────────────┘               │
+│                      ▼                                      │
+│              Synthesize Report                              │
+│              (main conversation)                            │
+│                      │                                      │
+│                      ▼                                      │
+│              Offer Actions                                  │
+│              (interactive)                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Process
 
-### 1. Code Review
+### 1. Spawn Agents (parallel)
 
-Scan for incomplete work:
+Launch these agents in parallel to gather data:
 
-```bash
-# Find TODOs, FIXMEs, HACKs
-grep -rn "TODO\|FIXME\|HACK\|XXX" src/ --include="*.py" --include="*.ts" --include="*.js"
+**Agent 1: Code Quality Scan**
+```
+Task tool:
+  subagent_type: Explore
+  prompt: |
+    Scan the codebase for incomplete work and code quality issues:
+
+    1. Find all TODO, FIXME, HACK, XXX comments
+    2. Find empty function bodies (pass, ..., NotImplementedError)
+    3. Find commented-out code blocks (3+ consecutive commented lines)
+    4. Find bare except clauses or empty catch blocks
+    5. Find unused imports
+
+    For each finding, report:
+    - File path and line number
+    - The marker or issue type
+    - Surrounding context (1 line before/after)
+
+    Group by severity: errors > warnings > notes
 ```
 
-Check for:
-- [ ] TODO/FIXME comments (unfinished work)
-- [ ] HACK/XXX markers (technical debt)
-- [ ] Empty function bodies or `pass`/`...` placeholders
-- [ ] Commented-out code blocks
-- [ ] Missing error handling (bare `except:`, empty `catch`)
-- [ ] Dead code (unused imports, unreachable branches)
+**Agent 2: Test Coverage Scan**
+```
+Task tool:
+  subagent_type: Explore
+  prompt: |
+    Analyze test coverage gaps:
 
-### 2. Test Coverage
+    1. List all source modules in src/
+    2. List all test files in tests/
+    3. Identify modules without corresponding test files
+    4. Find skipped tests (@skip, pytest.mark.skip)
+    5. Find tests with TODO markers
 
-Analyze test health:
-
-- [ ] Functions/classes without corresponding tests
-- [ ] Test files that import non-existent modules
-- [ ] Skipped tests (`@skip`, `pytest.mark.skip`)
-- [ ] Tests with `# TODO` markers
-
-```bash
-# Check for skipped tests
-grep -rn "@skip\|pytest.mark.skip\|\.skip(" tests/
+    Report:
+    - Modules missing tests
+    - Skipped test count and reasons
+    - Test files with TODOs
 ```
 
-### 3. Documentation Review
+**Agent 3: Documentation Scan**
+```
+Task tool:
+  subagent_type: Explore
+  prompt: |
+    Check documentation freshness:
 
-Check docs match reality:
+    1. Compare README features list with actual exports
+    2. Check if CHANGELOG has entries for recent commits
+    3. Find broken internal links in markdown files
+    4. Identify public functions without docstrings
 
-- [ ] README features vs actual implementation
-- [ ] API docs vs function signatures
-- [ ] CHANGELOG vs recent commits
-- [ ] Outdated examples (wrong imports, deprecated APIs)
-- [ ] Broken internal links
-
-```bash
-# Find documented but potentially missing features
-grep -E "^##|^\*\*" README.md | head -20
+    Report discrepancies with file:line references.
 ```
 
-### 4. GitHub Issues Health
+**Agent 4: GitHub Issues Health** (if reviewing issues)
+```
+Task tool:
+  subagent_type: Bash
+  prompt: |
+    Analyze GitHub issues health:
 
-```bash
-# List open issues
-gh issue list --state open --limit 50
+    1. Run: gh issue list --state open --json number,title,labels,updatedAt,assignees
+    2. Identify stale issues (no update in 30+ days)
+    3. Look for potential duplicates (similar titles)
+    4. Cross-reference with recent closed PRs to find potentially fixed issues
 
-# Find stale issues (no activity in 30+ days)
-gh issue list --state open --json number,title,updatedAt
+    Output a structured summary.
 ```
 
-Check for:
-- [ ] Stale issues (no activity, possibly abandoned)
-- [ ] Duplicate issues (similar titles/descriptions)
-- [ ] Issues already fixed (check if referenced in merged PRs)
-- [ ] Issues missing labels or assignees
-- [ ] Closed issues that should be reopened
+### 2. Synthesize Results
 
-### 5. Cross-Reference
+Once agents return, combine their findings into a unified report:
 
-Connect the dots:
+- Deduplicate findings
+- Prioritize by severity
+- Group related items
+- Calculate summary statistics
 
-- [ ] TODOs that reference non-existent issues
-- [ ] Issues that reference deleted code
-- [ ] Plans in `docs/plans/` with no corresponding issue
-- [ ] Completed work not reflected in CHANGELOG
+### 3. Present Report
+
+Show the consolidated report (see Output Format below).
+
+### 4. Offer Actions (Interactive)
+
+Ask user which actions to take:
+- Create issues for gaps?
+- Close stale issues?
+- Queue work for swarm?
 
 ## Output Format
 

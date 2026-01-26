@@ -12,9 +12,12 @@ Slash commands for software engineering workflows. These work in both single-age
 | `/plan` | Design implementation | docs/plans/*.md |
 | `/plan adr` | Architectural decision | docs/adr/*.md |
 | `/spike` | Experimental exploration | tests/spikes/* |
-| `/swarm` | Manage task queue | Queue operations |
+| `/swarm` | Manage job queue | Queue operations |
+| `/check` | Run code quality checks | Lint report |
+| `/changelog` | Generate CHANGELOG entries | CHANGELOG.md |
 | `/version` | Validate release readiness | Sync check |
 | `/commit` | Create git commit | Commit |
+| `/pr` | Create pull request | PR |
 | `/br` | Create feature branch | Branch |
 | `/purge` | Clean merged branches | Delete branches |
 
@@ -42,7 +45,14 @@ Slash commands for software engineering workflows. These work in both single-age
 │                      EXECUTION                              │
 │  /take #N         Implement issue directly                  │
 │  /take #N queue   Load issue to swarm queue                 │
-│  /swarm           Manage swarm task queue                   │
+│  /swarm           Manage swarm job queue                    │
+└─────────────────────────────────┬───────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      QUALITY                                │
+│  /check           Run linting, type checking, formatting    │
+│  /review code     Check for TODOs, code smells              │
 └─────────────────────────────────┬───────────────────────────┘
                                   │
                                   ▼
@@ -50,6 +60,8 @@ Slash commands for software engineering workflows. These work in both single-age
 │                      SHIPPING                               │
 │  /br              Create feature branch                     │
 │  /commit          Conventional commit                       │
+│  /pr              Create pull request                       │
+│  /changelog       Generate CHANGELOG entries                │
 │  /version         Validate sync, bump version               │
 │  /purge           Clean up merged branches                  │
 └─────────────────────────────────────────────────────────────┘
@@ -111,7 +123,7 @@ Take ownership of an issue and implement it.
 
 **Direct mode:** Research → Plan → Implement → PR
 
-**Queue mode:** Creates swarm task(s) with priority and complexity mapping from issue labels.
+**Queue mode:** Creates swarm job(s) with priority and complexity mapping from issue labels.
 
 ---
 
@@ -157,15 +169,56 @@ Spikes are throwaway — learnings get captured, code may be discarded.
 
 ### /swarm
 
-Manage the swarm task queue.
+Manage the swarm job queue.
 
 ```
-/swarm               Show queue status
-/swarm list          List pending/active/done tasks
-/swarm add <title>   Create new task
+/swarm               Show queue overview + pending jobs
+/swarm active        Show jobs currently being worked on
+/swarm done          Show recently completed jobs
+/swarm create <title> Create new job for the swarm
 ```
 
-See also: `swarm-task` CLI and `swarm-watcher` daemon.
+See also: `swarm-job` CLI and `swarm-watcher` daemon.
+
+---
+
+### /check
+
+Run code quality checks (linting, type checking, formatting).
+
+```
+/check               Run all checks
+/check lint          Run linter only (ruff)
+/check types         Run type checker only (mypy)
+/check format        Check formatting (ruff format --check)
+/check <file>        Check specific file or directory
+```
+
+**Detects project type** and runs appropriate tools:
+- Python: ruff, mypy, ruff format
+- Uses `uv run` when available
+- Falls back to Makefile targets if present
+
+**Reports** issues grouped by severity with auto-fix suggestions.
+
+---
+
+### /changelog
+
+Generate CHANGELOG entries from commits since last release.
+
+```
+/changelog           Generate entries for unreleased changes
+/changelog preview   Show what would be added (no file changes)
+/changelog <version> Generate entries for specific version
+```
+
+**Parses** conventional commit prefixes:
+- `feat:` → Added
+- `fix:` → Fixed
+- `BREAKING CHANGE:` → Breaking Changes
+
+**Ignores** internal commits: `chore:`, `test:`, `ci:`
 
 ---
 
@@ -175,11 +228,56 @@ Create a conventional commit from staged changes.
 
 ```
 /commit              Analyze staged changes, draft message
+/commit --amend      Amend previous commit (use carefully)
 ```
 
-**Format:** `<type>: <description>`
+**Format:** `type(scope): description`
 
-Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`
+**Types:** `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `style`
+
+**Detects:**
+- Breaking changes (adds `!` and footer)
+- Scope from file paths
+- Related issues
+
+**Multi-file guidance:** Suggests splitting unrelated changes.
+
+---
+
+### /pr
+
+Create, list, review, and manage pull requests.
+
+```
+/pr                  Create PR from current branch to main
+/pr draft            Create as draft PR
+/pr list             List open PRs with status
+/pr #123             Show details for specific PR
+/pr #123 review      Code review with agent
+/pr #123 checkout    Checkout PR branch locally
+/pr #123 continue    Checkout and continue working on PR
+/pr #123 merge       Merge PR and clean up branches
+```
+
+**Create mode** generates:
+- Title from branch name/commits
+- Summary of all commits (not just latest)
+- Related issues (auto-close syntax)
+- Testing checklist
+
+**Review mode** uses `code-reviewer` agent to analyze:
+- Bugs, security issues, code quality
+- Test coverage and project conventions
+- Offers to post comments or approve/request changes
+
+**Continue mode** uses `Explore` agent to understand PR context and remaining work.
+
+**Merge mode** handles the full merge workflow:
+- Pre-merge checks (approval, CI, conflicts)
+- Merge with squash/merge/rebase options
+- Delete remote branch (via `--delete-branch`)
+- Delete local branch and switch to main
+- Prune stale remote refs
 
 ---
 
@@ -188,8 +286,18 @@ Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`
 Create a feature branch following naming conventions.
 
 ```
-/br                  Interactive branch creation
-/br <name>           Create branch with name
+/br                           Interactive branch creation
+/br <description>             Create branch from description
+/br feat <description>        Shorthand: create feature branch
+/br fix <description>         Shorthand: create fix branch
+/br fix #123 <description>    Include issue number
+```
+
+**Shorthand examples:**
+```
+/br feat add user auth        → feat/add-user-auth
+/br fix #42 token expiry      → fix/42-token-expiry
+/br docs update readme        → docs/update-readme
 ```
 
 **Conventions:**
@@ -198,6 +306,7 @@ Create a feature branch following naming conventions.
 - `refactor/<name>` — Code restructuring
 - `docs/<name>` — Documentation
 - `chore/<name>` — Maintenance
+- `spike/<name>` — Experimental
 
 ---
 
@@ -228,11 +337,16 @@ Validate version consistency and release readiness.
 Clean up merged git branches.
 
 ```
-/purge               Remove merged local branches
-/purge --remote      Also remove merged remote branches
+/purge               Clean both local and remote merged branches
+/purge local         Clean only local merged branches
+/purge remote        Clean only remote merged branches
+/purge --dry-run     Show what would be deleted without deleting
 ```
 
-Safe by default — only removes branches merged into main.
+**Safe by default:**
+- Only removes branches merged into main
+- Never deletes main, master, develop, or current branch
+- Asks for confirmation before deletion
 
 ## Single-Agent vs Multi-Agent
 
@@ -241,27 +355,73 @@ Safe by default — only removes branches merged into main.
 | Single | All except `/swarm` | `/take` implements directly |
 | Swarm | All | `/take queue` loads work for agents |
 
-In swarm mode, the task queue coordinates work:
+In swarm mode, the job queue coordinates work:
 ```
-/take #123 queue  →  swarm-task claim  →  work  →  swarm-task complete
+/take #123 queue  →  swarm-job claim  →  work  →  swarm-job complete
 ```
+
+## Agent Delegation
+
+Some skills delegate heavy work to specialized agents while keeping decisions interactive:
+
+| Skill | Agent Usage | Pattern |
+|-------|-------------|---------|
+| `/review` | Explore agents (parallel) | Scan code, tests, docs → synthesize report |
+| `/take` | Explore agent | Research codebase → validate → plan → implement |
+| `/check` | Bash agent (background) | Run all linters → report → offer fixes |
+| `/pr #N review` | code-reviewer agent | Analyze PR → report findings → offer actions |
+| `/pr #N continue` | Explore agent | Understand PR context → show remaining work |
+
+### Why Delegate?
+
+**Agents handle:**
+- Codebase exploration (finding files, patterns)
+- Running commands (linting, tests)
+- Gathering data (issue health, coverage gaps)
+
+**Main conversation handles:**
+- Judgment calls (is this issue valid?)
+- User interaction (confirm before acting)
+- Synthesis (combining agent results into reports)
+
+### Example: /review
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Spawn in parallel:                                         │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
+│  │ Explore    │  │ Explore    │  │ Bash       │            │
+│  │ Code scan  │  │ Doc scan   │  │ GH issues  │            │
+│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘            │
+│        └───────────────┼───────────────┘                    │
+│                        ▼                                    │
+│              Synthesize + Present                           │
+│                        ▼                                    │
+│              Offer Actions (interactive)                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+This pattern keeps the skill responsive while offloading computation.
 
 ## Adding Custom Commands
 
-Commands are markdown files in `~/.dotfiles/claude/config/commands/`:
+Commands are markdown files in `~/.claude/commands/`:
 
 ```
-~/.dotfiles/claude/config/commands/
-├── review.md
+~/.claude/commands/
+├── br.md
+├── changelog.md
+├── check.md
+├── commit.md
 ├── issue.md
-├── take.md
 ├── plan.md
+├── pr.md
+├── purge.md
+├── review.md
 ├── spike.md
 ├── swarm.md
-├── version.md
-├── commit.md
-├── br.md
-└── purge.md
+├── take.md
+└── version.md
 ```
 
 Each file defines:

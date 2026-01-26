@@ -8,6 +8,39 @@ Take ownership of a GitHub issue and begin implementation.
 /take             Show suggested issues to take
 ```
 
+## Agent Strategy
+
+The research phase is delegated to an Explore agent, while judgment and implementation stay interactive.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  /take #123                                                 │
+│                                                             │
+│  1. Fetch issue (gh issue view)                             │
+│                     │                                       │
+│                     ▼                                       │
+│  ┌──────────────────────────────────┐                       │
+│  │ Explore Agent                    │                       │
+│  │                                  │                       │
+│  │ - Find relevant code             │                       │
+│  │ - Understand patterns            │                       │
+│  │ - Identify files to change       │                       │
+│  │ - Check for similar past fixes   │                       │
+│  └──────────────┬───────────────────┘                       │
+│                 │                                           │
+│                 ▼                                           │
+│  2. Validate issue (interactive)                            │
+│     "Does this make sense?"                                 │
+│                 │                                           │
+│                 ▼                                           │
+│  3. Present plan (interactive)                              │
+│     "Here's my approach..."                                 │
+│                 │                                           │
+│                 ▼                                           │
+│  4. Implement (main conversation)                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Modes
 
 ### Direct Mode (default)
@@ -41,14 +74,49 @@ swarm-job new "Issue title" \
 
 ## Process (Direct Mode)
 
-### 1. Understand the Issue
+### 1. Fetch Issue
 
-- Fetch full issue details with `gh issue view #N`
-- Read all comments and linked discussions
-- **Critical check**: Does this issue make sense?
-  - Is the bug real? Can it be reproduced?
-  - Is the feature well-defined? Are the requirements clear?
-  - Are there unanswered questions in the comments?
+```bash
+gh issue view #N
+```
+
+Read the full issue including comments and linked discussions.
+
+### 2. Research via Agent
+
+Spawn an Explore agent to understand the codebase context:
+
+```
+Task tool:
+  subagent_type: Explore
+  prompt: |
+    Research context for implementing GitHub issue #N:
+
+    Issue summary: <paste issue title and key details>
+
+    Find:
+    1. Files most relevant to this issue (by name, imports, functionality)
+    2. Existing patterns for similar features/fixes in the codebase
+    3. Related tests that might need updates
+    4. Any prior attempts or related PRs (check git log for keywords)
+
+    For bugs: Look for where the problematic behavior originates
+    For features: Look for where similar features are implemented
+
+    Output:
+    - Key files to examine (with brief explanation why)
+    - Relevant patterns to follow
+    - Suggested approach based on codebase conventions
+```
+
+### 3. Validate Issue (Interactive)
+
+With research in hand, make a judgment call:
+
+**Critical check**: Does this issue make sense?
+- Is the bug real? Can it be reproduced?
+- Is the feature well-defined? Are the requirements clear?
+- Are there unanswered questions in the comments?
 
 If the issue is unclear or flawed, **stop and report back**:
 > "This issue seems problematic because [X]. Should I:
@@ -56,14 +124,10 @@ If the issue is unclear or flawed, **stop and report back**:
 > b) Close it with an explanation
 > c) Proceed with my interpretation: [describe]"
 
-### 2. Research & Plan
+### 4. Present Plan (Interactive)
 
-- Search codebase for relevant code
-- Understand existing patterns and conventions
-- Identify files that need changes
-- Consider edge cases and tests needed
+Based on agent research, present a brief implementation plan:
 
-Present a brief implementation plan:
 ```
 Files to modify:
 - src/foo.ts - Add new handler
@@ -71,16 +135,20 @@ Files to modify:
 
 Approach: [1-2 sentences]
 Estimated complexity: [trivial/small/medium/large]
+
+Based on: [reference similar patterns found by agent]
 ```
 
-### 3. Implement
+Wait for user approval before proceeding.
+
+### 5. Implement
 
 - Create a feature branch: `git checkout -b fix/#123-short-description` or `feat/#123-...`
 - Make changes following project conventions
 - Write or update tests
-- Ensure checks pass
+- Ensure checks pass (consider `/check` to verify)
 
-### 4. Prepare for Review
+### 6. Prepare for Review
 
 - Stage changes and create commit following project conventions
 - Reference the issue: `fix: resolve hover bug in sidebar (#123)`
@@ -97,17 +165,25 @@ gh issue view #N
 - Confirm the issue is actionable (not stale, not blocked)
 - Check for linked PRs (maybe already in progress)
 
-### 2. Assess Complexity
+### 2. Research via Agent (optional for complex issues)
 
-Estimate based on:
-- Number of files likely affected
-- Architectural impact
-- Testing requirements
-- Dependencies on other work
+For complex issues, spawn an Explore agent first to inform task breakdown:
 
-### 3. Create Swarm Task(s)
+```
+Task tool:
+  subagent_type: Explore
+  prompt: |
+    Analyze issue #N for task decomposition:
 
-For simple issues — one task:
+    1. What distinct pieces of work does this require?
+    2. What are the dependencies between them?
+    3. Which parts could be parallelized?
+    4. Estimate complexity of each part (simple/moderate/complex)
+```
+
+### 3. Create Swarm Job(s)
+
+For simple issues — one job:
 ```bash
 swarm-job new "Issue title" -p medium -c moderate \
   -d "From #123: <brief description>"
@@ -140,6 +216,8 @@ The value of `/take` is not the code—it's the **judgment**:
 - Validating the issue makes sense
 - Choosing the right approach
 - Knowing the codebase well enough to do it idiomatically
+
+**Agents handle research. You handle decisions.**
 
 **Never take an issue without first confirming it's worth solving.**
 
