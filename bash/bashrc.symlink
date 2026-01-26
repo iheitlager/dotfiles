@@ -29,7 +29,8 @@ complete -cf sudo
 # (defined here too for non-login interactive shells)
 if ! declare -f _dotfiles_cached_source &>/dev/null; then
     _dotfiles_cached_source() {
-        local type="$1" cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
+        local type="$1"
+        local cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
         mkdir -p "$XDG_CACHE_HOME/dotfiles"
         
         # Regenerate cache if missing or dotfiles dir is newer

@@ -34,10 +34,6 @@ export HISTFILESIZE=1000
 export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
 export HISTTIMEFORMAT="[%DT%T] " 
 
-# PostgreSQL history - XDG compliant
-mkdir -p "$XDG_STATE_HOME/psql" 2>/dev/null
-export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
-
 # PATH setup - only done once in login shell
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
@@ -58,7 +54,8 @@ fi
 
 # Cache helper: regenerate file list only when dotfiles change
 _dotfiles_cached_source() {
-    local type="$1" cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
+    local type="$1"
+    local cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
     mkdir -p "$XDG_CACHE_HOME/dotfiles"
     
     # Regenerate cache if missing or dotfiles dir is newer
