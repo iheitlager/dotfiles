@@ -1,0 +1,16 @@
+# Ghostty terminal configuration
+# Symlink: ln -sf ~/.dotfiles/config/ghostty ~/.config/ghostty
+
+# Working directory inheritance
+working-directory = inherit
+window-inherit-working-directory = true
+
+# Font rendering
+font-thicken = true
+
+# Cursor
+cursor-style = bar
+
+# Workflow optimizations
+copy-on-select = true
+mouse-hide-while-typing = true

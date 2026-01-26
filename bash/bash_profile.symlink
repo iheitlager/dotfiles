@@ -11,19 +11,6 @@ export XDG_DATA_HOME=~/.local/share       # User data files
 export XDG_STATE_HOME=~/.local/state      # User state (logs, history)
 export XDG_CACHE_HOME=~/.cache            # Non-essential cached data
 
-# Ansible - XDG compliant
-export ANSIBLE_HOME="$XDG_CONFIG_HOME/ansible"
-export ANSIBLE_ASYNC_DIR="$XDG_CACHE_HOME/ansible"
-
-# Ruby Gem - XDG compliant
-export GEM_HOME="$XDG_DATA_HOME/gem"
-export GEM_SPEC_CACHE="$XDG_CACHE_HOME/gem"
-
-# NPM - XDG compliant
-export NPM_CONFIG_USERCONFIG="$XDG_CONFIG_HOME/npm/npmrc"
-export npm_config_cache="$XDG_CACHE_HOME/npm"
-mkdir -p "$XDG_CONFIG_HOME/npm" 2>/dev/null
-
 # Locale settings
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
@@ -35,12 +22,12 @@ export EDITOR=vim
 export MANPAGER="col -b | bat --plain --language=man"
 export CLICOLOR=1
 export LESS='-RFX --use-color'
-export LESSHISTFILE="$XDG_STATE_HOME/less/history"
 mkdir -p "$XDG_STATE_HOME/less" 2>/dev/null
+export LESSHISTFILE="$XDG_STATE_HOME/less/history"
 
 # Bash history - XDG compliant
-export HISTFILE="$XDG_STATE_HOME/bash/history"
 mkdir -p "$XDG_STATE_HOME/bash" 2>/dev/null
+export HISTFILE="$XDG_STATE_HOME/bash/history"
 export HISTCONTROL=ignoreboth:erasedups
 export HISTSIZE=5000
 export HISTFILESIZE=1000
@@ -48,8 +35,8 @@ export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
 export HISTTIMEFORMAT="[%DT%T] " 
 
 # PostgreSQL history - XDG compliant
-export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
 mkdir -p "$XDG_STATE_HOME/psql" 2>/dev/null
+export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
 
 # PATH setup - only done once in login shell
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
@@ -69,10 +56,24 @@ if [ -e "$XDG_CONFIG_HOME/secrets" ]; then
     source "$XDG_CONFIG_HOME/secrets"
 fi
 
-# Source environment variables from modules
-for env_file in $DOTFILES/**/bash_env; do
-    source "$env_file"
-done
+# Cache helper: regenerate file list only when dotfiles change
+_dotfiles_cached_source() {
+    local type="$1" cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
+    mkdir -p "$XDG_CACHE_HOME/dotfiles"
+    
+    # Regenerate cache if missing or dotfiles dir is newer
+    if [[ ! -f "$cache" ]] || [[ "$DOTFILES" -nt "$cache" ]]; then
+        printf '%s\n' $DOTFILES/*/"$type" > "$cache" 2>/dev/null
+    fi
+    
+    # Source each file from cache
+    while IFS= read -r f; do
+        [[ -f "$f" ]] && source "$f"
+    done < "$cache"
+}
+
+# Source environment variables from modules (cached)
+_dotfiles_cached_source bash_env
 
 # Source bashrc for interactive login shells
 if [[ $- == *i* ]]; then
