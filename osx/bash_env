@@ -3,3 +3,8 @@ export WORK_DIR=~/wc
 # ripgrep doesn't natively support XDG, point it to our config
 export RIPGREP_CONFIG_PATH="$XDG_CONFIG_HOME/ripgrep/config"
 export TLDR_CACHE_DIR="$XDG_CACHE_HOME/tldr"
+
+# PostgreSQL history - XDG compliant
+mkdir -p "$XDG_STATE_HOME/psql" 2>/dev/null
+export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
+

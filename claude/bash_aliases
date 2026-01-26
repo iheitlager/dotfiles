@@ -7,3 +7,53 @@ alias la4='launch-agents -n 4 start'
 alias la6='launch-agents -n 6 start'
 alias las='launch-agents stop'
 alias lac='launch-agents --force clean'
+
+
+# Send message to Claude agent pane
+# Usage: agent-say 1 "do something"
+agent-say() {
+    local pane=$1
+    shift
+    local msg="$*"
+    local session=$(tmux list-sessions -F "#{session_name}" | grep "^claude-" | head -1)
+    tmux send-keys -t "$session:agents.$pane" "$msg" Enter
+    tmux send-keys -t "$session:agents.$pane" Enter
+}
+
+# Unstick agent (just send Enter)
+agent-poke() {
+    local pane=$1
+    local session=$(tmux list-sessions -F "#{session_name}" | grep "^claude-" | head -1)
+    tmux send-keys -t "$session:agents.$pane" Enter
+    tmux send-keys -t "$session:agents.$pane" Enter
+}
+
+# Broadcast to all agents
+agent-broadcast() {
+    local msg="$*"
+    for i in 1 2 3 4; do
+        agent-say $i "$msg"
+        sleep 0.2
+    done
+}
+
+agent-yes() {
+    local pane=$1
+    local session=$(tmux list-sessions -F "#{session_name}" | grep "^claude-" | head -1)
+    tmux send-keys -t "$session:agents.$pane" Enter
+    tmux send-keys -t "$session:agents.$pane" Enter
+}
+
+agent-always() {
+    local pane=$1
+    local session=$(tmux list-sessions -F "#{session_name}" | grep "^claude-" | head -1)
+    tmux send-keys -t "$session:agents.$pane" Down Enter
+    tmux send-keys -t "$session:agents.$pane" Enter
+}
+
+agent-no() {
+    local pane=$1
+    local session=$(tmux list-sessions -F "#{session_name}" | grep "^claude-" | head -1)
+    tmux send-keys -t "$session:agents.$pane" Down Down Enter
+    tmux send-keys -t "$session:agents.$pane" Enter
+}
