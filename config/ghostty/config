@@ -14,3 +14,12 @@ cursor-style = bar
 # Workflow optimizations
 copy-on-select = true
 mouse-hide-while-typing = true
+
+# Allow Option key to work as Alt/Meta for terminal apps
+macos-option-as-alt = true
+
+# Unbind Alt+arrow so tmux can use them for pane switching
+keybind = alt+left=unbind
+keybind = alt+right=unbind
+keybind = alt+up=unbind
+keybind = alt+down=unbind
