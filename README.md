@@ -3,80 +3,108 @@
 ## dotfiles
 
 Your dotfiles are how you personalize your system. These are mine, specific for working on OSX.
-My workflow is all about Homebrew, bash, iTerm2, vscode and Claude. It is also very XDG inspired. 
+My workflow is all about Homebrew, bash, Ghostty, tmux, vscode and Claude. It is also very XDG inspired. 
 
-I believe everything should be versioned and scripted. Your laptop is your personal workstation for which you have to tweak your personal workflow. That way it can also become shareable between various workstations like your private and workmachines. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). Therefore, I once started with [holmans dotfiles](https://github.com/holman/dotfiles) and did create my own. Mine however, isvery much `bash` centric instead of `zsh`. Do not really know the value of another shell. 
+I believe everything should be versioned and scripted. Your laptop is your personal workstation for which you have to tweak your personal workflow. That way it can also become shareable between various workstations like your private and workmachines. As such I am a fan of the [dotfiles philosophy](https://dotfiles.github.io/). Therefore, I once started with [holmans dotfiles](https://github.com/holman/dotfiles) and did create my own. Mine however, is very much `bash` centric instead of `zsh`. Do not really know the value of another shell. 
 
 This dotfile system is basic scripting with some topical modularization, no fancy agent convergence based config management. Over the years the system became infected by the use of IA. Modern CLI tools (eza, bat, ripgrep, fd, delta, fzf) provide rich colored output and better defaults. And some lengthy scripts where nicely produced by Claude. Nowadays it also contains my agent system.
 
-## install
-
-Run this:
+## Quick Start
 
 ```sh
-# need to install homebrew on a clean laptop to make sure git is there
-$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-$ eval "$(/opt/homebrew/bin/brew shellenv)"    # make sure homebrew is known
+# Install homebrew on a clean Mac
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+eval "$(/opt/homebrew/bin/brew shellenv)"
 
-$ git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
-$ ~/.dotfiles/script/bootstrap                 # run this once to configure dotfile
-$ dot                                          # run anywhere to install or upgrade packages
+# Clone and bootstrap
+git clone git@github.com:iheitlager/dotfiles.git ~/.dotfiles
+~/.dotfiles/script/bootstrap    # Configure dotfiles (run once)
+dot                             # Install/upgrade packages
 ```
 
-There are two commands to run every now and then:
-* `dot` to upgrade homebrew
-* `vimstall` to do Vundle based vim packages
+## Key Commands
 
-You have to run your npm, pip, etc updates yourself
+| Command | Description |
+|---------|-------------|
+| `dot` | Install/upgrade Homebrew packages |
+| `dot install <topic>` | Run install.sh for a topic (vim, osx, tmux, etc.) |
+| `dot list` | Show available topics with install scripts |
+| `dot -h` | Show all dot options |
 
-## topical
+## Features
 
-Everything is configured and tweaked within `~/.dotfiles`. The actual dotfiles are symlinked from this folder during the bootstrap.
-This should remain on your system, and offers one place for versioning of your dotfiles, and for example allows .ssh to be excluded.
-Everything's built around topic areas. If you're adding a new area to your
-forked dotfiles — say, "Python" — you can simply add a `python` directory and put files in there. 
-The complete dotfiles system consists of install time and runtime parts, in total four parts:
+### Terminal Stack
+- **Ghostty** - GPU-accelerated terminal with Catppuccin colors
+- **tmux** - Terminal multiplexer with status bar, git info, session persistence
+- **bash** - Configured with modern completions and prompt
 
-1. create an XDG compliant .config structure
-1. symlinks to dotfiles into .config and .local
-2. topical extensions to be loaded by `.bash_profile`
-3. topical brew based installers during `script\bootstrap [--no-brew]` (run these with `dot`)
-4. `install.sh` scripts to finalize
+### Hotkey Daemon
+Custom Python hotkey daemon for system-wide shortcuts:
+- **Alt+Enter** - Launch Ghostty
+- Runs as LaunchAgent, logs to `~/.local/state/hotkey/`
+- Requires Accessibility permissions
 
-## components
+### Editor Support
+- **Neovim** - Configured with lazy.nvim, telescope, treesitter
+- **VS Code** - Global keybindings (Ctrl+Alt+T for terminal)
+- **vim** - Classic config with Vundle
 
-There's a few special files in the hierarchy.
+### Agent System
+Multi-agent swarm for Claude Code:
+- `launch-agents` - Start/manage agent swarms
+- `swarm-job` - Job queue management
+- `swarm-watcher` - Queue monitoring daemon
+- See [docs/agent-system.md](docs/agent-system.md) for details
 
-- **bin/**: `bin/` will get added to your `$PATH` .bash_profile and anything in there will be made available everywhere.
-- **topic/bash_aliases**: Any file named `bash_aliases` is loaded by .bash_profile and provides aliases available in your shell
-- **topic/bash_env**: Any file named `bash_env` is loaded by .bash_profile and provides environment variables available in your shell
-- **topic/bash_completion**: Any file named `bash_completion` is loaded by .bash_profile, is supposed to contain completion statements and is available in your shell
-- **topic/brew_packages**: Any file named `brew_packages` is executed when running `dot`, this provides a way to create HomeBrew based installers. It is adviced to also put your package managers in here (like `pip` for python and `npm` for node)
-- **topic/install.sh**: Any file named `install.sh` is executed when running `script\bootstrap`, this provides a way to create topical installers
-- **topic/\*.symlink**: Any files ending in `*.symlink` get symlinked into
-  your `$HOME`. This is to keep your files versioned in your dotfiles., while keeping them where they belong in your home directory. 
-  These files get symlinked in when you run `script/bootstrap`.
-- **topic/config/**: Any directory named `config` inside a topic gets symlinked to `~/.config/<topic>/` for XDG compliance
-- **config/\<app\>/**: The central `config/` directory also gets linked: `config/<app>/` → `~/.config/<app>/`
-- **local/bin/**: The central `.local/` directory also gets linked: `local/bin/<app>` → `~/.local/bin/<app>`
+## Topical Organization
 
-Do not forget to never checkin secrets in any of these files, use `~/.config/secrets` for this (sourced by `.bash_profile`). This file is excluded from version control for that reason. Also git secrets are generated into `.local/gitconfig`.
+Everything is organized by topic (vim, git, python, etc.). Each topic can have:
+
+| File | Purpose |
+|------|---------|
+| `bash_aliases` | Shell aliases (loaded by .bash_profile) |
+| `bash_env` | Environment variables |
+| `bash_completion` | Tab completions |
+| `brew_packages` | Homebrew packages (run with `dot`) |
+| `install.sh` | Setup script (run with `dot install <topic>`) |
+| `*.symlink` | Symlinked to `$HOME` |
+| `config/` | Symlinked to `~/.config/<topic>/` |
 
 ## XDG Base Directory
 
-This dotfiles setup follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/):
+This setup follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/):
 
 | Variable | Location | Purpose |
 |----------|----------|---------|
-| `XDG_CONFIG_HOME` | `~/.config` | User configuration files |
-| `XDG_DATA_HOME` | `~/.local/share` | User data files |
-| `XDG_STATE_HOME` | `~/.local/state` | User state (logs, history) |
-| `XDG_CACHE_HOME` | `~/.cache` | Non-essential cached data |
+| `XDG_CONFIG_HOME` | `~/.config` | User configuration |
+| `XDG_DATA_HOME` | `~/.local/share` | User data |
+| `XDG_STATE_HOME` | `~/.local/state` | Logs, history, runtime state |
+| `XDG_CACHE_HOME` | `~/.cache` | Cached data |
 
-Applications configured for XDG compliance include: vim, bat, ripgrep, tmux, pip, docker, colima, ipython, matplotlib, ollama, and history files for bash, python, psql, and less. One could basically ask what is not XDG compliant.
+Use `xdg-info` to inspect XDG paths and app compliance.
 
-See [docs/xdg_setup.md](docs/xdg_setup.md) for detailed documentation.
+## Directory Structure
 
-## credits
-- Main inspiration comes from https://github.com/holman/dotfiles
-- More about the dotfile stuff: https://dotfiles.github.io/
+```
+~/.dotfiles/
+├── bash/           # Shell configuration
+├── claude/         # Claude Code config, agents, skills
+├── config/         # XDG configs (ghostty, bat, ripgrep, tmux)
+├── docker/         # Docker/Colima setup
+├── git/            # Git config and aliases
+├── local/bin/      # Custom scripts (dot, hotkey, launch-agents)
+├── osx/            # macOS-specific settings
+├── python/         # Python/uv configuration
+├── tmux/           # tmux config with TPM plugins
+├── vim/            # Vim/Neovim configuration
+└── vscode/         # VS Code settings
+```
+
+## Secrets
+
+Never commit secrets! Use `~/.config/secrets` (sourced by .bash_profile, excluded from git).
+Git credentials go in `~/.local/gitconfig`.
+
+## Credits
+- Main inspiration: https://github.com/holman/dotfiles
+- Dotfiles community: https://dotfiles.github.io/
