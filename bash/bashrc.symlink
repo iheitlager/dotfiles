@@ -112,12 +112,17 @@ update_prompt() {
             local behind=${counts%%	*}  # Tab-separated
             local ahead=${counts##*	}
             
+            # Use raw ANSI codes (not PS1 escapes) since git_prompt is printed via \[...\]
+            local R=$'\033[31m'  # Red
+            local G=$'\033[32m'  # Green  
+            local N=$'\033[0m'   # Reset
+            
             if [[ "$ahead" -gt 0 && "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}/${GREEN}${ahead} ahead${RESET}]"
+                git_prompt="${git_prompt} ↓${behind} ↑${ahead}"
             elif [[ "$ahead" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${GREEN}${ahead} ahead${RESET}]"
+                git_prompt="${git_prompt} ↑${ahead}"
             elif [[ "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} [${RED}${behind} behind${RESET}]"
+                git_prompt="${git_prompt} ↓${behind}"
             fi
         fi
     fi
