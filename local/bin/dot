@@ -17,6 +17,7 @@ Usage: dot [COMMAND] [OPTIONS]
 COMMANDS:
     install <topic>   Run install.sh for a specific topic (e.g., vim, osx, vscode)
     list              List available topics with install.sh scripts
+    status            Show installation status and outdated packages
     (none)            Install homebrew packages (default behavior)
 
 OPTIONS:
@@ -32,6 +33,7 @@ Example:
     dot install vim               # Run vim/install.sh
     dot install osx               # Run osx/install.sh
     dot list                      # Show available topics
+    dot status                    # Show what's installed and outdated
     dot -n                        # Regenerate Brewfile and install
     dot -x                        # Export current installations to Brewfile
     dot -v -n                     # Verbose output with new installation
@@ -79,6 +81,76 @@ if [[ $# -gt 0 ]]; then
                     echo "   - $topic"
                 fi
             done
+            exit 0
+            ;;
+        status)
+            echo "📊 Dotfiles Status"
+            echo "=================="
+            echo ""
+            
+            # Homebrew status
+            echo "🍺 Homebrew"
+            echo "   Version: $(brew --version | head -1)"
+            echo "   Prefix:  $(brew --prefix)"
+            echo ""
+            
+            # Brewfile status
+            BREWFILE="${XDG_DATA_HOME:-$HOME/.local/share}/Brewfile"
+            if [[ -f "$BREWFILE" ]]; then
+                formulae=$(grep -c '^brew ' "$BREWFILE" 2>/dev/null || echo 0)
+                casks=$(grep -c '^cask ' "$BREWFILE" 2>/dev/null || echo 0)
+                echo "📦 Brewfile: $BREWFILE"
+                echo "   Formulae: $formulae"
+                echo "   Casks:    $casks"
+            else
+                echo "📦 Brewfile: not found (run 'dot -x' to create)"
+            fi
+            echo ""
+            
+            # Outdated packages
+            echo "🔄 Outdated Packages"
+            outdated=$(brew outdated 2>/dev/null)
+            if [[ -n "$outdated" ]]; then
+                outdated_count=$(echo "$outdated" | wc -l | tr -d ' ')
+                echo "   $outdated_count package(s) can be upgraded (run 'brew upgrade')"
+                echo "$outdated" | head -10 | while read line; do
+                    echo "   ⬆️  $line"
+                done
+                [[ $outdated_count -gt 10 ]] && echo "   ... and $((outdated_count - 10)) more"
+            else
+                echo "   ✅ All packages up to date"
+            fi
+            echo ""
+            
+            # Topics status
+            if [[ -n $DOTFILES ]]; then
+                echo "📁 Topics"
+                for dir in "$DOTFILES"/*/; do
+                    topic=$(basename "$dir")
+                    # Skip hidden dirs and special dirs
+                    [[ "$topic" == ".git" || "$topic" == "script" || "$topic" == "docs" ]] && continue
+                    
+                    features=""
+                    [[ -f "$dir/install.sh" ]] && features+="install "
+                    [[ -f "$dir/brew_packages" ]] && features+="brew "
+                    [[ -f "$dir/bash_aliases" ]] && features+="aliases "
+                    [[ -f "$dir/bash_env" ]] && features+="env "
+                    [[ -d "$dir/config" ]] && features+="config "
+                    
+                    if [[ -n "$features" ]]; then
+                        printf "   %-12s [%s]\n" "$topic" "${features% }"
+                    fi
+                done
+            fi
+            echo ""
+            
+            # XDG paths
+            echo "🗂️  XDG Paths"
+            echo "   CONFIG: ${XDG_CONFIG_HOME:-~/.config}"
+            echo "   DATA:   ${XDG_DATA_HOME:-~/.local/share}"
+            echo "   STATE:  ${XDG_STATE_HOME:-~/.local/state}"
+            echo "   CACHE:  ${XDG_CACHE_HOME:-~/.cache}"
+            
             exit 0
             ;;
     esac
