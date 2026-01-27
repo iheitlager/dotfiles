@@ -39,3 +39,12 @@ if [ "${CURRENT_PROFILE}" != "${TERM_PROFILE}" ]; then
 fi;
 
 defaults write com.googlecode.iterm2 PromptOnQuit -bool false
+
+############################################################################
+# skhd - simple hotkey daemon
+############################################################################
+# Start skhd service (config is auto-loaded from $XDG_CONFIG_HOME/skhd/skhdrc)
+if command -v skhd &> /dev/null; then
+    brew services start skhd 2>/dev/null || true
+    echo "  skhd service started (Alt+Return opens Ghostty)"
+fi

@@ -2,3 +2,9 @@
 
 alias vimstall="vim +PluginInstall +qall" # command to install Vundle packages
 alias noswp="rm -f *.swp"
+
+# Neovim aliases
+alias v="nvim"
+alias vi="nvim"
+alias nv="nvim"
+alias nvimup="nvim --headless '+Lazy! sync' +qa"  # Update neovim plugins

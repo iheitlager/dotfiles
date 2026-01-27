@@ -1,0 +1,5 @@
+# skhd configuration - simple hotkey daemon
+# Reload config: skhd --reload
+
+# Launch or focus Ghostty with Alt+Return
+alt - return : open -a Ghostty
