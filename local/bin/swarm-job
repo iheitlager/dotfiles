@@ -142,7 +142,7 @@ cmd_new() {
             -d|--description) description="$2"; shift 2 ;;
             -D|--depends)     depends_on="$2"; shift 2 ;;
             -e|--edit)        edit_after=true; shift ;;
-            -h|--help)        print_usage_new; exit 0 ;;
+            -h|--help)        help_new; exit 0 ;;
             -*)               echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
             *)
                 if [[ -z "$title" ]]; then
@@ -156,7 +156,7 @@ cmd_new() {
 
     if [[ -z "$title" ]]; then
         echo -e "${RED}Error: Title is required${NC}" >&2
-        print_usage_new
+        help_new
         exit 1
     fi
 
@@ -229,11 +229,8 @@ EOF
     fi
 }
 
-print_usage_new() {
-    local help_cmd="cat"
-    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-    
-    $help_cmd << EOF
+help_new() {
+    cat << EOF
 Usage: swarm-job new "title" [OPTIONS]
 
 Create a new job for the agent swarm.
@@ -268,7 +265,7 @@ cmd_claim() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -n|--dry-run) dry_run=true; shift ;;
-            -h|--help)    print_usage_claim; exit 0 ;;
+            -h|--help)    help_claim; exit 0 ;;
             -*)           echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
             *)            job_id="$1"; shift ;;
         esac
@@ -346,11 +343,8 @@ cmd_claim() {
     ) 200>"$lock_file"
 }
 
-print_usage_claim() {
-    local help_cmd="cat"
-    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-    
-    $help_cmd << EOF
+help_claim() {
+    cat << EOF
 Usage: swarm-job claim [JOB_ID] [OPTIONS]
 
 Atomically claim a job from the pending queue.
@@ -383,7 +377,7 @@ cmd_complete() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             -r|--result) result="$2"; shift 2 ;;
-            -h|--help)   print_usage_complete; exit 0 ;;
+            -h|--help)   help_complete; exit 0 ;;
             -*)          echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
             *)           job_id="$1"; shift ;;
         esac
@@ -391,7 +385,7 @@ cmd_complete() {
 
     if [[ -z "$job_id" ]]; then
         echo -e "${RED}Error: JOB_ID required${NC}" >&2
-        print_usage_complete
+        help_complete
         exit 1
     fi
 
@@ -432,11 +426,8 @@ cmd_complete() {
     echo -e "  By: ${claimed_by:-$AGENT_ID}"
 }
 
-print_usage_complete() {
-    local help_cmd="cat"
-    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-    
-    $help_cmd << EOF
+help_complete() {
+    cat << EOF
 Usage: swarm-job complete <JOB_ID> [OPTIONS]
 
 Mark a job as completed.
@@ -531,11 +522,8 @@ cmd_list() {
     fi
 }
 
-print_usage_list() {
-    local help_cmd="cat"
-    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-    
-    $help_cmd << EOF
+help_list() {
+    cat << EOF
 Usage: swarm-job list [FILTER]
 
 List jobs by status.
@@ -560,11 +548,8 @@ EOF
 # ============================================================================
 # Main
 # ============================================================================
-print_usage() {
-    local help_cmd="cat"
-    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-    
-    $help_cmd << EOF
+show_help() {
+    cat << EOF
 Usage: swarm-job <command> [options]
 
 Job management for the Claude agent swarm.
@@ -596,7 +581,7 @@ EOF
 
 # Parse command
 if [[ $# -eq 0 ]]; then
-    print_usage
+    show_help
     exit 0
 fi
 
@@ -608,10 +593,10 @@ case "$COMMAND" in
     claim)    cmd_claim "$@" ;;
     complete) cmd_complete "$@" ;;
     list)     cmd_list "$@" ;;
-    -h|--help|help) print_usage ;;
+    -h|--help|help) show_help ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}" >&2
-        print_usage
+        show_help
         exit 1
         ;;
 esac
