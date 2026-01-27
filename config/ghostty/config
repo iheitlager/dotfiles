@@ -78,6 +78,9 @@ shell-integration-features = cursor,sudo,title
 # =============================================================================
 # KEYBINDINGS
 # =============================================================================
+# Global hotkey to summon Ghostty from anywhere (Alt+Enter)
+keybind = global:alt+enter=toggle_quick_terminal
+
 # Unbind Alt+arrow so tmux can use them for pane switching
 keybind = alt+left=unbind
 keybind = alt+right=unbind

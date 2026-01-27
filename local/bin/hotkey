@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --script
+#!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
 # dependencies = ["pynput"]
@@ -11,6 +11,10 @@ Usage:
     hotkey              Run in foreground
     hotkey --help       Show this help
     hotkey --list       List configured hotkeys
+
+This script can be run directly with 'uv run --script' for development,
+or compiled to a standalone binary using PyInstaller for production use.
+The compiled binary gets cleaner Accessibility permissions on macOS.
 """
 
 import logging
