@@ -1,0 +1,240 @@
+#!/usr/bin/env bash
+# XDG directory inspector - shows XDG setup and app-specific paths
+set -euo pipefail
+
+# Colors
+BOLD='\033[1m'
+DIM='\033[2m'
+GREEN='\033[32m'
+BLUE='\033[34m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+RESET='\033[0m'
+
+# XDG directories with defaults
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+
+show_help() {
+    local help_cmd="cat"
+    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
+    
+    $help_cmd << 'EOF'
+Usage: xdg-info [OPTIONS] [APP]
+
+XDG Base Directory inspector - shows XDG setup and app-specific paths.
+
+OPTIONS:
+    -h, --help      Show this help message
+    -l, --list      List all apps with XDG presence
+    -e, --env       Show environment variables related to XDG
+    -s, --sources   Show dotfiles module sources
+
+ARGUMENTS:
+    APP             Show XDG paths for specific app (e.g., vim, git, docker)
+
+EXAMPLES:
+    xdg-info             Show XDG directory overview
+    xdg-info vim         Show XDG paths for vim
+    xdg-info -l          List all apps with XDG presence
+    xdg-info -e          Show XDG environment variables
+    xdg-info -s          Show dotfiles sources
+
+EOF
+}
+
+# Check if tree is available, use find as fallback
+show_tree() {
+    local dir="$1"
+    local depth="${2:-2}"
+    if [[ -d "$dir" ]]; then
+        if command -v tree &>/dev/null; then
+            tree -L "$depth" -C --dirsfirst "$dir" 2>/dev/null || echo "  (empty)"
+        else
+            find "$dir" -maxdepth "$depth" -print 2>/dev/null | head -20 | sed 's|^|  |'
+        fi
+    else
+        echo -e "  ${DIM}(does not exist)${RESET}"
+    fi
+}
+
+show_overview() {
+    echo -e "${BOLD}XDG Base Directory Specification${RESET}"
+    echo -e "${DIM}See: https://specifications.freedesktop.org/basedir-spec/latest/${RESET}\n"
+    
+    echo -e "${BOLD}${GREEN}CONFIG${RESET} ${DIM}(user configuration)${RESET}"
+    echo -e "  ${CYAN}XDG_CONFIG_HOME${RESET} = $XDG_CONFIG_HOME"
+    show_tree "$XDG_CONFIG_HOME" 1
+    echo
+    
+    echo -e "${BOLD}${BLUE}DATA${RESET} ${DIM}(user data files)${RESET}"
+    echo -e "  ${CYAN}XDG_DATA_HOME${RESET}   = $XDG_DATA_HOME"
+    show_tree "$XDG_DATA_HOME" 1
+    echo
+    
+    echo -e "${BOLD}${YELLOW}STATE${RESET} ${DIM}(logs, history, runtime)${RESET}"
+    echo -e "  ${CYAN}XDG_STATE_HOME${RESET}  = $XDG_STATE_HOME"
+    show_tree "$XDG_STATE_HOME" 1
+    echo
+    
+    echo -e "${BOLD}${DIM}CACHE${RESET} ${DIM}(non-essential cached data)${RESET}"
+    echo -e "  ${CYAN}XDG_CACHE_HOME${RESET}  = $XDG_CACHE_HOME"
+    show_tree "$XDG_CACHE_HOME" 1
+}
+
+show_app() {
+    local app="$1"
+    local found=false
+    
+    echo -e "${BOLD}XDG paths for: ${CYAN}$app${RESET}\n"
+    
+    # Check each XDG location (exact match first, then prefix matches)
+    local -a checked=()
+    for dir in "$XDG_CONFIG_HOME/$app" "$XDG_CONFIG_HOME/$app"-*; do
+        [[ " ${checked[*]} " =~ " $dir " ]] && continue
+        checked+=("$dir")
+        if [[ -e "$dir" ]]; then
+            echo -e "${GREEN}CONFIG${RESET}: $dir"
+            show_tree "$dir" 2
+            found=true
+        fi
+    done
+    
+    checked=()
+    for dir in "$XDG_DATA_HOME/$app" "$XDG_DATA_HOME/$app"-*; do
+        [[ " ${checked[*]} " =~ " $dir " ]] && continue
+        checked+=("$dir")
+        if [[ -e "$dir" ]]; then
+            echo -e "${BLUE}DATA${RESET}: $dir"
+            show_tree "$dir" 2
+            found=true
+        fi
+    done
+    
+    checked=()
+    for dir in "$XDG_STATE_HOME/$app" "$XDG_STATE_HOME/$app"-*; do
+        [[ " ${checked[*]} " =~ " $dir " ]] && continue
+        checked+=("$dir")
+        if [[ -e "$dir" ]]; then
+            echo -e "${YELLOW}STATE${RESET}: $dir"
+            show_tree "$dir" 2
+            found=true
+        fi
+    done
+    
+    checked=()
+    for dir in "$XDG_CACHE_HOME/$app" "$XDG_CACHE_HOME/$app"-*; do
+        [[ " ${checked[*]} " =~ " $dir " ]] && continue
+        checked+=("$dir")
+        if [[ -e "$dir" ]]; then
+            echo -e "${DIM}CACHE${RESET}: $dir"
+            show_tree "$dir" 2
+            found=true
+        fi
+    done
+    
+    # Check dotfiles module
+    if [[ -d "$DOTFILES/$app" ]]; then
+        echo -e "\n${BOLD}Dotfiles module${RESET}: $DOTFILES/$app"
+        show_tree "$DOTFILES/$app" 2
+        found=true
+    fi
+    
+    # Check for related env vars
+    local env_vars
+    env_vars=$(env | grep -i "^${app}" 2>/dev/null | head -10 || true)
+    if [[ -n "$env_vars" ]]; then
+        echo -e "\n${BOLD}Environment variables${RESET}:"
+        echo "$env_vars" | sed 's/^/  /'
+        found=true
+    fi
+    
+    if [[ "$found" == false ]]; then
+        echo -e "${DIM}No XDG paths found for '$app'${RESET}"
+        echo -e "\nTry: xdg -l  to list apps with XDG presence"
+    fi
+}
+
+list_apps() {
+    echo -e "${BOLD}Apps with XDG presence${RESET}\n"
+    
+    echo -e "${GREEN}CONFIG${RESET} ($XDG_CONFIG_HOME):"
+    ls -1 "$XDG_CONFIG_HOME" 2>/dev/null | sed 's/^/  /' || echo "  (empty)"
+    echo
+    
+    echo -e "${BLUE}DATA${RESET} ($XDG_DATA_HOME):"
+    ls -1 "$XDG_DATA_HOME" 2>/dev/null | sed 's/^/  /' || echo "  (empty)"
+    echo
+    
+    echo -e "${YELLOW}STATE${RESET} ($XDG_STATE_HOME):"
+    ls -1 "$XDG_STATE_HOME" 2>/dev/null | sed 's/^/  /' || echo "  (empty)"
+    echo
+    
+    echo -e "${DIM}CACHE${RESET} ($XDG_CACHE_HOME):"
+    ls -1 "$XDG_CACHE_HOME" 2>/dev/null | sed 's/^/  /' || echo "  (empty)"
+}
+
+show_env() {
+    echo -e "${BOLD}XDG Environment Variables${RESET}\n"
+    
+    echo -e "${CYAN}Base directories:${RESET}"
+    echo "  XDG_CONFIG_HOME = ${XDG_CONFIG_HOME}"
+    echo "  XDG_DATA_HOME   = ${XDG_DATA_HOME}"
+    echo "  XDG_STATE_HOME  = ${XDG_STATE_HOME}"
+    echo "  XDG_CACHE_HOME  = ${XDG_CACHE_HOME}"
+    echo
+    
+    echo -e "${CYAN}App-specific overrides:${RESET}"
+    env | grep -E '(CONFIG|DATA|STATE|CACHE|HIST|HOME)' | grep -v '^XDG_' | sort | sed 's/^/  /' || echo "  (none)"
+}
+
+show_sources() {
+    echo -e "${BOLD}Dotfiles Module Sources${RESET}\n"
+    
+    echo -e "${CYAN}bash_env${RESET} (environment variables):"
+    for f in "$DOTFILES"/*/bash_env; do
+        [[ -f "$f" ]] && echo "  ${f#$DOTFILES/}"
+    done
+    echo
+    
+    echo -e "${CYAN}bash_aliases${RESET} (aliases and functions):"
+    for f in "$DOTFILES"/*/bash_aliases; do
+        [[ -f "$f" ]] && echo "  ${f#$DOTFILES/}"
+    done
+    echo
+    
+    echo -e "${CYAN}bash_completion${RESET} (tab completions):"
+    for f in "$DOTFILES"/*/bash_completion; do
+        [[ -f "$f" ]] && echo "  ${f#$DOTFILES/}"
+    done
+    echo
+    
+    if [[ -d "$XDG_CACHE_HOME/dotfiles" ]]; then
+        echo -e "${CYAN}Cached files${RESET} ($XDG_CACHE_HOME/dotfiles):"
+        ls -la "$XDG_CACHE_HOME/dotfiles" 2>/dev/null | tail -n +2 | sed 's/^/  /'
+    fi
+}
+
+# Main
+case "${1:-}" in
+    -h|--help)
+        show_help
+        ;;
+    -l|--list)
+        list_apps
+        ;;
+    -e|--env)
+        show_env
+        ;;
+    -s|--sources)
+        show_sources
+        ;;
+    "")
+        show_overview
+        ;;
+    *)
+        show_app "$1"
+        ;;
+esac

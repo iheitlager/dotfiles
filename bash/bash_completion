@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Bash completions for bash module
+
+# Complete 'help' with commands from PATH
+complete -c help

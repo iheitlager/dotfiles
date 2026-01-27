@@ -29,8 +29,8 @@ export LESSHISTFILE="$XDG_STATE_HOME/less/history"
 mkdir -p "$XDG_STATE_HOME/bash" 2>/dev/null
 export HISTFILE="$XDG_STATE_HOME/bash/history"
 export HISTCONTROL=ignoreboth:erasedups
-export HISTSIZE=5000
-export HISTFILESIZE=1000
+export HISTSIZE=500
+export HISTFILESIZE=500
 export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
 export HISTTIMEFORMAT="[%DT%T] " 
 
@@ -52,21 +52,29 @@ if [ -e "$XDG_CONFIG_HOME/secrets" ]; then
     source "$XDG_CONFIG_HOME/secrets"
 fi
 
-# Cache helper: regenerate file list only when dotfiles change
+# Cache helper: concatenate module files into single cached file
+# Rebuilds cache when dotfiles dir is modified
+# This is done for a combination of speed and maintainability
 _dotfiles_cached_source() {
     local type="$1"
-    local cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
+    local cache="$XDG_CACHE_HOME/dotfiles/${type}.sh"
     mkdir -p "$XDG_CACHE_HOME/dotfiles"
     
     # Regenerate cache if missing or dotfiles dir is newer
     if [[ ! -f "$cache" ]] || [[ "$DOTFILES" -nt "$cache" ]]; then
-        printf '%s\n' $DOTFILES/*/"$type" > "$cache" 2>/dev/null
+        # Concatenate all module files with origin comments
+        : > "$cache"  # Truncate/create
+        for f in $DOTFILES/*/"$type"; do
+            if [[ -f "$f" ]]; then
+                printf '\n# >>> %s\n' "${f#$DOTFILES/}" >> "$cache"
+                cat "$f" >> "$cache"
+                printf '\n# <<< %s\n' "${f#$DOTFILES/}" >> "$cache"
+            fi
+        done
     fi
     
-    # Source each file from cache
-    while IFS= read -r f; do
-        [[ -f "$f" ]] && source "$f"
-    done < "$cache"
+    # Source single cached file
+    source "$cache"
 }
 
 # Source environment variables from modules (cached)

@@ -5,6 +5,12 @@
 # Exit if not running interactively
 [[ $- != *i* ]] && return
 
+# Ensure XDG and HISTFILE are set for non-login shells (e.g., subshells, scripts)
+# This prevents ~/.bash_history from being created
+export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+export HISTFILE="${HISTFILE:-$XDG_STATE_HOME/bash/history}"
+mkdir -p "$(dirname "$HISTFILE")" 2>/dev/null
+
 # Shell options
 shopt -s cdspell        # Fix spelling errors in cd
 shopt -s histappend     # Append to history rather than overwrite
@@ -25,23 +31,29 @@ set -o ignoreeof        # Prevent Ctrl+D from logging out
 # Tab complete for sudo
 complete -cf sudo
 
-# Cache helper: regenerate file list only when dotfiles change
+# Cache helper: concatenate module files into single cached file
 # (defined here too for non-login interactive shells)
 if ! declare -f _dotfiles_cached_source &>/dev/null; then
     _dotfiles_cached_source() {
         local type="$1"
-        local cache="$XDG_CACHE_HOME/dotfiles/${type}.list"
+        local cache="$XDG_CACHE_HOME/dotfiles/${type}.sh"
         mkdir -p "$XDG_CACHE_HOME/dotfiles"
         
         # Regenerate cache if missing or dotfiles dir is newer
         if [[ ! -f "$cache" ]] || [[ "$DOTFILES" -nt "$cache" ]]; then
-            printf '%s\n' $DOTFILES/*/"$type" > "$cache" 2>/dev/null
+            # Concatenate all module files with origin comments
+            : > "$cache"  # Truncate/create
+            for f in $DOTFILES/*/"$type"; do
+                if [[ -f "$f" ]]; then
+                    printf '\n# >>> %s\n' "${f#$DOTFILES/}" >> "$cache"
+                    cat "$f" >> "$cache"
+                    printf '\n# <<< %s\n' "${f#$DOTFILES/}" >> "$cache"
+                fi
+            done
         fi
         
-        # Source each file from cache
-        while IFS= read -r f; do
-            [[ -f "$f" ]] && source "$f"
-        done < "$cache"
+        # Source single cached file
+        source "$cache"
     }
 fi
 
@@ -86,7 +98,7 @@ update_prompt() {
     if [[ -n "$VIRTUAL_ENV" ]]; then
         local git_root="${VIRTUAL_ENV%/*}"
         local project_name="${git_root##*/}"  # Faster than $(basename ...)
-        venv_info="${YELLOW}📦 ${project_name}${RESET} "
+        venv_info="${GREEN}📦 ${project_name}${RESET} "
         # Just check for uv.lock (skip grep)
         [[ -f "$git_root/uv.lock" ]] && venv_info="⚡$venv_info"
     fi
@@ -100,10 +112,16 @@ update_prompt() {
             _cached_py_version=""
         fi
     fi
-    [[ -n "$_cached_py_version" ]] && python_info="${RED}🐍 py${_cached_py_version}${RESET} "
+    [[ -n "$_cached_py_version" ]] && python_info="${BLUE}🐍 py${_cached_py_version}${RESET} "
     
     # Git information - __git_ps1 already checks if we're in a repo
-    local git_prompt="$(__git_ps1 "⎇ %s")"
+    # Use raw ANSI codes (not PS1 escapes) since git_prompt is printed via \[...\]
+    local Y=$'\033[33m'  # Yellow
+    local R=$'\033[31m'  # Red
+    local G=$'\033[32m'  # Green  
+    local N=$'\033[0m'   # Reset
+    
+    local git_prompt="$(__git_ps1 "${Y}⎇ %s${N}")"
     
     if [[ -n "$git_prompt" ]]; then
         # Get ahead/behind in one call (fails silently if no upstream)
@@ -112,17 +130,12 @@ update_prompt() {
             local behind=${counts%%	*}  # Tab-separated
             local ahead=${counts##*	}
             
-            # Use raw ANSI codes (not PS1 escapes) since git_prompt is printed via \[...\]
-            local R=$'\033[31m'  # Red
-            local G=$'\033[32m'  # Green  
-            local N=$'\033[0m'   # Reset
-            
             if [[ "$ahead" -gt 0 && "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} ↓${behind} ↑${ahead}"
+                git_prompt="${git_prompt} ${R}↓${behind}${N} ${G}↑${ahead}${N}"
             elif [[ "$ahead" -gt 0 ]]; then
-                git_prompt="${git_prompt} ↑${ahead}"
+                git_prompt="${git_prompt} ${G}↑${ahead}${N}"
             elif [[ "$behind" -gt 0 ]]; then
-                git_prompt="${git_prompt} ↓${behind}"
+                git_prompt="${git_prompt} ${R}↓${behind}${N}"
             fi
         fi
     fi
@@ -142,6 +155,10 @@ update_prompt() {
 
     # Tell terminal the current directory (OSC 7) for new tab/window behavior
     printf '\e]7;file://%s%s\e\\' "${HOSTNAME}" "${PWD// /%20}"
+    
+    # Share history across terminals: append new commands, then reload
+    history -a  # Append new lines to history file
+    history -n  # Read new lines from history file
 }
 
 PROMPT_COMMAND=update_prompt

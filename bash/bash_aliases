@@ -28,6 +28,8 @@ alias x='exit'
 alias a='alias | sort | bat --plain --language=bash'
 alias c='clear'
 alias e='env | sort | bat --plain --language=bash' # make sure env is always sorted
+alias reload='source ~/.bashrc && echo "Reloaded ~/.bashrc"'
+alias r='reload'
 
 alias ls='eza --color=always --group-directories-first'
 alias ll='eza -la --color=always --group-directories-first --git --header'
@@ -72,6 +74,7 @@ alias first='head -n1'
 alias second="awk 'NR==2'"
 alias third="awk 'NR==3'"
 
+# This should be here to make history available in the script
 _bash_history() {
     local HELP_CMD="cat"
     if command -v bat >/dev/null 2>&1; then

@@ -86,12 +86,10 @@ debug() {
 }
 
 show_help() {
-    local HELP="cat"
-    if command -v bat >/dev/null 2>&1; then
-        HELP="bat --plain --language=help"
-    fi
+    local help_cmd="cat"
+    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
     
-    $HELP << EOF
+    $help_cmd << 'EOF'
 Usage: launch-agents [OPTIONS] [COMMAND]
 
 Launch and manage a Claude Code agent swarm.

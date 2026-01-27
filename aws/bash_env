@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+# AWS XDG compliant
+export AWS_CONFIG_FILE="$XDG_CONFIG_HOME/aws/config"
+export AWS_SHARED_CREDENTIALS_FILE="$XDG_CONFIG_HOME/aws/credentials"
+mkdir -p "$XDG_CONFIG_HOME/aws" 2>/dev/null
