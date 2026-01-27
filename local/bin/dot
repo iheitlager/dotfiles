@@ -1,29 +1,37 @@
 #!/usr/bin/env bash
 # Install homebrew packages
-BREWFILE=~/.local/Brewfile
+BREWFILE="${XDG_DATA_HOME:-$HOME/.local/share}/Brewfile"
 
 # Trap Ctrl-C and exit cleanly
 trap 'echo ""; echo "❌ Installation interrupted by user"; exit 130' INT
 
-show_usage() {
+print_usage() {
     local HELP="cat"
     if command -v bat >/dev/null 2>&1; then
         HELP="bat --plain --language=help"
     fi
     
     $HELP << EOF
-Usage: dot [OPTIONS]
+Usage: dot [COMMAND] [OPTIONS]
+
+COMMANDS:
+    install <topic>   Run install.sh for a specific topic (e.g., vim, osx, vscode)
+    list              List available topics with install.sh scripts
+    (none)            Install homebrew packages (default behavior)
 
 OPTIONS:
     -n, --new         Force regeneration of Brewfile and install
     -x, --export      Only create Brewfile without installing
     -s, --skip        Skip using brew bundle, force package installation
     -v, --verbose     Show verbose output during operations
-    -f, --file PATH   Specify custom Brewfile location (default: ~/.local/Brewfile)
+    -f, --file PATH   Specify custom Brewfile location (default: \$XDG_DATA_HOME/Brewfile)
     -h, --help        Show this help message
 
 Example:
     dot                           # Install using existing Brewfile
+    dot install vim               # Run vim/install.sh
+    dot install osx               # Run osx/install.sh
+    dot list                      # Show available topics
     dot -n                        # Regenerate Brewfile and install
     dot -x                        # Export current installations to Brewfile
     dot -v -n                     # Verbose output with new installation
@@ -31,6 +39,50 @@ Example:
 
 EOF
 }
+
+# Handle subcommands first
+if [[ $# -gt 0 ]]; then
+    case $1 in
+        install)
+            if [[ -z $DOTFILES ]]; then
+                echo "❌ DOTFILES variable not set, exiting"
+                exit 1
+            fi
+            if [[ -z $2 ]]; then
+                echo "❌ Usage: dot install <topic>"
+                echo "   Run 'dot list' to see available topics"
+                exit 1
+            fi
+            TOPIC="$2"
+            INSTALL_SCRIPT="$DOTFILES/$TOPIC/install.sh"
+            if [[ -f "$INSTALL_SCRIPT" ]]; then
+                echo "🔧 Running install.sh for '$TOPIC'..."
+                source "$INSTALL_SCRIPT"
+                echo "✅ Done installing '$TOPIC'"
+                exit 0
+            else
+                echo "❌ No install.sh found for topic '$TOPIC'"
+                echo "   Expected: $INSTALL_SCRIPT"
+                echo "   Run 'dot list' to see available topics"
+                exit 1
+            fi
+            ;;
+        list)
+            if [[ -z $DOTFILES ]]; then
+                echo "❌ DOTFILES variable not set, exiting"
+                exit 1
+            fi
+            echo "📋 Available topics with install.sh:"
+            for script in "$DOTFILES"/*/install.sh; do
+                if [[ -f "$script" ]]; then
+                    topic=$(basename "$(dirname "$script")")
+                    echo "   - $topic"
+                fi
+            done
+            exit 0
+            ;;
+    esac
+fi
 
 # Parse command line arguments
 USE_NEW=false
@@ -60,12 +112,12 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         -h|--help)
-            show_usage
+            print_usage
             exit 0
             ;;
         *)
             echo "Unknown option: $1"
-            show_usage
+            print_usage
             exit 1
             ;;
     esac

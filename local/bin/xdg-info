@@ -17,7 +17,7 @@ XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
-show_help() {
+print_usage() {
     local help_cmd="cat"
     command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
     
@@ -220,7 +220,7 @@ show_sources() {
 # Main
 case "${1:-}" in
     -h|--help)
-        show_help
+        print_usage
         ;;
     -l|--list)
         list_apps

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 # launch-agents
 # Version: 0.6.0
 #
@@ -85,7 +86,7 @@ debug() {
     fi
 }
 
-show_help() {
+print_usage() {
     local help_cmd="cat"
     command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
     
@@ -1022,7 +1023,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            show_help
+            print_usage
             exit 0
             ;;
         start|stop|clean|info|restart|attach|workspace)
@@ -1088,7 +1089,7 @@ case ${COMMAND:-} in
         ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}"
-        show_help
+        print_usage
         exit 1
         ;;
 esac

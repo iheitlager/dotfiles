@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Script to generate .env file with credentials from 1Password
 # Author: Claude/Ilja Heitlager
@@ -54,63 +54,66 @@ print_success() {
     fi
 }
 
-print_help() {
-    echo -e "${BLUE}Usage:${NC} $0 [options]\n"
-    echo -e "${BLUE}Options:${NC}"
-    echo "  -i file          Read configuration from input file (default: .env_vars)"
-    echo "  -V vault_name    Specify the 1Password vault name (optional)"
-    echo "  -v, --verbose    Enable verbose output (default: silent mode)"
-    echo -e "  -h, --help       Show this help message\n"
+print_usage() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
     
-    echo -e "${BLUE}Description:${NC}"
-    echo "  This script generates a .env file by retrieving credentials from 1Password"
-    echo "  based on credential mappings defined in the '.env_vars' configuration file."
-    echo -e "  If no vault is specified, 1Password will search across all accessible vaults.\n"
-    
-    echo -e "${BLUE}Configuration:${NC}"
-    echo "  Edit '.env_vars' to define credential mappings and other settings:"
-    echo ""
-    echo "  Format 1 (colon-separated for 1Password):"
-    echo "    ENV_VAR_NAME:1password_item_name:field_name"
-    echo ""
-    echo "  Format 2 (key-value with braces for 1Password):"
-    echo "    ENV_VAR_NAME={1password_item_name:field_name}"
-    echo ""
-    echo "  Format 3 (pre-populated values):"
-    echo "    ENV_VAR_NAME=value"
-    echo ""
-    echo "  Format 4 (generated keys):"
-    echo "    ENV_VAR_NAME={openssl16}  # 32-char hex string"
-    echo "    ENV_VAR_NAME={base64}     # base64-encoded 32 random bytes"
-    echo "    ENV_VAR_NAME={uuid}       # UUID v4"
-    echo ""
-    echo -e "  Comment lines (starting with #) and empty lines are also copied.\n"
-    
-    echo -e "${BLUE}Examples:${NC}"
-    echo "  # Format 1"
-    echo "  ANTHROPIC_API_KEY:Anthropic api:credential"
-    echo "  OPENAI_API_KEY:OpenAI API:key"
-    echo ""
-    echo "  # Format 2"
-    echo "  DATABASE_URL={Production DB:connection_string}"
-    echo "  GITHUB_TOKEN={GitHub Token:credential}"
-    echo ""
-    echo "  # Format 3 (pre-populated)"
-    echo "  LOG_LEVEL=INFO"
-    echo "  DEBUG=false"
-    echo ""
-    echo "  # Format 4 (generated)"
-    echo "  SECRET_KEY={openssl16}"
-    echo "  SESSION_KEY={base64}"
-    echo -e "  REQUEST_ID={uuid}\n"
-    
-    echo -e "${BLUE}Usage Examples:${NC}"
-    echo "  $0                    # Silent mode, search all vaults"
-    echo "  $0 -v                 # Verbose mode, search all vaults"
-    echo "  $0 -V 'Our Family'    # Silent mode, specific vault"
-    echo "  $0 -v -V 'Work'       # Verbose mode, specific vault"
-    echo "  $0 -i custom.env_vars # Read from custom file"
-    echo "  cat custom.env_vars | $0 # Read from stdin"
+    $HELP << EOF
+Usage: env.sh [OPTIONS]
+
+OPTIONS:
+    -i FILE           Read configuration from input file (default: .env_vars)
+    -V VAULT          Specify the 1Password vault name (optional)
+    -v, --verbose     Enable verbose output (default: silent mode)
+    -h, --help        Show this help message
+
+DESCRIPTION:
+    Generates a .env file by retrieving credentials from 1Password based on
+    credential mappings defined in a configuration file. If no vault is
+    specified, 1Password will search across all accessible vaults.
+
+CONFIGURATION FORMATS:
+    Format 1 (colon-separated for 1Password):
+        ENV_VAR_NAME:1password_item_name:field_name
+
+    Format 2 (key-value with braces for 1Password):
+        ENV_VAR_NAME={1password_item_name:field_name}
+
+    Format 3 (pre-populated values):
+        ENV_VAR_NAME=value
+
+    Format 4 (generated keys):
+        ENV_VAR_NAME={openssl16}    # 32-char hex string
+        ENV_VAR_NAME={base64}       # base64-encoded 32 random bytes
+        ENV_VAR_NAME={uuid}         # UUID v4
+
+    Comment lines (starting with #) and empty lines are copied to output.
+
+EXAMPLES:
+    env.sh                        # Silent mode, search all vaults
+    env.sh -v                     # Verbose mode, search all vaults
+    env.sh -V 'Our Family'        # Silent mode, specific vault
+    env.sh -v -V 'Work'           # Verbose mode, specific vault
+    env.sh -i custom.env_vars     # Read from custom file
+    cat custom.env_vars | env.sh  # Read from stdin
+
+CONFIG FILE EXAMPLES:
+    # 1Password lookups
+    ANTHROPIC_API_KEY:Anthropic api:credential
+    DATABASE_URL={Production DB:connection_string}
+
+    # Pre-populated values
+    LOG_LEVEL=INFO
+    DEBUG=false
+
+    # Generated values
+    SECRET_KEY={openssl16}
+    SESSION_KEY={base64}
+    REQUEST_ID={uuid}
+
+EOF
 }
 
 #==============================================================================
@@ -442,7 +445,7 @@ while getopts "i:V:vh-:" opt; do
             SILENT=false
             ;;
         h)
-            print_help
+            print_usage
             exit 0
             ;;
         -)
@@ -451,19 +454,19 @@ while getopts "i:V:vh-:" opt; do
                     SILENT=false
                     ;;
                 help)
-                    print_help
+                    print_usage
                     exit 0
                     ;;
                 *)
                     print_error "Invalid long option: --$OPTARG"
-                    print_help
+                    print_usage
                     exit 1
                     ;;
             esac
             ;;
         \?)
             print_error "Invalid option: -$OPTARG"
-            print_help
+            print_usage
             exit 1
             ;;
     esac

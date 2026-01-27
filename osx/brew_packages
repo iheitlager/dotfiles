@@ -21,7 +21,4 @@ done
 brew install mkcert || brew upgrade mkcert
 mkcert -install
 
-# skhd - simple hotkey daemon for system-wide keyboard shortcuts
-brew install koekeishiya/formulae/skhd || brew upgrade skhd
-
 export PATH=$TMPPATH

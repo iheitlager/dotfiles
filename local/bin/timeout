@@ -2,8 +2,13 @@
 
 # timeout - run a command with a time limit (pure bash implementation)
 
-usage() {
-    cat <<EOF
+print_usage() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+    
+    $HELP << EOF
 Usage: timeout [OPTION]... DURATION COMMAND [ARG]...
 
 Run COMMAND, and send a signal if it runs longer than DURATION.
@@ -59,7 +64,7 @@ while [[ $# -gt 0 ]]; do
         -v|--verbose)
             VERBOSE=true; shift ;;
         -h|--help)
-            usage ;;
+            print_usage ;;
         --)
             shift; break ;;
         -*)

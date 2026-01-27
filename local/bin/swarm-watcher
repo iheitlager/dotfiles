@@ -440,8 +440,11 @@ watch_loop() {
 }
 
 # Show help
-show_help() {
-    cat << EOF
+print_usage() {
+    local help_cmd="cat"
+    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
+    
+    $help_cmd << EOF
 Usage: swarm-watcher [OPTIONS]
 
 Monitor the job queue and notify capable agents.
@@ -466,7 +469,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
-            show_help
+            print_usage
             exit 0
             ;;
         -i|--interval)

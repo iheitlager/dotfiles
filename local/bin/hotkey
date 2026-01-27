@@ -1,0 +1,182 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pynput"]
+# ///
+"""
+hotkey - Simple hotkey daemon for macOS
+Requires Accessibility permissions in System Settings > Privacy & Security
+
+Usage:
+    hotkey              Run in foreground
+    hotkey --help       Show this help
+    hotkey --list       List configured hotkeys
+"""
+
+import logging
+import logging.handlers
+import os
+import subprocess
+import sys
+from pathlib import Path
+from pynput import keyboard
+
+# =============================================================================
+# LOGGING SETUP (XDG compliant with rotation)
+# =============================================================================
+
+def setup_logging():
+    """Configure logging to XDG_STATE_HOME with rotation"""
+    xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
+    log_dir = Path(xdg_state) / "hotkey"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    log_file = log_dir / "hotkey.log"
+    
+    # Rotating file handler: 1MB max, keep 3 backups
+    handler = logging.handlers.RotatingFileHandler(
+        log_file,
+        maxBytes=1_000_000,  # 1MB
+        backupCount=3,
+    )
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+    
+    # Also log to stderr when running interactively
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter("%(message)s"))
+    
+    logger = logging.getLogger("hotkey")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+    if sys.stderr.isatty():
+        logger.addHandler(console)
+    
+    return logger
+
+log = setup_logging()
+
+# =============================================================================
+# HOTKEY CONFIGURATION
+# Add your hotkeys here. Format: (modifiers, key, action)
+# =============================================================================
+
+def open_ghostty():
+    """Launch Ghostty terminal"""
+    log.info("Opening Ghostty")
+    subprocess.run(["open", "-a", "Ghostty"], check=False)
+
+def open_finder():
+    """Launch Finder"""
+    log.info("Opening Finder")
+    subprocess.run(["open", "-a", "Finder"], check=False)
+
+# Hotkey definitions: (frozenset of modifiers, key, description, action)
+HOTKEYS = [
+    (frozenset({keyboard.Key.alt}), keyboard.Key.enter, "Open Ghostty", open_ghostty),
+    # Add more hotkeys below:
+    # (frozenset({keyboard.Key.alt}), keyboard.Key.f, "Open Finder", open_finder),
+    # (frozenset({keyboard.Key.alt, keyboard.Key.shift}), keyboard.KeyCode.from_char('t'), "New Tab", new_tab),
+]
+
+# =============================================================================
+# HOTKEY ENGINE
+# =============================================================================
+
+class HotkeyDaemon:
+    def __init__(self):
+        self.pressed_modifiers = set()
+        self.modifier_keys = {
+            keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r,
+            keyboard.Key.ctrl, keyboard.Key.ctrl_l, keyboard.Key.ctrl_r,
+            keyboard.Key.shift, keyboard.Key.shift_l, keyboard.Key.shift_r,
+            keyboard.Key.cmd, keyboard.Key.cmd_l, keyboard.Key.cmd_r,
+        }
+        # Normalize modifier variants to base modifier
+        self.modifier_map = {
+            keyboard.Key.alt_l: keyboard.Key.alt,
+            keyboard.Key.alt_r: keyboard.Key.alt,
+            keyboard.Key.ctrl_l: keyboard.Key.ctrl,
+            keyboard.Key.ctrl_r: keyboard.Key.ctrl,
+            keyboard.Key.shift_l: keyboard.Key.shift,
+            keyboard.Key.shift_r: keyboard.Key.shift,
+            keyboard.Key.cmd_l: keyboard.Key.cmd,
+            keyboard.Key.cmd_r: keyboard.Key.cmd,
+        }
+
+    def normalize_modifier(self, key):
+        """Normalize left/right variants to base modifier"""
+        return self.modifier_map.get(key, key)
+
+    def on_press(self, key):
+        # Track modifiers
+        if key in self.modifier_keys:
+            self.pressed_modifiers.add(self.normalize_modifier(key))
+            return
+
+        # Check hotkeys
+        for modifiers, hotkey, description, action in HOTKEYS:
+            if key == hotkey and self.pressed_modifiers == modifiers:
+                try:
+                    action()
+                except Exception as e:
+                    log.error(f"Error executing {description}: {e}")
+
+    def on_release(self, key):
+        # Remove modifier when released
+        if key in self.modifier_keys:
+            normalized = self.normalize_modifier(key)
+            self.pressed_modifiers.discard(normalized)
+
+    def run(self):
+        log.info("hotkey daemon started")
+        self.list_hotkeys()
+        
+        with keyboard.Listener(
+            on_press=self.on_press,
+            on_release=self.on_release
+        ) as listener:
+            listener.join()
+
+    def list_hotkeys(self):
+        log.info("Configured hotkeys:")
+        for modifiers, key, description, _ in HOTKEYS:
+            mod_str = "+".join(m.name for m in sorted(modifiers, key=lambda x: x.name))
+            key_str = key.name if hasattr(key, 'name') else str(key.char)
+            log.info(f"  {mod_str}+{key_str}: {description}")
+
+
+def print_usage():
+    print(__doc__)
+    print("\nNote: Requires Accessibility permissions.")
+    print("Grant access in: System Settings > Privacy & Security > Accessibility")
+    xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
+    print(f"\nLogs: {xdg_state}/hotkey/hotkey.log")
+
+
+def main():
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        if arg in ("-h", "--help"):
+            print_usage()
+            sys.exit(0)
+        elif arg in ("-l", "--list"):
+            daemon = HotkeyDaemon()
+            daemon.list_hotkeys()
+            sys.exit(0)
+        else:
+            print(f"Unknown option: {arg}")
+            print_usage()
+            sys.exit(1)
+
+    daemon = HotkeyDaemon()
+    try:
+        daemon.run()
+    except KeyboardInterrupt:
+        log.info("hotkey daemon stopped")
+
+
+if __name__ == "__main__":
+    main()

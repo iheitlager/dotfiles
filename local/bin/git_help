@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 
-print_help () {
+print_item() {
    printf "  \033[0;33m$1\033[0m: $2\n"
 }
 
 _git_help() {
     printf "git commands\n------------\n"
-    print_help 'cheat git' 'small cheat sheet of common git commands'
-    print_help 'info git' 'smallest cheat sheet of git commands'
-    print_help 'man git' 'git manual pages'
+    print_item 'cheat git' 'small cheat sheet of common git commands'
+    print_item 'info git' 'smallest cheat sheet of git commands'
+    print_item 'man git' 'git manual pages'
 
     echo ""
-    print_help 'git reset --hard' 'rollback and discard all uncommitted changes'
-    print_help 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
-    print_help 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
-    print_help 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
-    print_help 'git rebase origin/main' 'rebase on current main'
+    print_item 'git reset --hard' 'rollback and discard all uncommitted changes'
+    print_item 'git reset --soft HEAD~1' 'undo last commit and leave changes staged'
+    print_item 'git rebase HEAD~[X] -i' 'prepare to squash [X] commits - interactive'
+    print_item 'git branch -D [branch_name]' 'locally delete branch [branch_name]'
+    print_item 'git rebase origin/main' 'rebase on current main'
 
     printf "\naliases\n-------\n"
     grep "^alias" $DOTFILES/git/bash_aliases | grep "git" | sort 
