@@ -185,14 +185,14 @@ get_model() {
             ;;
         3)
             case $agent in
-                1) echo "opus" ;;
-                *) echo "sonnet" ;;
+                1|2) echo "sonnet" ;;
+                *) echo "opus" ;;
             esac
             ;;
         4)
             case $agent in
-                1|2) echo "opus" ;;
-                3)   echo "sonnet" ;;
+                1|2) echo "sonnet" ;;
+                3)   echo "opus" ;;
                 4)   echo "haiku" ;;
             esac
             ;;
@@ -540,7 +540,7 @@ create_tmux_layout() {
         3)
             # Create 1x3 layout: 1 | 2 | 3
             tmux split-window -h -t "$SESSION:agents" -c "$WORKTREE_ROOT/agent-2"
-            tmux split-window -v -t "$SESSION:agents.2" -c "$WORKTREE_ROOT/agent-3"
+            tmux split-window -h -t "$SESSION:agents.2" -c "$WORKTREE_ROOT/agent-3"
             ;;
         4)
             # Create 2x2 layout: 1 | 3
