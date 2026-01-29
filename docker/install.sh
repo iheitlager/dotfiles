@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 
 # XDG compliant: use DOCKER_CONFIG or default to ~/.config/docker
 DOCKER_CONFIG="${DOCKER_CONFIG:-$HOME/.config/docker}"

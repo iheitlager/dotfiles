@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 
 source "$(dirname "$0")/bash_env"
 
@@ -9,4 +12,3 @@ fi
 
 # pip.conf is now XDG compliant at ~/.config/pip/pip.conf
 # (handled by config/pip/ via bootstrap link_config_files)
-

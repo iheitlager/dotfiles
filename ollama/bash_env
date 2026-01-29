@@ -1,3 +1,6 @@
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 # Ollama XDG compliant - models go to data directory
 export OLLAMA_MODELS="$XDG_DATA_HOME/ollama/models"
 mkdir -p "$XDG_DATA_HOME/ollama/models" 2>/dev/null

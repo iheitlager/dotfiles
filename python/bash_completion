@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 
 eval "$(uv generate-shell-completion bash)"
 complete -o "nospace" -W "python" killall;

@@ -1,3 +1,6 @@
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 [include]
     # be sure to add the local keys in this file
     # it is excluded from version control

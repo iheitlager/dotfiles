@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 # swarm-watcher - Job queue monitor daemon for agent swarm
 # Version: 2.0.0
 #

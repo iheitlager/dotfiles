@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 # Setup VS Code global settings and keybindings
 
 VSCODE_USER_DIR="$HOME/Library/Application Support/Code/User"

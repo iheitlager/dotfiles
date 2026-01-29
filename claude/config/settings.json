@@ -49,5 +49,9 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "additionalDirectories": [".", "~/.local/state/agent-context"]
+  "additionalDirectories": [
+    ".",
+    "~/.local/state/agent-context"
+  ],
+  "model": "sonnet"
 }

@@ -1,3 +1,6 @@
+-- Copyright 2026 Ilja Heitlager
+-- SPDX-License-Identifier: Apache-2.0
+
 -- Neovim configuration
 -- Inherits vim config and adds modern features
 

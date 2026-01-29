@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 
 # AWS XDG compliant
 export AWS_CONFIG_FILE="$XDG_CONFIG_HOME/aws/config"

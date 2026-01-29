@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 
 # Lot's of examples taken from https://github.com/mathiasbynens/dotfiles/blob/master/.osx
 

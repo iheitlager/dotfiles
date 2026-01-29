@@ -1,3 +1,6 @@
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 export WORK_DIR=~/wc
 
 # ripgrep doesn't natively support XDG, point it to our config

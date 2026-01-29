@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 
 # XDG-compliant vim directories
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"

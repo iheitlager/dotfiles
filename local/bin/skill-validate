@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
 """
 skill-validate - Security validation for AI agent skills and instructions.
 Version: 0.2.0
