@@ -633,7 +633,8 @@ cmd_workspace() {
     # Sanitize session name: replace dots and special chars with underscores
     local dir_name=$(basename "$PWD")
     local ws_session="ws-${dir_name//[^a-zA-Z0-9_-]/_}"
-    
+    local agent_spec="$HOME/.dotfiles/local/share/launch-agents/WORKSPACE_AGENT.md"
+
     if tmux has-session -t "$ws_session" 2>/dev/null; then
         if [[ "$FORCE" == true ]]; then
             echo -e "${YELLOW}Workspace exists, restarting...${NC}"
@@ -659,39 +660,68 @@ cmd_workspace() {
 
     # Create session with first pane (claude)
     tmux new-session -d -s "$ws_session" -n "workspace" -c "$PWD"
-    
+
     # Split vertically: left claude, right shell
     tmux split-window -h -t "$ws_session:workspace" -c "$PWD"
-    
+
     # Set even split (50/50)
     tmux select-layout -t "$ws_session:workspace" even-horizontal
-    
+
     # Activate venv if present in both panes
     if [[ -f ".venv/bin/activate" ]]; then
         tmux send-keys -t "$ws_session:workspace.1" "source .venv/bin/activate" C-m
         tmux send-keys -t "$ws_session:workspace.2" "source .venv/bin/activate" C-m
         sleep 0.3
     fi
-    
-    # Set environment to skip folder trust prompt
+
+    # Set environment for claude
     tmux send-keys -t "$ws_session:workspace.1" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
     tmux send-keys -t "$ws_session:workspace.1" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
+    tmux send-keys -t "$ws_session:workspace.1" "export WORKSPACE_SESSION='$ws_session'" C-m
     tmux send-keys -t "$ws_session:workspace.1" "clear" C-m
-    
-    # Start claude in opus on the left pane
-    tmux send-keys -t "$ws_session:workspace.1" "claude --model opus --add-dir . $SKIP_PERMISSIONS" C-m
-    
-    # Select left pane (claude)
+
+    # Build agent prompt with session info
+    local agent_prompt=""
+    if [[ -f "$agent_spec" ]]; then
+        # Replace $WORKSPACE_SESSION placeholder with actual session name
+        agent_prompt=$(sed "s|\$WORKSPACE_SESSION|$ws_session|g" "$agent_spec")
+    fi
+
+    # Start claude in opus on the left pane with workspace agent instructions
+    if [[ -n "$agent_prompt" ]]; then
+        tmux send-keys -t "$ws_session:workspace.1" "claude --model opus --add-dir . --append-system-prompt \"\$(sed 's|\\\$WORKSPACE_SESSION|$ws_session|g' '$agent_spec')\" $SKIP_PERMISSIONS" C-m
+    else
+        tmux send-keys -t "$ws_session:workspace.1" "claude --model opus --add-dir . $SKIP_PERMISSIONS" C-m
+    fi
+
+    # Create second window: monitors (ctop | htop)
+    tmux new-window -t "$ws_session" -n "monitors" -c "$PWD"
+    tmux split-window -h -t "$ws_session:monitors" -c "$PWD"
+    tmux select-layout -t "$ws_session:monitors" even-horizontal
+
+    # Start ctop (left) and htop (right) in monitors window
+    tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color ctop" C-m
+    tmux send-keys -t "$ws_session:monitors.2" "htop" C-m
+
+    # Select workspace window, left pane (claude)
+    tmux select-window -t "$ws_session:workspace"
     tmux select-pane -t "$ws_session:workspace.1"
 
     echo ""
     echo -e "${GREEN}${BOLD}Workspace Ready${NC}"
     echo ""
     echo "Directory:    $(basename "$PWD")"
-    echo "Left pane:    claude (opus)"
-    echo "Right pane:   shell"
+    echo ""
+    echo "Window 1 (workspace):"
+    echo "  Left pane:  claude (opus)"
+    echo "  Right pane: shell"
+    echo ""
+    echo "Window 2 (monitors):"
+    echo "  Left pane:  ctop"
+    echo "  Right pane: htop"
     echo ""
     echo "Navigation:"
+    echo "  Ctrl-b 1/2      Switch window"
     echo "  Alt ←→          Switch pane"
     echo "  Ctrl-b z        Zoom pane"
     echo "  Ctrl-b d        Detach"
