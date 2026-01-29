@@ -44,13 +44,15 @@ set textwidth=120 "Make it obvious where 80 characters is
 set colorcolumn=+1
 
 " http://vim.wikia.com/wiki/Toggle_auto-indenting_for_code_paste
-set pastetoggle=<F2> "Have a hotkey to allow simple pasting
+" pastetoggle removed - not needed in Neovim (bracketed paste is automatic)
+if !has('nvim')
+  set pastetoggle=<F2>
+  set ttymouse=xterm2
+endif
 nnoremap <F2> :set invpaste paste?<CR>
-set paste "default on
 set showmode
 
 set mouse=a
-set ttymouse=xterm2
 
 set clipboard=unnamed
 
