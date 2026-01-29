@@ -4,3 +4,6 @@ export DOCKER_CONFIG="$XDG_CONFIG_HOME/docker"
 # Colima XDG-compliant home directory
 # Colima doesn't natively support XDG, so we set COLIMA_HOME
 export COLIMA_HOME="$XDG_DATA_HOME/colima"
+
+# Point Docker CLI to Colima's socket (when colima is running)
+export DOCKER_HOST="unix://$COLIMA_HOME/default/docker.sock"
