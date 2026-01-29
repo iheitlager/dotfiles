@@ -231,6 +231,11 @@ Files to modify:
 Approach: [1-2 sentences]
 Estimated complexity: [trivial/small/medium/large]
 
+Test plan:
+- [ ] Unit tests for new handler
+- [ ] Integration test for end-to-end flow
+- [ ] Existing tests still pass
+
 Based on: [reference similar patterns found by agent]
 ```
 
@@ -240,16 +245,53 @@ Wait for user approval before proceeding.
 
 - Create a feature branch: `git checkout -b fix/#123-short-description` or `feat/#123-...`
 - Make changes following project conventions
-- Write or update tests
-- Ensure checks pass (consider `/check` to verify)
+- Write or update tests for changed code
 
-### 6. Prepare for Review
+### 6. Verify Tests & Coverage (MANDATORY)
+
+Before preparing for review, **tests must pass**:
+
+```bash
+# Run tests (use project's test command)
+uv run pytest tests/ -x --tb=short   # Python
+npm test                              # Node
+make test                             # If Makefile exists
+```
+
+**Coverage requirements:**
+- New code should have test coverage
+- Bug fixes should include a regression test
+- Check coverage if available: `uv run pytest --cov=src/`
+
+**If tests fail:**
+```
+✗ Tests failing - DO NOT proceed to PR
+
+Fix failing tests before continuing:
+  - Read test output to understand failures
+  - Fix implementation or update tests
+  - Re-run until green
+```
+
+**If no tests exist for changed code:**
+```
+⚠️  No test coverage for changes
+
+Options:
+  a) Write tests now (recommended)
+  b) Proceed without tests (must justify in PR)
+  c) Create follow-up issue for tests
+```
+
+Run `/check` to verify linting, types, and formatting as well.
+
+### 7. Prepare for Review
 
 - Stage changes and create commit following project conventions
 - Reference the issue: `fix: resolve hover bug in sidebar (#123)`
 - Summarize what was done and any follow-up needed
 
-### 7. Complete Swarm Job
+### 8. Complete Swarm Job
 
 After PR is created or merged, mark the job as done:
 
