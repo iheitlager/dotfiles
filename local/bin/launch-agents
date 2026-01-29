@@ -788,48 +788,81 @@ cmd_start() {
 }
 
 cmd_stop() {
-    debug "Stopping session $SESSION"
+    # Check for workspace session first (ws-*), then swarm session (claude-*)
+    local dir_name=$(basename "$PWD")
+    local ws_session="ws-${dir_name//[^a-zA-Z0-9_-]/_}"
+    local target_session=""
+    local session_type=""
 
-    if tmux has-session -t "$SESSION" 2>/dev/null; then
-        # Count panes in agents window to determine agent count
-        local pane_count=$(tmux list-panes -t "$SESSION:agents" 2>/dev/null | wc -l | tr -d ' ')
-        
+    if tmux has-session -t "$ws_session" 2>/dev/null; then
+        target_session="$ws_session"
+        session_type="workspace"
+    elif tmux has-session -t "$SESSION" 2>/dev/null; then
+        target_session="$SESSION"
+        session_type="swarm"
+    fi
+
+    if [[ -z "$target_session" ]]; then
+        echo "No session running (checked: $ws_session, $SESSION)"
+        return
+    fi
+
+    debug "Stopping $session_type session: $target_session"
+
+    if [[ "$session_type" == "workspace" ]]; then
+        # Workspace mode: simpler shutdown
+        if [[ "$FORCE" == true ]]; then
+            echo -e "${YELLOW}Force killing workspace...${NC}"
+            # Send Ctrl-C to both panes
+            tmux send-keys -t "$target_session:workspace.1" C-c
+            tmux send-keys -t "$target_session:workspace.2" C-c
+            sleep 0.3
+        else
+            echo -e "${YELLOW}Stopping workspace...${NC}"
+            # Send graceful exit to claude
+            tmux send-keys -t "$target_session:workspace.1" "/exit" Enter 2>/dev/null || true
+            sleep 0.3
+        fi
+        tmux kill-session -t "$target_session"
+        echo -e "${GREEN}✓ Workspace stopped${NC}"
+    else
+        # Swarm mode: original logic
+        local pane_count=$(tmux list-panes -t "$target_session:agents" 2>/dev/null | wc -l | tr -d ' ')
+
         if [[ "$FORCE" == true ]]; then
             echo -e "${YELLOW}Force killing agents...${NC}"
-            
+
             # Send Ctrl-C to interrupt running processes
             for i in $(seq 1 $pane_count); do
                 debug "Sending Ctrl-C to agent-$i"
-                tmux send-keys -t "$SESSION:agents.$i" C-c
+                tmux send-keys -t "$target_session:agents.$i" C-c
             done
             sleep 0.5
-            
+
             # Send exit to terminate shells
             for i in $(seq 1 $pane_count); do
                 debug "Sending exit to agent-$i"
-                tmux send-keys -t "$SESSION:agents.$i" "exit" Enter
+                tmux send-keys -t "$target_session:agents.$i" "exit" Enter
             done
             sleep 0.5
-            
-            echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
-            tmux kill-session -t "$SESSION"
+
+            echo -e "${YELLOW}Killing tmux session: $target_session${NC}"
+            tmux kill-session -t "$target_session"
             echo -e "${GREEN}✓ Session killed${NC}"
         else
             echo -e "${YELLOW}Sending shutdown to agents...${NC}"
-            
+
             # Send graceful shutdown message to each agent (two commands required)
             for i in $(seq 1 $pane_count); do
                 debug "Sending shutdown to agent-$i"
-                tmux send-keys -t "$SESSION:agents.$i" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter
-                tmux send-keys -t "$SESSION:agents.$i" Enter
+                tmux send-keys -t "$target_session:agents.$i" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter
+                tmux send-keys -t "$target_session:agents.$i" Enter
             done
-            
-            echo -e "${YELLOW}Killing tmux session: $SESSION${NC}"
-            tmux kill-session -t "$SESSION"
+
+            echo -e "${YELLOW}Killing tmux session: $target_session${NC}"
+            tmux kill-session -t "$target_session"
             echo -e "${GREEN}✓ Session stopped${NC}"
         fi
-    else
-        echo "No session running"
     fi
 }
 
