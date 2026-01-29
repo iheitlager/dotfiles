@@ -15,4 +15,6 @@ __docker_clean() {
 
 
 alias dclean=__docker_clean
-alias ctop="DOCKER_HOST=unix://$HOME/.colima/default/docker.sock ctop"
+
+# ctop needs TERM fix for tmux-256color
+alias ctop='TERM=xterm-256color command ctop'
