@@ -19,7 +19,10 @@ for s:dir in [s:vim_state, s:vim_data, s:vim_cache,
 endfor
 
 " Move state files out of $HOME
-set viminfofile=$XDG_STATE_HOME/vim/viminfo
+" viminfofile is Vim-only; Neovim uses shada (handled automatically)
+if !has('nvim')
+  set viminfofile=$XDG_STATE_HOME/vim/viminfo
+endif
 set directory=$XDG_STATE_HOME/vim/swap//
 set backupdir=$XDG_STATE_HOME/vim/backup//
 set undodir=$XDG_STATE_HOME/vim/undo//
