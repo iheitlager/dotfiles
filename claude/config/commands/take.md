@@ -8,6 +8,99 @@ Take ownership of a GitHub issue and begin implementation.
 /take             Show suggested issues to take
 ```
 
+## Pre-flight Checks (MANDATORY)
+
+Before taking any issue, run these checks in order. **Stop immediately** if any check fails.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PRE-FLIGHT CHECKS                                          │
+│                                                             │
+│  1. Check working state                                     │
+│     ├─ On main/agent-N base branch? ─── Continue            │
+│     └─ On feature branch?                                   │
+│        ├─ Clean (no changes)? ─── Warn, offer to switch     │
+│        └─ Dirty (uncommitted)? ─── STOP                     │
+│                     │                                       │
+│  2. Sync with main                                          │
+│     ├─ git fetch origin                                     │
+│     └─ git rebase origin/main                               │
+│                     │                                       │
+│  3. Atomic queue registration (swarm-job take)              │
+│     ├─ Issue already in queue? ─── Show who, STOP           │
+│     └─ Not in queue? ─── Create + claim atomically          │
+│                     │                                       │
+│  ✓ Ready to proceed                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Check 1: Working State
+
+```bash
+# Get current branch
+BRANCH=$(git branch --show-current)
+
+# Check for uncommitted changes
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "✗ Uncommitted changes on $BRANCH"
+  echo "  Commit or stash changes first, or use /pr to finalize current work"
+  # STOP
+fi
+
+# Check if on a feature branch (not main, not agent-N base)
+if [[ "$BRANCH" != "main" && ! "$BRANCH" =~ ^agent-[0-9]+$ ]]; then
+  echo "⚠️  Currently on feature branch: $BRANCH"
+  echo "  Options:"
+  echo "    1. Switch to main first: git checkout main"
+  echo "    2. Finish current work: /pr to create PR"
+  echo "    3. Abandon branch: git checkout main && git branch -D $BRANCH"
+  # ASK user what to do, or STOP
+fi
+```
+
+### Check 2: Sync with Main
+
+```bash
+git fetch origin
+git rebase origin/main
+```
+
+**If rebase conflicts:**
+```
+✗ Rebase conflicts detected
+  Your branch has diverged from main. Resolve conflicts first:
+    git rebase --abort   # Cancel and keep your changes
+    git rebase --continue # After fixing conflicts
+```
+
+### Check 3: Atomic Queue Registration
+
+Use `swarm-job take` which atomically:
+- Checks if issue already has a job (pending or active)
+- Creates the job
+- Claims it immediately
+
+```bash
+swarm-job take $ISSUE_NUM -t "$TITLE" -p $PRIORITY -c $COMPLEXITY
+```
+
+**If already taken:**
+```
+✗ Issue #123 already in queue
+
+  Job: job-1737500000
+  Title: Fix login redirect
+  Claimed by: agent-2
+
+Options:
+  - Claim existing: swarm-job claim job-1737500000
+  - Choose different issue
+```
+
+This is atomic (uses `flock`) so no race conditions between agents.
+
+---
+
 ## Agent Strategy
 
 The research phase is delegated to an Explore agent, while judgment and implementation stay interactive.
@@ -16,6 +109,8 @@ The research phase is delegated to an Explore agent, while judgment and implemen
 ┌─────────────────────────────────────────────────────────────┐
 │  /take #123                                                 │
 │                                                             │
+│  0. Pre-flight checks (see above)                           │
+│                     │                                       │
 │  1. Fetch issue (gh issue view)                             │
 │                     │                                       │
 │                     ▼                                       │
@@ -153,6 +248,16 @@ Wait for user approval before proceeding.
 - Stage changes and create commit following project conventions
 - Reference the issue: `fix: resolve hover bug in sidebar (#123)`
 - Summarize what was done and any follow-up needed
+
+### 7. Complete Swarm Job
+
+After PR is created or merged, mark the job as done:
+
+```bash
+swarm-job complete "$JOB_ID" -r "PR #$PR_NUM created"
+```
+
+This is handled automatically by `/pr` and `/merge` commands.
 
 ## Process (Queue Mode)
 

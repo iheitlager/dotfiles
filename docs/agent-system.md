@@ -620,7 +620,7 @@ $ swarm-job complete job-001 -r "Implemented config parser with validation"
 # Watcher broadcasts: "[swarm] Job completed: job-001 by agent-1"
 ```
 
-## Git Workflow
+## Git Workflow & Synchronization
 
 Each agent works on its own branch (`agent-1`, `agent-2`, etc.):
 
@@ -628,6 +628,41 @@ Each agent works on its own branch (`agent-1`, `agent-2`, etc.):
 2. Make changes, commit with clear messages
 3. Create PR when complete: `gh pr create`
 4. Log completion to events.log
+
+### Sync Points
+
+Agents must stay synchronized with `main`. These are the critical sync points:
+
+| Command | Sync Action | Signal to Others |
+|---------|-------------|------------------|
+| `/take` | Rebase on main before starting | Register job in queue |
+| `/pr` | Check if behind main, warn | Complete swarm job |
+| `/merge` | Pull latest main | **Broadcast sync signal** |
+
+### When Signals Are Sent
+
+Only one event requires broadcasting to other agents:
+
+**After `/merge`**: Main has changed, other agents need to rebase.
+
+```bash
+# Signal sent to all agents in swarm
+tmux send-keys -t "$SESSION:agents.$pane" \
+  "[sync] main updated via PR #$PR - run: git fetch && git rebase origin/main"
+```
+
+Other coordination (job claimed, job completed, new job) is handled by:
+- The file-based queue system (atomic claims)
+- The swarm-watcher daemon (broadcasts completions)
+
+### Pre-flight Checks (enforced by /take)
+
+Before taking any issue:
+
+1. **Working state** - Must be on clean main/agent-N branch
+2. **Queue check** - Issue not already claimed by another agent
+3. **Sync** - Rebase on latest main
+4. **Register** - Create and claim job in queue
 
 ## Complexity Assessment Guide
 

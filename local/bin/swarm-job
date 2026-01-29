@@ -546,6 +546,165 @@ EOF
 }
 
 # ============================================================================
+# TAKE command (atomic check + create + claim)
+# ============================================================================
+cmd_take() {
+    local issue_num=""
+    local title=""
+    local priority="medium"
+    local complexity="moderate"
+    local description=""
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -i|--issue)       issue_num="$2"; shift 2 ;;
+            -t|--title)       title="$2"; shift 2 ;;
+            -p|--priority)    priority="$2"; shift 2 ;;
+            -c|--complexity)  complexity="$2"; shift 2 ;;
+            -d|--description) description="$2"; shift 2 ;;
+            -h|--help)        help_take; exit 0 ;;
+            -*)               echo -e "${RED}Unknown option: $1${NC}" >&2; exit 1 ;;
+            *)
+                # First positional arg is issue number
+                if [[ -z "$issue_num" ]]; then
+                    issue_num="$1"
+                elif [[ -z "$title" ]]; then
+                    title="$1"
+                fi
+                shift ;;
+        esac
+    done
+
+    if [[ -z "$issue_num" ]]; then
+        echo -e "${RED}Error: Issue number required${NC}" >&2
+        help_take
+        exit 1
+    fi
+
+    # Strip # prefix if present
+    issue_num="${issue_num#\#}"
+
+    ensure_dirs
+
+    local global_lock="$LOCK_DIR/take.lock"
+
+    # Atomic check + create + claim with global lock
+    (
+        if ! flock -n 200; then
+            echo -e "${YELLOW}Another agent is taking an issue, try again${NC}" >&2
+            exit 1
+        fi
+
+        # Check if issue already has a job (pending or active)
+        local existing=""
+        for job_file in "$PENDING_DIR"/*.yaml "$ACTIVE_DIR"/*.yaml; do
+            [[ -f "$job_file" ]] || continue
+            if grep -q "#${issue_num}[^0-9]" "$job_file" 2>/dev/null || \
+               grep -q "#${issue_num}$" "$job_file" 2>/dev/null; then
+                existing="$job_file"
+                break
+            fi
+        done
+
+        if [[ -n "$existing" ]]; then
+            local existing_id=$(basename "$existing" .yaml)
+            local existing_title=$(yaml_get "$existing" "title")
+            local claimed_by=$(yaml_get "$existing" "claimed_by")
+
+            echo -e "${YELLOW}✗ Issue #$issue_num already in queue${NC}"
+            echo ""
+            echo "  Job: $existing_id"
+            echo "  Title: $existing_title"
+            if [[ -n "$claimed_by" && "$claimed_by" != "null" ]]; then
+                echo "  Claimed by: $claimed_by"
+            else
+                echo "  Status: pending (unclaimed)"
+            fi
+            echo ""
+            echo "Options:"
+            echo "  - Claim existing: swarm-job claim $existing_id"
+            echo "  - Choose different issue"
+            exit 1
+        fi
+
+        # Also check for open PRs (non-blocking warning)
+        if command -v gh &>/dev/null; then
+            local pr_check=$(gh pr list --search "#$issue_num in:body" --json number,title --jq '.[0].number // empty' 2>/dev/null)
+            if [[ -n "$pr_check" ]]; then
+                echo -e "${YELLOW}⚠️  Note: PR #$pr_check may address this issue${NC}"
+            fi
+        fi
+
+        # Create the job
+        [[ -z "$title" ]] && title="Issue #$issue_num"
+
+        local recommended_model
+        case $complexity in
+            simple)   recommended_model="haiku" ;;
+            moderate) recommended_model="sonnet" ;;
+            complex)  recommended_model="opus" ;;
+        esac
+
+        local job_id="job-$(date +%s)-$$"
+        local job_file="$ACTIVE_DIR/$job_id.yaml"  # Create directly in active (claimed)
+        local timestamp=$(date -Iseconds)
+
+        [[ -z "$description" ]] && description="From issue #$issue_num"
+
+        cat > "$job_file" << EOF
+id: $job_id
+created: $timestamp
+created_by: ${AGENT_ID:-user}
+priority: $priority
+complexity: $complexity
+recommended_model: $recommended_model
+title: $title (#$issue_num)
+description: |
+  $description
+depends_on: []
+claimed_by: ${AGENT_ID:-user}
+claimed_at: $timestamp
+completed_at: null
+result: null
+EOF
+
+        echo "$timestamp | ${AGENT_ID:-user} | TAKE | $job_id | Issue #$issue_num - $title" >> "$EVENTS_LOG"
+
+        echo -e "${GREEN}✓ Took issue #$issue_num${NC}"
+        echo ""
+        echo "  Job ID: $job_id"
+        echo "  Title: $title"
+        echo "  Claimed by: ${AGENT_ID:-user}"
+        echo ""
+
+    ) 200>"$global_lock"
+}
+
+help_take() {
+    cat << EOF
+Usage: swarm-job take <issue-num> [OPTIONS]
+
+Atomically check if issue is available, create job, and claim it.
+Prevents race conditions when multiple agents try to take the same issue.
+
+Arguments:
+    ISSUE_NUM       GitHub issue number (e.g., 123 or #123)
+
+Options:
+    -t, --title       Job title (default: "Issue #N")
+    -p, --priority    low, medium, high, urgent (default: medium)
+    -c, --complexity  simple, moderate, complex (default: moderate)
+    -d, --description Job description
+    -h, --help        Show this help
+
+Examples:
+    swarm-job take 123
+    swarm-job take #123 -t "Add dark mode" -c moderate
+    swarm-job take 456 -p high -c complex
+EOF
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 show_help() {
@@ -564,6 +723,7 @@ Commands:
     claim       Claim a job from the queue
     complete    Mark a job as done
     list        List jobs by status
+    take        Atomically check + create + claim for an issue
 
 Run 'swarm-job <command> --help' for command-specific options.
 
@@ -576,6 +736,7 @@ Examples:
     swarm-job claim
     swarm-job complete job-1737372800
     swarm-job list pending
+    swarm-job take 123 -t "Fix login bug" -p high
 EOF
 }
 
@@ -593,6 +754,7 @@ case "$COMMAND" in
     claim)    cmd_claim "$@" ;;
     complete) cmd_complete "$@" ;;
     list)     cmd_list "$@" ;;
+    take)     cmd_take "$@" ;;
     -h|--help|help) show_help ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}" >&2

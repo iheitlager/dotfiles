@@ -188,6 +188,35 @@ To close manually:
   gh issue close 99 --reason completed --comment "Closed via PR #123"
 ```
 
+### 7. Complete Swarm Job & Notify Agents
+
+After merge, update the swarm queue and signal other agents:
+
+```bash
+# Complete any swarm job associated with this PR's issues
+for ISSUE in $LINKED_ISSUES; do
+  JOB_ID=$(swarm-job list active 2>/dev/null | grep "#$ISSUE" | awk '{print $1}')
+  if [[ -n "$JOB_ID" ]]; then
+    swarm-job complete "$JOB_ID" -r "merged via PR #$PR"
+  fi
+done
+
+# Signal other agents to sync (if in swarm mode)
+if tmux has-session -t "claude-$PROJECT" 2>/dev/null; then
+  # Get all panes and notify them
+  for pane in $(tmux list-panes -t "claude-$PROJECT:agents" -F '#{pane_index}'); do
+    tmux send-keys -t "claude-$PROJECT:agents.$pane" \
+      "[sync] main updated via PR #$PR - run: git fetch && git rebase origin/main" Enter
+  done
+fi
+```
+
+This ensures:
+- Swarm queue reflects completed work
+- Other agents know to sync their branches
+
+---
+
 ## Output
 
 ```
@@ -200,6 +229,8 @@ PR Merged Successfully
 ✓ Switched to main
 ✓ Pulled latest changes
 ✓ Pruned stale remote refs
+✓ Swarm job completed (if applicable)
+✓ Notified agents to sync (if in swarm mode)
 
 Commit: abc1234 feat(auth): add OAuth support (#123)
 

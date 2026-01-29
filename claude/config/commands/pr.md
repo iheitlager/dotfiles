@@ -586,6 +586,18 @@ After any operation, suggest relevant next actions:
 - Add labels: `gh pr edit --add-label "enhancement"`
 - View in browser: `gh pr view --web`
 
+### Complete Swarm Job
+
+If this PR was created from a `/take` workflow, mark the swarm job as done:
+
+```bash
+# Find job for this issue (from PR body "Closes #N")
+JOB_ID=$(swarm-job list active | grep "#$ISSUE_NUM" | awk '{print $1}')
+if [[ -n "$JOB_ID" ]]; then
+  swarm-job complete "$JOB_ID" -r "PR #$PR_NUM created"
+fi
+```
+
 **After review:**
 - Post comments: `gh pr comment 123 --body "..."`
 - Approve: `gh pr review 123 --approve`
