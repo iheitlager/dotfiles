@@ -12,11 +12,11 @@
 
 ---
 
-In the [previous article](https://stories.lab271.io/the-agents-are-coming-clean-your-home-c8ae7e026c51), we cleaned up our home directory with XDG-compliant dotfiles. Now we face a new challenge: AI coding agents have opinions about where their config lives, and those opinions don't always align with ours.
+In the [previous article](https://stories.lab271.io/the-agents-are-coming-clean-your-home-c8ae7e026c51), I cleaned up my home directory with XDG-compliant dotfiles. Now I face a new challenge: AI coding agents have opinions about where their config lives, and those opinions don't always align with mine.
 
-Claude Code expects `~/.claude/`. We want version control. We want XDG compliance. We want a single source of truth.
+Claude Code expects `~/.claude/`. I want version control. I want XDG compliance. I want a single source of truth. I want to align this with my [dotfiles](https://github.com/iheitlager/dotfiles)
 
-The solution? Another level of indirection.
+How do I solve this? Well, just add another level of indirection.
 
 ## The Problem
 
@@ -30,9 +30,9 @@ Claude Code stores its configuration in `~/.claude/`:
 └── skills/            # Reusable skill definitions
 ```
 
-This creates three familiar problems: you want `CLAUDE.md` in git, but `~/.claude/` isn't your dotfiles repo. Config should live in `~/.config/`, not yet another dotfile in `~/`. And you want your agent instructions to travel when you clone your dotfiles on a new machine.
+This creates three familiar problems: I want `CLAUDE.md` in git, but `~/.claude/` isn't my dotfiles repo. Config should live in `~/.config/`, not yet another dotfile in `~/`. And I want my agent instructions to travel when I clone my dotfiles on a new machine.
 
-Sound familiar? It's the same pattern we solved for vim and tmux—but with a twist. Claude Code doesn't support XDG paths, and we need to version control files that directly instruct an AI.
+Sound familiar? It's the same pattern I solved for vim and tmux—but with a twist. Claude Code doesn't support XDG paths, and I need to version control files that directly instruct an AI.
 
 ## The Triple-Layer Architecture
 
@@ -54,9 +54,9 @@ Layer 3: APPLICATION EXPECTATION
 ~/.claude/ ────────► symlinks to ~/.config/claude/*
 ```
 
-Each layer serves a purpose: Layer 1 gives you version control and portability. Layer 2 maintains XDG compliance and standards. Layer 3 is what Claude Code actually reads.
+Each layer serves a purpose: Layer 1 gives me version control and portability. Layer 2 maintains XDG compliance and standards. Layer 3 is what Claude Code actually reads.
 
-Edit in one place. Git tracks it. Claude reads it.
+I edit in one place. Git tracks it. Claude reads it.
 
 ## Implementation
 
@@ -93,9 +93,9 @@ Not everything belongs in git. Version control `CLAUDE.md` (your global AI instr
 
 ## The Key Files
 
-**CLAUDE.md** is where it gets interesting. This markdown file is your global instructions to the AI—code standards, workflow preferences, things to avoid. It travels with your dotfiles. New machine? Clone, bootstrap, and Claude already knows your preferences.
+**CLAUDE.md** is where it gets interesting. This markdown file is my global instructions to the AI—code standards, workflow preferences, things to avoid. It travels with my dotfiles. New machine? Clone, bootstrap, and Claude already knows my preferences.
 
-**settings.json** is your security configuration. You can allowlist safe commands (`git`, `uv`, `gh`) and denylist dangerous ones (`rm -rf`, `sudo`, `curl|sh`). Version control this. Review changes carefully. The deny list is your safety net against an overeager agent.
+**settings.json** is my security configuration. I can allowlist safe commands (`git`, `uv`, `gh`) and denylist dangerous ones (`rm -rf`, `sudo`, `curl|sh`). I version control this. I review changes carefully. The deny list is my safety net against an overeager agent.
 
 **commands/** and **skills/** extend Claude Code's capabilities with reusable instructions. Custom slash commands, documentation workflows, testing patterns—all versioned, all portable.
 
@@ -105,13 +105,13 @@ After running `script/bootstrap`, verify the chain:
 
 ```bash
 $ ls -la ~/.config/claude
-lrwxr-xr-x  claude -> /Users/you/.dotfiles/claude/config
+lrwxr-xr-x  claude -> /Users/iheitlager/.dotfiles/claude/config
 
 $ ls -la ~/.claude/CLAUDE.md
 lrwxr-xr-x  CLAUDE.md -> ~/.config/claude/CLAUDE.md
 
 $ readlink -f ~/.claude/CLAUDE.md
-/Users/you/.dotfiles/claude/config/CLAUDE.md
+/Users/iheitlager/.dotfiles/claude/config/CLAUDE.md
 ```
 
 One file. Three paths. Full traceability.
@@ -120,14 +120,14 @@ One file. Three paths. Full traceability.
 
 This isn't just about organization. It's about treating AI agent configuration as first-class infrastructure:
 
-- **Auditability** — Git history shows every change to your AI's instructions
-- **Portability** — Your agent setup travels with your dotfiles
+- **Auditability** — Git history shows every change to my AI's instructions
+- **Portability** — My agent setup travels with my dotfiles
 - **Security** — Permission settings are version controlled and reviewable
-- **Consistency** — Same instructions across all your machines
+- **Consistency** — Same instructions across all my machines
 
-There's something profound about version-controlling the instructions you give to an AI. When that agent makes a mistake, you can check what guidance you gave it. When you tweak its behavior, you have a record of what changed. When your colleague asks "how did you get Claude to do that?", you point them at a file in git.
+There's something profound about version-controlling the instructions I give to an AI. When that agent makes a mistake, I can check what guidance I gave it. When I tweak its behavior, I have a record of what changed. When my colleague asks "how did you get Claude to do that?", I point them at a file in git.
 
-When you start running multiple agents in parallel—which we'll cover in part 3—this foundation becomes critical. Each agent reads from the same source of truth, following the same rules, with the same security boundaries.
+When I start running multiple agents in parallel—which I'll cover in part 3—this foundation becomes critical. Each agent reads from the same source of truth, following the same rules, with the same security boundaries.
 
 But first: go version control your `CLAUDE.md`. Your future self will thank you.
 
