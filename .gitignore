@@ -2,3 +2,6 @@ claude/config/settings.local.json
 .DS_Store
 .netrwhist
 AGENTS.md
+
+# Neovim plugin lock file
+config/nvim/lazy-lock.json
