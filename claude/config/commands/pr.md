@@ -428,6 +428,42 @@ git branch -d feat/old-branch 2>/dev/null
 
 Create a new PR from current branch.
 
+### 0. Pre-flight Check: Validate Branch Type
+
+**CRITICAL**: Never create a PR from `agent-XX` base branches (worktree bases).
+
+```bash
+BRANCH=$(git branch --show-current)
+
+# Block PR creation from agent-XX base branches
+if [[ "$BRANCH" =~ ^agent-[0-9]+$ ]]; then
+  echo "✗ Cannot create PR from agent-XX base branch"
+  echo ""
+  echo "  agent-XX branches are worktree bases, not feature branches."
+  echo ""
+  echo "  To create a PR from this worktree:"
+  echo "    1. Sync to main: git fetch && git rebase origin/main"
+  echo "    2. Create feature branch: git checkout -b feat/your-feature"
+  echo "    3. Make your changes and commit"
+  echo "    4. Create PR: /pr"
+  echo ""
+  exit 1
+fi
+
+# Also block from main if no commits ahead
+if [[ "$BRANCH" == "main" ]]; then
+  COMMITS_AHEAD=$(git rev-list --count origin/main..HEAD)
+  if [[ "$COMMITS_AHEAD" -eq 0 ]]; then
+    echo "✗ No commits ahead of main"
+    echo ""
+    echo "  Create a feature branch first:"
+    echo "    /br feat <description>"
+    echo ""
+    exit 1
+  fi
+fi
+```
+
 ### 1. Gather Context
 
 ```bash

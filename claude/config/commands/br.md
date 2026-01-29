@@ -34,10 +34,32 @@ Use prefixes matching commit types:
 
 ## Process
 
-1. **Parse the request** — Understand what work the user wants to do
-2. **Suggest branch name** — Use format: `type/short-description`
-3. **Check for related issue** — If issue exists, include number: `feat/123-add-feature`
-4. **Create the branch** from current HEAD or specified base
+1. **Check current branch** — Verify we're on a valid base (`main` or `agent-N`)
+2. **Parse the request** — Understand what work the user wants to do
+3. **Suggest branch name** — Use format: `type/short-description`
+4. **Check for related issue** — If issue exists, include number: `feat/123-add-feature`
+5. **Create the branch** from current HEAD or specified base
+
+### Pre-flight: Verify Base Branch
+
+```bash
+BRANCH=$(git branch --show-current)
+
+# Warn if creating from a feature branch (should be on main or agent-N)
+if [[ "$BRANCH" != "main" && ! "$BRANCH" =~ ^agent-[0-9]+$ ]]; then
+  echo "⚠️  Creating branch from feature branch: $BRANCH"
+  echo ""
+  echo "  Usually you want to branch from main or agent-N."
+  echo "  Consider: git checkout main && /br <type> <description>"
+  echo ""
+  echo "  Continue anyway? [y/N]"
+  # Ask for confirmation
+fi
+```
+
+**Valid base branches:**
+- `main` — Standard base for most work
+- `agent-1`, `agent-2`, etc. — Worktree base branches for parallel work
 
 ## Branch Name Rules
 

@@ -130,6 +130,42 @@ Check `Makefile` for convenient shortcuts: `make test`, `make lint`, `make forma
 
 ## Git Workflow & Branching Strategy
 
+### Worktrees and Agent Branches
+
+**IMPORTANT**: For projects using git worktrees, `agent-XX` branches (e.g., `agent-1`, `agent-2`) are **base branches** for parallel work, NOT feature branches.
+
+**Rules for agent-XX branches:**
+- ❌ **NEVER** create PRs directly from `agent-XX` branches
+- ❌ **NEVER** push `agent-XX` branches to remote
+- ✅ **DO** use them as base branches in worktrees for creating feature branches
+- ✅ **DO** sync them with main: `git fetch && git rebase origin/main`
+
+**Correct workflow from a worktree:**
+```bash
+# You're in a worktree on agent-1 branch
+git branch --show-current  # → agent-1
+
+# 1. Sync with main
+git fetch origin
+git rebase origin/main
+
+# 2. Create feature branch
+git checkout -b feat/my-feature
+
+# 3. Make changes and commit
+# ... work ...
+git commit -m "feat: add feature"
+
+# 4. Push feature branch and create PR
+git push -u origin feat/my-feature
+/pr  # This will work because you're on feat/my-feature, not agent-1
+```
+
+**Why this matters:**
+- Worktrees enable parallel development without branch switching
+- `agent-XX` branches are isolated workspace bases
+- PRs should come from feature branches (`feat/`, `fix/`, etc.), not workspace bases
+
 ### Branch Naming Conventions
 
 All branches must follow these conventions:
