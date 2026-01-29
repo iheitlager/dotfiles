@@ -130,7 +130,8 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter',
     build = ':TSUpdate',
     config = function()
-      require('nvim-treesitter.configs').setup({
+      -- API changed: 'configs' -> 'config' in newer versions
+      require('nvim-treesitter.config').setup({
         ensure_installed = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown' },
         auto_install = true,
         highlight = { enable = true },
