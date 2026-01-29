@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+"""
+Markdown to Plain Text Converter for Medium
+
+Strips all formatting and outputs plain text that Medium can easily accept.
+- No HTML, no markdown formatting
+- Bullets (•) for unordered lists
+- # for numbered lists
+- Links extracted and printed separately
+"""
+
+import re
+import sys
+import argparse
+import subprocess
+from pathlib import Path
+from typing import List, Tuple
+
+
+class PlainTextConverter:
+    """Convert markdown to plain text for Medium."""
+    
+    def __init__(self):
+        self.links = []
+    
+    def extract_links(self, text: str) -> str:
+        """Extract links and replace with just the text."""
+        def replace_link(match):
+            link_text = match.group(1)
+            url = match.group(2)
+            self.links.append(f"{link_text}: {url}")
+            return link_text
+        
+        # [text](url) -> text
+        text = re.sub(r'\[([^\]]+?)\]\(([^)]+?)\)', replace_link, text)
+        return text
+    
+    def strip_formatting(self, text: str) -> str:
+        """Remove all markdown formatting."""
+        # Remove bold and italic
+        text = re.sub(r'\*\*([^*]+?)\*\*', r'\1', text)
+        text = re.sub(r'__([^_]+?)__', r'\1', text)
+        text = re.sub(r'\*([^*]+?)\*', r'\1', text)
+        text = re.sub(r'_([^_]+?)_', r'\1', text)
+        
+        # Remove inline code backticks
+        text = re.sub(r'`([^`]+?)`', r'\1', text)
+        
+        return text
+    
+    def convert_headers(self, line: str) -> str:
+        """Convert headers to plain text."""
+        match = re.match(r'^(#{1,6})\s+(.+)$', line.strip())
+        if match:
+            level = len(match.group(1))
+            content = match.group(2)
+            # For Medium, just return the text in uppercase for h1/h2
+            if level == 1:
+                return content.upper()
+            elif level == 2:
+                return content
+            else:
+                return content
+        return line
+    
+    def convert(self, markdown_text: str) -> Tuple[str, List[str]]:
+        """Convert markdown to plain text."""
+        lines = markdown_text.split('\n')
+        result = []
+        in_code_block = False
+        numbered_list_counter = 0
+        
+        for line in lines:
+            # Skip frontmatter
+            if line.strip() == '---':
+                continue
+            
+            # Handle code blocks
+            if line.strip().startswith('```'):
+                in_code_block = not in_code_block
+                if in_code_block:
+                    # Starting code block, optionally add label
+                    language = line.strip()[3:].strip()
+                    if language:
+                        result.append(f"\n{language.upper()}:")
+                continue
+            
+            if in_code_block:
+                # Just add code as-is with indent
+                result.append(f"    {line}")
+                continue
+            
+            # Skip horizontal rules
+            if re.match(r'^[\-\*\_]{3,}$', line.strip()):
+                result.append('')
+                continue
+            
+            # Handle headers
+            if line.strip().startswith('#'):
+                header = self.convert_headers(line)
+                result.append(f"\n{header}\n")
+                continue
+            
+            # Handle blockquotes
+            if line.strip().startswith('>'):
+                quote = line.strip()[1:].strip()
+                quote = self.extract_links(quote)
+                quote = self.strip_formatting(quote)
+                result.append(quote)
+                continue
+            
+            # Handle unordered lists
+            if re.match(r'^\s*[-*+]\s+', line):
+                content = re.sub(r'^\s*[-*+]\s+', '', line)
+                content = self.extract_links(content)
+                content = self.strip_formatting(content)
+                result.append(f"• {content}")
+                continue
+            
+            # Handle ordered lists
+            if re.match(r'^\s*\d+\.\s+', line):
+                numbered_list_counter += 1
+                content = re.sub(r'^\s*\d+\.\s+', '', line)
+                content = self.extract_links(content)
+                content = self.strip_formatting(content)
+                result.append(f"# {content}")
+                continue
+            else:
+                if numbered_list_counter > 0:
+                    numbered_list_counter = 0
+            
+            # Regular text
+            if line.strip():
+                text = self.extract_links(line)
+                text = self.strip_formatting(text)
+                result.append(text)
+            else:
+                result.append('')
+        
+        # Clean up multiple empty lines
+        output = '\n'.join(result)
+        output = re.sub(r'\n{3,}', '\n\n', output)
+        
+        return output.strip(), self.links
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Convert markdown to plain text for Medium (auto-copies to clipboard)',
+        epilog='Example: markdown-to-medium article.md'
+    )
+    parser.add_argument('input', type=Path, help='Input markdown file')
+    parser.add_argument('-o', '--output', type=Path, help='Output text file')
+    parser.add_argument('--no-clipboard', action='store_true',
+                       help='Do not copy to clipboard')
+    
+    args = parser.parse_args()
+    
+    if not args.input.exists():
+        print(f"Error: File not found: {args.input}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Read input file
+    with open(args.input, 'r', encoding='utf-8') as f:
+        markdown_text = f.read()
+    
+    # Convert
+    converter = PlainTextConverter()
+    plain_text, links = converter.convert(markdown_text)
+    
+    # Format output
+    output = plain_text
+    
+    # Add links section if there are links
+    if links:
+        output += "\n\n" + "="*50 + "\nLINKS:\n" + "="*50 + "\n"
+        for link in links:
+            output += f"{link}\n"
+    
+    # Print to stdout
+    print(output)
+    
+    # Save to file if requested
+    if args.output:
+        with open(args.output, 'w', encoding='utf-8') as f:
+            f.write(plain_text)  # Save without links section
+        print(f"\n✓ Saved to {args.output}", file=sys.stderr)
+    
+    # Copy to clipboard by default (unless disabled)
+    if not args.no_clipboard:
+        try:
+            process = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+            process.communicate(plain_text.encode('utf-8'))  # Copy just the text, not the links
+            print("\n✓ Plain text copied to clipboard!", file=sys.stderr)
+            print("✓ Links are printed above for reference", file=sys.stderr)
+        except Exception as e:
+            print(f"\n✗ Failed to copy to clipboard: {e}", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
