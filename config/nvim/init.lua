@@ -187,3 +187,74 @@ require('lazy').setup({
   -- lazy.nvim options
   checker = { enabled = false },  -- Don't auto-check for updates
 })
+
+-- Claude AI integration (uses ~/.dotfiles/local/bin/ai)
+local claude = {}
+
+-- Get visual selection
+claude.get_selection = function()
+  local start_pos = vim.fn.getpos("'<")
+  local end_pos = vim.fn.getpos("'>")
+  local lines = vim.fn.getline(start_pos[2], end_pos[2])
+  if #lines == 0 then return '' end
+  -- Handle partial line selection
+  lines[#lines] = string.sub(lines[#lines], 1, end_pos[3])
+  lines[1] = string.sub(lines[1], start_pos[3])
+  return table.concat(lines, '\n')
+end
+
+-- Run ai command and return result
+claude.ask = function(prompt, text)
+  local cmd = string.format('echo %s | ai --raw %s', vim.fn.shellescape(text), vim.fn.shellescape(prompt))
+  local result = vim.fn.system(cmd)
+  return vim.trim(result)
+end
+
+-- Replace selection with AI response
+claude.replace = function(prompt)
+  local text = claude.get_selection()
+  if text == '' then
+    vim.notify('No selection', vim.log.levels.WARN)
+    return
+  end
+  local result = claude.ask(prompt, text)
+  -- Replace the visual selection
+  vim.cmd('normal! gv"_d')
+  vim.api.nvim_put(vim.split(result, '\n'), 'c', false, true)
+end
+
+-- Show AI response in split (keeps original)
+claude.show = function(prompt)
+  local text = claude.get_selection()
+  if text == '' then
+    vim.notify('No selection', vim.log.levels.WARN)
+    return
+  end
+  local result = claude.ask(prompt, text)
+  -- Open result in horizontal split
+  vim.cmd('new')
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(result, '\n'))
+  vim.bo.buftype = 'nofile'
+  vim.bo.filetype = 'markdown'
+end
+
+-- Interactive prompt
+claude.prompt = function(action)
+  vim.ui.input({ prompt = 'Claude: ' }, function(input)
+    if input and input ~= '' then
+      if action == 'replace' then
+        claude.replace(input)
+      else
+        claude.show(input)
+      end
+    end
+  end)
+end
+
+-- Keymaps (visual mode)
+keymap('v', '<leader>aa', function() claude.prompt('show') end, { desc = 'Ask Claude' })
+keymap('v', '<leader>ar', function() claude.prompt('replace') end, { desc = 'Ask Claude (replace)' })
+keymap('v', '<leader>ae', function() claude.show('Explain this code concisely') end, { desc = 'Explain' })
+keymap('v', '<leader>af', function() claude.replace('Fix this code. Return only the fixed code, no explanation.') end, { desc = 'Fix' })
+keymap('v', '<leader>as', function() claude.replace('Simplify this code. Return only the code, no explanation.') end, { desc = 'Simplify' })
+keymap('v', '<leader>ad', function() claude.show('Add documentation/comments to this code') end, { desc = 'Document' })
