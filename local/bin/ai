@@ -16,7 +16,7 @@ MODEL="sonnet"
 RAW_OUTPUT=false
 
 print_usage() {
-    cat << 'EOF'
+    show_help << 'EOF'
 Usage: ai [OPTIONS] [PROMPT]
 
 One-shot AI queries from the command line.
