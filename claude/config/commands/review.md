@@ -222,3 +222,17 @@ A codebase is never "done" — but it can be **coherent**:
 - Every gap is acknowledged
 
 `/review` surfaces the gaps. You decide what to do about them.
+
+## Prompt
+
+Review this code for bugs, security issues, and improvements. Be concise and actionable.
+
+Focus on:
+- Logic errors or potential bugs
+- Security vulnerabilities (injection, XSS, secrets)
+- Missing error handling
+- Type issues
+- Performance concerns
+- Code clarity
+
+Format: List issues by severity (critical/warning/suggestion) with line references where applicable.

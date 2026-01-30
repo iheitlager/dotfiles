@@ -92,70 +92,115 @@ if [[ $# -gt 0 ]]; then
             echo "📊 Dotfiles Status"
             echo "=================="
             echo ""
-            
-            # Homebrew status
-            echo "🍺 Homebrew"
-            echo "   Version: $(brew --version | head -1)"
-            echo "   Prefix:  $(brew --prefix)"
+
+            # Cache status (fast - just check files)
+            cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+            echo "💾 Shell Cache ($cache_dir)"
+            if [[ -d "$cache_dir" ]]; then
+                # Count source files for each cache type
+                env_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_env' 2>/dev/null | wc -l | tr -d ' ')
+                alias_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_aliases' 2>/dev/null | wc -l | tr -d ' ')
+                comp_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_completion' 2>/dev/null | wc -l | tr -d ' ')
+
+                for cache_file in "$cache_dir"/*.sh; do
+                    [[ -f "$cache_file" ]] || continue
+                    name=$(basename "$cache_file" .sh)
+                    age_sec=$(( $(date +%s) - $(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null) ))
+                    if [[ $age_sec -lt 60 ]]; then
+                        age="${age_sec}s"
+                    elif [[ $age_sec -lt 3600 ]]; then
+                        age="$((age_sec / 60))m"
+                    elif [[ $age_sec -lt 86400 ]]; then
+                        age="$((age_sec / 3600))h"
+                    else
+                        age="$((age_sec / 86400))d"
+                    fi
+                    size=$(wc -c < "$cache_file" | tr -d ' ')
+                    # Add source count based on cache type
+                    case "$name" in
+                        bash_env)        sources="$env_count sources, profile" ;;
+                        bash_aliases)    sources="$alias_count sources, bashrc" ;;
+                        bash_completion) sources="$comp_count sources, bashrc" ;;
+                        *)               sources="" ;;
+                    esac
+                    printf "   %-18s %6s  %s ago  [%s]\n" "$name.sh" "${size}B" "$age" "$sources"
+                done
+                echo ""
+                echo "   Run 'dot invalidate' to clear and regenerate on next shell"
+            else
+                echo "   (no cache - will generate on next shell start)"
+            fi
             echo ""
-            
-            # Brewfile status
+
+            # Brewfile status (fast - just read file)
             BREWFILE="${XDG_DATA_HOME:-$HOME/.local/share}/Brewfile"
+            echo "📦 Brewfile"
             if [[ -f "$BREWFILE" ]]; then
                 formulae=$(grep -c '^brew ' "$BREWFILE" 2>/dev/null || echo 0)
                 casks=$(grep -c '^cask ' "$BREWFILE" 2>/dev/null || echo 0)
-                echo "📦 Brewfile: $BREWFILE"
+                taps=$(grep -c '^tap ' "$BREWFILE" 2>/dev/null || echo 0)
+                echo "   Path:     $BREWFILE"
+                echo "   Taps:     $taps"
                 echo "   Formulae: $formulae"
                 echo "   Casks:    $casks"
             else
-                echo "📦 Brewfile: not found (run 'dot -x' to create)"
+                echo "   Not found (run 'dot -x' to create)"
             fi
             echo ""
-            
-            # Outdated packages
-            echo "🔄 Outdated Packages"
-            outdated=$(brew outdated 2>/dev/null)
-            if [[ -n "$outdated" ]]; then
-                outdated_count=$(echo "$outdated" | wc -l | tr -d ' ')
-                echo "   $outdated_count package(s) can be upgraded (run 'brew upgrade')"
-                echo "$outdated" | head -10 | while read line; do
-                    echo "   ⬆️  $line"
-                done
-                [[ $outdated_count -gt 10 ]] && echo "   ... and $((outdated_count - 10)) more"
-            else
-                echo "   ✅ All packages up to date"
-            fi
+
+            # Homebrew status (fast - cached version)
+            echo "🍺 Homebrew"
+            echo "   Prefix: $(brew --prefix)"
+            # Use brew info which is faster than brew outdated
+            installed=$(brew list --formula 2>/dev/null | wc -l | tr -d ' ')
+            casks_installed=$(brew list --cask 2>/dev/null | wc -l | tr -d ' ')
+            echo "   Installed: $installed formulae, $casks_installed casks"
             echo ""
-            
-            # Topics status
-            if [[ -n $DOTFILES ]]; then
-                echo "📁 Topics"
-                for dir in "$DOTFILES"/*/; do
-                    topic=$(basename "$dir")
-                    # Skip hidden dirs and special dirs
-                    [[ "$topic" == ".git" || "$topic" == "script" || "$topic" == "docs" ]] && continue
-                    
-                    features=""
-                    [[ -f "$dir/install.sh" ]] && features+="install "
-                    [[ -f "$dir/brew_packages" ]] && features+="brew "
-                    [[ -f "$dir/bash_aliases" ]] && features+="aliases "
-                    [[ -f "$dir/bash_env" ]] && features+="env "
-                    [[ -d "$dir/config" ]] && features+="config "
-                    
-                    if [[ -n "$features" ]]; then
-                        printf "   %-12s [%s]\n" "$topic" "${features% }"
-                    fi
-                done
-            fi
-            echo ""
-            
-            # XDG paths
+
+            # XDG paths (fast)
             echo "🗂️  XDG Paths"
             echo "   CONFIG: ${XDG_CONFIG_HOME:-~/.config}"
             echo "   DATA:   ${XDG_DATA_HOME:-~/.local/share}"
             echo "   STATE:  ${XDG_STATE_HOME:-~/.local/state}"
             echo "   CACHE:  ${XDG_CACHE_HOME:-~/.cache}"
-            
+            echo ""
+
+            # Topics summary (fast)
+            if [[ -n $DOTFILES ]]; then
+                echo "📁 Topics"
+                for dir in "$DOTFILES"/*/; do
+                    topic=$(basename "$dir")
+                    [[ "$topic" == ".git" || "$topic" == "script" || "$topic" == "docs" ]] && continue
+
+                    features=""
+                    [[ -f "$dir/install.sh" ]] && features+="I"
+                    [[ -f "$dir/brew_packages" ]] && features+="B"
+                    [[ -f "$dir/bash_aliases" ]] && features+="A"
+                    [[ -f "$dir/bash_env" ]] && features+="E"
+                    [[ -f "$dir/bash_completion" ]] && features+="C"
+                    [[ -d "$dir/config" ]] && features+="X"
+
+                    [[ -n "$features" ]] && printf "   %-12s [%s]\n" "$topic" "$features"
+                done
+                echo ""
+                echo "   Legend: I=install B=brew A=aliases E=env C=completion X=config"
+            fi
+            echo ""
+
+            # Outdated packages (slowest - at the end)
+            echo "🔄 Outdated (run 'brew outdated' for full list)"
+            outdated=$(timeout 5 brew outdated 2>/dev/null || echo "")
+            if [[ -n "$outdated" ]]; then
+                outdated_count=$(echo "$outdated" | wc -l | tr -d ' ')
+                echo "   $outdated_count package(s) can be upgraded"
+                echo "$outdated" | head -5 | while read -r line; do
+                    echo "   ⬆️  $line"
+                done
+                [[ $outdated_count -gt 5 ]] && echo "   ... and $((outdated_count - 5)) more"
+            else
+                echo "   ✅ All up to date (or timed out)"
+            fi
+
             exit 0
             ;;
         invalidate)

@@ -63,12 +63,5 @@ agent-no() {
 }
 
 
-# One-shot AI queries (non-interactive)
-# Usage: ai "explain this error"
-alias ai='claude -p | mdcat'
-
-# Quick AI helper without quotes
-# Usage: ask what is the capital of France
-ask() {
-    claude -p "$*" | mdcat
-}
+# ai command is now in local/bin/ai
+# Usage: ai "explain this", ai -f file.py "review", ai --cmd "find large files"

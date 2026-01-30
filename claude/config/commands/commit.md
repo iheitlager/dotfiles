@@ -133,3 +133,18 @@ After generating the message:
 3. Execute: `git commit -m "message"`
 
 If the commit includes a Co-Authored-By, add it to the footer.
+
+## Prompt
+
+Generate a concise conventional commit message for these staged changes.
+
+Format: type(scope): description
+
+Types: feat, fix, docs, refactor, test, chore, perf, style
+Scope: derive from file paths (cli, core, api, etc.) or omit if unclear
+
+Rules:
+- First line under 72 characters
+- Use imperative mood ("add" not "added")
+- Focus on WHY not WHAT
+- Return ONLY the commit message, no explanation
