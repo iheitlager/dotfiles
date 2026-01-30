@@ -61,3 +61,14 @@ agent-no() {
     tmux send-keys -t "$session:agents.$pane" Down Down Enter
     tmux send-keys -t "$session:agents.$pane" Enter
 }
+
+
+# One-shot AI queries (non-interactive)
+# Usage: ai "explain this error"
+alias ai='claude -p | mdcat'
+
+# Quick AI helper without quotes
+# Usage: ask what is the capital of France
+ask() {
+    claude -p "$*" | mdcat
+}

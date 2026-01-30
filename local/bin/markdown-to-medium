@@ -55,15 +55,9 @@ class PlainTextConverter:
         """Convert headers to plain text."""
         match = re.match(r'^(#{1,6})\s+(.+)$', line.strip())
         if match:
-            level = len(match.group(1))
             content = match.group(2)
-            # For Medium, just return the text in uppercase for h1/h2
-            if level == 1:
-                return content.upper()
-            elif level == 2:
-                return content
-            else:
-                return content
+            # For Medium, capitalize first letter only
+            return content.capitalize()
         return line
     
     def convert(self, markdown_text: str) -> Tuple[str, List[str]]:

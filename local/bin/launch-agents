@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.6.0
+# Version: 0.7.0
 #
 # Changelog:
+# 0.7.0 Default to sonnet, --opus flag enables opus-based distribution
 # 0.6.0 Added --daemon/-d flag for task-watcher integration
 # 0.5.2 Improved resilience: smart defaults, restart command, better session handling
 # 0.5.1 Force clean now kills tmux and agent processes (claude/gemini/copilot)
@@ -79,6 +80,7 @@ FORCE=false
 VERBOSE=false
 EQUAL_DISTRIBUTION=false
 DAEMON_MODE=false
+OPUS_MODE=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
@@ -104,7 +106,7 @@ Commands:
     stop            Kill tmux session
     restart         Stop and restart the session
     attach          Attach to existing session
-    workspace       Simple workspace: claude (opus) left, shell right
+    workspace       Simple workspace: claude left, shell right
     clean           Remove worktrees (if branches merged and clean)
     info            Show status of agents, models, and tasks
 
@@ -113,6 +115,7 @@ Options:
     -d, --daemon    Run task-watcher daemon (monitors queue, notifies agents)
     -r              Shortcut for 'restart'
     -a              Shortcut for 'attach'
+    --opus          Use opus-based model distribution (default: all sonnet)
     --equal         For n=6, use equal distribution (Option 5) instead of default
     -v, --verbose   Print commands being executed
     --force         Force restart or clean (skips prompts)
@@ -126,9 +129,9 @@ Layouts:
     6 agents        agent-1 / agent-2 │ agent-3 / agent-4 │ agent-5 / agent-6
 
 Clients & Models:
-    claude          opus (agents 1-2)
-    copilot         5.1-codex (agents 3-4)
-    gemini          gemini-pro (agents 5-6)
+    claude          sonnet (default), opus with --opus flag
+    copilot         5.1-codex (agents 5-6 with n=6)
+    gemini          gemini-pro (agent 6 with n=6)
 
 Examples:
     launch-agents                   Smart default: start or attach
@@ -182,43 +185,58 @@ get_model() {
     local agent=$1
     local count=$2
 
-    case $count in
-        2)
-            echo "opus"
-            ;;
-        3)
+    # Non-claude models (copilot/gemini) for 6-agent configs
+    if [[ "$count" -eq 6 ]]; then
+        if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
             case $agent in
-                1|2) echo "sonnet" ;;
-                *) echo "opus" ;;
+                3|4) echo "5.1-codex"; return ;;
+                5|6) echo "gemini-pro"; return ;;
             esac
-            ;;
-        4)
+        else
             case $agent in
-                1|2) echo "sonnet" ;;
-                3)   echo "opus" ;;
-                4)   echo "haiku" ;;
+                5) echo "5.1-codex"; return ;;
+                6) echo "gemini-pro"; return ;;
             esac
-            ;;
-        6)
-            if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
-                # Option 5: Equal pairs
+        fi
+    fi
+
+    # Claude models: default to sonnet, --opus enables opus-based distribution
+    if [[ "$OPUS_MODE" == true ]]; then
+        case $count in
+            2)
+                echo "opus"
+                ;;
+            3)
                 case $agent in
-                    1) echo "opus" ;;
-                    2) echo "sonnet" ;;
-                    3|4) echo "5.1-codex" ;;
-                    5|6) echo "gemini-pro" ;;
+                    1|2) echo "sonnet" ;;
+                    *) echo "opus" ;;
                 esac
-            else
-                # Option 1: Default (4 claude, 1 copilot, 1 gemini)
+                ;;
+            4)
                 case $agent in
-                    1|2) echo "opus" ;;
-                    3|4) echo "sonnet" ;;
-                    5) echo "5.1-codex" ;;
-                    6) echo "gemini-pro" ;;
+                    1|2) echo "sonnet" ;;
+                    3)   echo "opus" ;;
+                    4)   echo "haiku" ;;
                 esac
-            fi
-            ;;
-    esac
+                ;;
+            6)
+                if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
+                    case $agent in
+                        1) echo "opus" ;;
+                        2) echo "sonnet" ;;
+                    esac
+                else
+                    case $agent in
+                        1|2) echo "opus" ;;
+                        3|4) echo "sonnet" ;;
+                    esac
+                fi
+                ;;
+        esac
+    else
+        # Default: all claude agents use sonnet
+        echo "sonnet"
+    fi
 }
 
 create_agent() {
@@ -690,11 +708,14 @@ cmd_workspace() {
         agent_prompt=$(sed "s|\$WORKSPACE_SESSION|$ws_session|g" "$agent_spec")
     fi
 
-    # Start claude in opus on the left pane with workspace agent instructions
+    # Start claude on the left pane with workspace agent instructions
+    local ws_model="sonnet"
+    [[ "$OPUS_MODE" == true ]] && ws_model="opus"
+
     if [[ -n "$agent_prompt" ]]; then
-        tmux send-keys -t "$ws_session:workspace.1" "claude --model opus --add-dir . --append-system-prompt \"\$(sed 's|\\\$WORKSPACE_SESSION|$ws_session|g' '$agent_spec')\" $SKIP_PERMISSIONS" C-m
+        tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt \"\$(sed 's|\\\$WORKSPACE_SESSION|$ws_session|g' '$agent_spec')\" $SKIP_PERMISSIONS" C-m
     else
-        tmux send-keys -t "$ws_session:workspace.1" "claude --model opus --add-dir . $SKIP_PERMISSIONS" C-m
+        tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . $SKIP_PERMISSIONS" C-m
     fi
 
     # Create second window: monitors (ctop | htop)
@@ -716,7 +737,7 @@ cmd_workspace() {
     echo "Directory:    $(basename "$PWD")"
     echo ""
     echo "Window 1 (workspace):"
-    echo "  Left pane:  claude (opus)"
+    echo "  Left pane:  claude ($ws_model)"
     echo "  Right pane: shell"
     echo ""
     echo "Window 2 (monitors):"
@@ -1062,6 +1083,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --equal)
             EQUAL_DISTRIBUTION=true
+            shift
+            ;;
+        --opus)
+            OPUS_MODE=true
             shift
             ;;
         -v|--verbose)
