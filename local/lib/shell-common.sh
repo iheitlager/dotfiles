@@ -21,6 +21,7 @@ VERBOSE=${VERBOSE:-false}
 
 debug() {
     [[ "$VERBOSE" == true ]] && echo -e "${DIM}${BLUE}[DEBUG]${NC} $*" >&2
+    return 0
 }
 
 info() {

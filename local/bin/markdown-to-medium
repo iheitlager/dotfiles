@@ -49,6 +49,10 @@ class PlainTextConverter:
         # Remove inline code backticks
         text = re.sub(r'`([^`]+?)`', r'\1', text)
         
+        # Replace em dashes with commas
+        text = text.replace('—', ',')
+        text = text.replace('–', ',')
+        
         return text
     
     def convert_headers(self, line: str) -> str:

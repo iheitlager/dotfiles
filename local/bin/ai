@@ -3,260 +3,177 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # ai - One-shot AI queries from the command line
-# Version: 0.3.0
+# Version: 0.5.0
 
-# set -e  # Temporarily disabled for debugging
+set -e
 
 # Source shared utilities
 DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 source "$DOTFILES/local/lib/shell-common.sh"
 
-# Paths
-COMMANDS_DIR="$DOTFILES/claude/config/commands"
-
 # Defaults
 MODEL="sonnet"
-CLIPBOARD_MODE=false
-CMD_MODE=false
-REVIEW_MODE=false
-COMMIT_MODE=false
 RAW_OUTPUT=false
-FILE_CONTEXT=""
 
 print_usage() {
-    local help_cmd="cat"
-    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-
-    $help_cmd << 'EOF'
+    cat << 'EOF'
 Usage: ai [OPTIONS] [PROMPT]
 
 One-shot AI queries from the command line.
 
 OPTIONS:
     -f FILE           Include file as context
-    -c, --clipboard   Read context from clipboard, copy response to clipboard
-    --fast            Use haiku model (quick/cheap)
-    --opus            Use opus model (complex tasks)
-    --raw             Plain output (no markdown rendering)
-    --cmd             Generate shell command (asks before running)
-    --review [FILE]   Code review mode
-    --commit          Generate commit message from staged changes
+    -c, --clipboard   Read from clipboard, copy response to clipboard
+    --fast            Use haiku (quick/cheap)
+    --opus            Use opus (complex tasks)
+    --raw             Plain output (no markdown)
     -h, --help        Show this help
+
+COMMANDS:
+    --commit          Generate commit message for staged changes
+    --review [FILE]   Review code (file or git diff)
+    --diff            Explain current git diff
+    --cmd "task"      Generate shell command
+    --fix "error"     Help fix an error
 
 EXAMPLES:
     ai "explain git rebase"
-    cat error.log | ai "what's wrong"
     ai -f config.yaml "is this valid"
     ai -c "fix this code"
-    ai --fast "what flag extracts tar"
-    ai --cmd "find files over 100mb"
-    ai --review src/main.py
+    cat error.log | ai "summarize"
     ai --commit
+    ai --diff
+    ai --cmd "find files over 100mb"
 
 EOF
+    exit 0
 }
 
-render_output() {
-    if [[ "$RAW_OUTPUT" == true ]]; then
-        cat
-    else
-        render_md
-    fi
-}
-
+# Simple prompt loader from commands/*.md
 load_prompt() {
     local name="$1"
-    local cmd_file="$COMMANDS_DIR/$name.md"
+    local file="$DOTFILES/claude/config/commands/$name.md"
+    [[ -f "$file" ]] || die "Command file not found: $file"
+    awk '/^## Prompt/{f=1;next}/^##/{if(f)exit}f' "$file" | sed '/^$/d'
+}
 
-    if [[ -f "$cmd_file" ]]; then
-        # Extract content after "## Prompt" until next "##" or EOF
-        awk '/^## Prompt/{found=1; next} /^## /{if(found) exit} found{print}' "$cmd_file" | sed '/^$/d'
-    else
-        warn "Command file not found: $cmd_file"
-        echo ""
-    fi
+render() {
+    if [[ "$RAW_OUTPUT" == true ]]; then cat; else render_md; fi
 }
 
 # Parse arguments
+FILE_CONTEXT=""
+CLIPBOARD=false
+COMMAND=""
+COMMAND_ARG=""
 POSITIONAL=()
+
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -f)
-            if [[ -z "$2" || "$2" =~ ^- ]]; then
-                die "-f requires a file argument"
-            fi
-            if [[ ! -f "$2" ]]; then
-                die "File not found: $2"
-            fi
-            FILE_CONTEXT=$(cat "$2")
-            shift 2
-            ;;
-        -c|--clipboard)
-            CLIPBOARD_MODE=true
-            shift
-            ;;
-        --fast)
-            MODEL="haiku"
-            shift
-            ;;
-        --opus)
-            MODEL="opus"
-            shift
-            ;;
-        --raw)
-            RAW_OUTPUT=true
-            shift
-            ;;
-        --cmd)
-            CMD_MODE=true
-            shift
-            ;;
-        --review)
-            REVIEW_MODE=true
-            shift
-            # Check if next arg is a file (not a flag)
-            if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
-                REVIEW_FILE="$1"
-                shift
-            fi
-            ;;
-        --commit)
-            COMMIT_MODE=true
-            shift
-            ;;
-        -h|--help)
-            print_usage
-            exit 0
-            ;;
-        -*)
-            die "Unknown option: $1"
-            ;;
-        *)
-            POSITIONAL+=("$1")
-            shift
-            ;;
+        -h|--help)     print_usage ;;
+        -f)            FILE_CONTEXT=$(cat "$2"); shift 2 ;;
+        -c|--clipboard) CLIPBOARD=true; shift ;;
+        --fast)        MODEL="haiku"; shift ;;
+        --opus)        MODEL="opus"; shift ;;
+        --raw)         RAW_OUTPUT=true; shift ;;
+        --commit)      COMMAND="commit"; shift ;;
+        --diff)        COMMAND="diff"; shift ;;
+        --review)      COMMAND="review"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        --cmd)         COMMAND="cmd"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        --fix)         COMMAND="fix"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        -*)            die "Unknown option: $1" ;;
+        *)             POSITIONAL+=("$1"); shift ;;
     esac
 done
 
-# Build prompt
 PROMPT="${POSITIONAL[*]}"
-CONTEXT=""
 
-# Handle special modes
-if [[ "$COMMIT_MODE" == true ]]; then
-    DIFF=$(git diff --cached 2>/dev/null)
-    if [[ -z "$DIFF" ]]; then
-        die "No staged changes to commit"
-    fi
-    CONTEXT="$DIFF"
-    PROMPT="$(load_prompt commit)
-
-$CONTEXT"
-    RAW_OUTPUT=true
-fi
-
-if [[ "$REVIEW_MODE" == true ]]; then
-    REVIEW_PROMPT=$(load_prompt review)
-
-    if [[ -n "$REVIEW_FILE" && -f "$REVIEW_FILE" ]]; then
-        CONTEXT=$(cat "$REVIEW_FILE")
-        PROMPT="$REVIEW_PROMPT
-
-$CONTEXT"
-    elif [[ -z "$REVIEW_FILE" ]]; then
-        # Review staged changes, fallback to unstaged
-        DIFF=$(git diff --cached 2>/dev/null)
-        if [[ -z "$DIFF" ]]; then
-            DIFF=$(git diff 2>/dev/null)
-        fi
-        if [[ -z "$DIFF" ]]; then
-            die "No changes to review (no file specified, no git diff)"
-        fi
-        CONTEXT="$DIFF"
-        PROMPT="$REVIEW_PROMPT
-
-$CONTEXT"
-    else
-        die "File not found: $REVIEW_FILE"
-    fi
-fi
-
-if [[ "$CMD_MODE" == true ]]; then
-    if [[ -z "$PROMPT" ]]; then
-        die "Usage: ai --cmd \"description of what you want to do\""
-    fi
-    CMD_PROMPT=$(load_prompt cmd)
-    PROMPT="$CMD_PROMPT
-
-Task: $PROMPT"
-    RAW_OUTPUT=true
-fi
-
-if [[ "$CLIPBOARD_MODE" == true ]]; then
-    CLIPBOARD_CONTENT=$(clipboard_paste)
-
-    if [[ -n "$CLIPBOARD_CONTENT" ]]; then
-        if [[ -n "$PROMPT" ]]; then
-            PROMPT="$PROMPT
-
-Context from clipboard:
-$CLIPBOARD_CONTENT"
+# Build prompt based on command
+case "$COMMAND" in
+    commit)
+        DIFF=$(git diff --cached) || true
+        [[ -z "$DIFF" ]] && die "No staged changes"
+        PROMPT="$(load_prompt commit)"$'\n\n'"$DIFF"
+        RAW_OUTPUT=true
+        ;;
+    diff)
+        DIFF=$(git diff 2>/dev/null) || DIFF=$(git diff --cached 2>/dev/null) || true
+        [[ -z "$DIFF" ]] && die "No changes"
+        PROMPT="$(load_prompt diff)"$'\n\n'"$DIFF"
+        ;;
+    review)
+        if [[ -n "$COMMAND_ARG" && -f "$COMMAND_ARG" ]]; then
+            CONTENT=$(cat "$COMMAND_ARG")
         else
-            PROMPT="$CLIPBOARD_CONTENT"
+            CONTENT=$(git diff --cached 2>/dev/null) || CONTENT=$(git diff 2>/dev/null) || true
+            [[ -z "$CONTENT" ]] && die "No changes to review"
         fi
-    fi
+        PROMPT="$(load_prompt review)"$'\n\n'"$CONTENT"
+        ;;
+    cmd)
+        [[ -z "$COMMAND_ARG" && -z "$PROMPT" ]] && die "Usage: ai --cmd 'what to do'"
+        PROMPT="$(load_prompt cmd)"$'\n\n'"Task: ${COMMAND_ARG:-$PROMPT}"
+        RAW_OUTPUT=true
+        ;;
+    fix)
+        [[ -z "$COMMAND_ARG" && -z "$PROMPT" ]] && die "Usage: ai --fix 'error message'"
+        PROMPT="$(load_prompt fix)"$'\n\n'"${COMMAND_ARG:-$PROMPT}"
+        ;;
+esac
+
+# Add clipboard content
+if [[ "$CLIPBOARD" == true ]]; then
+    CLIP=$(clipboard_paste) || true
+    [[ -n "$CLIP" ]] && PROMPT="${PROMPT:+$PROMPT$'\n\n'}Clipboard:$'\n'$CLIP"
 fi
 
-# Read stdin if available and not a tty
+# Add stdin
 if [[ ! -t 0 ]]; then
-    STDIN_CONTENT=$(cat)
-    if [[ -n "$STDIN_CONTENT" ]]; then
-        if [[ -n "$PROMPT" ]]; then
-            PROMPT="$PROMPT
-
-$STDIN_CONTENT"
-        else
-            PROMPT="$STDIN_CONTENT"
-        fi
-    fi
+    STDIN=$(cat)
+    [[ -n "$STDIN" ]] && PROMPT="${PROMPT:+$PROMPT$'\n\n'}$STDIN"
 fi
 
-# Add file context if provided
-if [[ -n "$FILE_CONTEXT" ]]; then
-    PROMPT="$PROMPT
+# Add file context
+[[ -n "$FILE_CONTEXT" ]] && PROMPT="${PROMPT:+$PROMPT$'\n\n'}File:$'\n'$FILE_CONTEXT"
 
-File contents:
-$FILE_CONTEXT"
-fi
+# Need something
+[[ -z "$PROMPT" ]] && print_usage
 
-# Need a prompt
-if [[ -z "$PROMPT" ]]; then
-    print_usage
-    exit 1
-fi
-
-# Execute
-debug "Model: $MODEL"
-debug "Prompt length: ${#PROMPT}"
-debug "Calling claude..."
+# Call Claude
+debug "Model: $MODEL, Prompt: ${#PROMPT} chars"
 RESPONSE=$(printf '%s' "$PROMPT" | claude -p --model "$MODEL")
-debug "Response length: ${#RESPONSE}"
-debug "Response: $RESPONSE"
 
-# Handle output
-debug "CMD_MODE=$CMD_MODE CLIPBOARD_MODE=$CLIPBOARD_MODE RAW_OUTPUT=$RAW_OUTPUT"
-if [[ "$CMD_MODE" == true ]]; then
-    # Show command and ask to run
-    echo -e "${BOLD}Command:${NC} $RESPONSE"
-    echo ""
-    if confirm "Run this command?"; then
-        eval "$RESPONSE"
-    fi
-elif [[ "$CLIPBOARD_MODE" == true ]]; then
-    # Copy to clipboard and show
-    echo "$RESPONSE" | clipboard_copy
-    echo "$RESPONSE" | render_output
-    success "Copied to clipboard" >&2
-else
-    echo "$RESPONSE" | render_output
-fi
+# Output
+case "$COMMAND" in
+    commit)
+        echo -e "${BOLD}Commit message:${NC}"
+        echo "$RESPONSE"
+        echo
+        if confirm "Commit?"; then
+            git commit -m "$RESPONSE"
+            success "Done"
+        else
+            echo "$RESPONSE" | clipboard_copy
+            info "Copied to clipboard"
+        fi
+        ;;
+    cmd)
+        echo -e "${BOLD}Command:${NC} $RESPONSE"
+        echo
+        if confirm "Run?"; then
+            eval "$RESPONSE"
+        fi
+        ;;
+    *)
+        if [[ "$CLIPBOARD" == true ]]; then
+            echo "$RESPONSE" | clipboard_copy
+            echo "$RESPONSE" | render
+            success "Copied to clipboard" >&2
+        else
+            echo "$RESPONSE" | render
+        fi
+        ;;
+esac
