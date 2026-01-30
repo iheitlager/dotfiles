@@ -31,12 +31,11 @@ Generate shell commands from natural language descriptions.
 
 ## Prompt
 
-Generate a shell command for the given task.
+Generate a shell command for the given task. Output ONLY the raw command - no markdown code blocks, no explanation, no preamble. Just the command itself that can be pasted directly into a terminal.
 
 Rules:
-- Return ONLY the command, no explanation
+- Output the command only, nothing else
 - Use bash syntax
-- Prefer common POSIX tools when possible
-- If multiple commands needed, chain with && or use subshells
-- For destructive operations, include safety checks
-- Use quotes around variables and paths with spaces
+- Prefer common POSIX tools
+- Chain multiple commands with &&
+- Use quotes around paths with spaces
