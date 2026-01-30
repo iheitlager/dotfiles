@@ -161,9 +161,16 @@ case "$COMMAND" in
         fi
         ;;
     cmd)
-        echo "$RESPONSE" | clipboard_copy
         echo -e "${BOLD}Command:${NC} $RESPONSE"
-        info "Copied - paste with Cmd+V"
+        if [[ "$CLIPBOARD" == true ]]; then
+            echo "$RESPONSE" | clipboard_copy
+            info "Copied - paste with Cmd+V"
+        else
+            echo
+            if confirm "Run?"; then
+                eval "$RESPONSE"
+            fi
+        fi
         ;;
     *)
         if [[ "$CLIPBOARD" == true ]]; then
