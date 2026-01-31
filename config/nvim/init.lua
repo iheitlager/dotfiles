@@ -5,6 +5,7 @@
 -- Inherits vim config and adds modern features
 
 -- Load vim config for shared settings
+-- @diagnostic disable: undefined-global
 local vim_config = vim.fn.expand('$XDG_CONFIG_HOME/vim/vimrc')
 if vim.fn.filereadable(vim_config) == 1 then
   vim.cmd('source ' .. vim_config)

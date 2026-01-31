@@ -49,9 +49,9 @@
       "Read(~/.config/secrets)"
     ]
   },
+  "model": "opus",
   "additionalDirectories": [
     ".",
     "~/.local/state/agent-context"
-  ],
-  "model": "sonnet"
+  ]
 }

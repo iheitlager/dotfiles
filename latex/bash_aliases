@@ -2,8 +2,6 @@
 # Copyright 2026 Ilja Heitlager
 # SPDX-License-Identifier: Apache-2.0
 
-
-
 alias bibdesk="open /Applications/BibDesk.app"
 
 __latex_clean() {

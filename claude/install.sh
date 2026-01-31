@@ -15,3 +15,5 @@ ln -sf "$XDG_CONFIG_HOME/claude/settings.json" "$HOME/.claude/settings.json"
 for dir in "$XDG_CONFIG_HOME/claude"/*/; do
     [ -d "$dir" ] && ln -sfn "$dir" "$HOME/.claude/$(basename "$dir")"
 done
+
+ln -sf /opt/homebrew/bin/claude ~/.local/bin/claude

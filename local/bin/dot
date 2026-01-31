@@ -22,6 +22,7 @@ COMMANDS:
     list              List available topics with install.sh scripts
     status            Show installation status and outdated packages
     invalidate        Clear dotfiles caches (bash_env, bash_aliases, etc.)
+    purge             Find and remove stale symlinks in XDG directories
     (none)            Install homebrew packages (default behavior)
 
 OPTIONS:
@@ -39,6 +40,8 @@ Example:
     dot list                      # Show available topics
     dot status                    # Show what's installed and outdated
     dot invalidate                # Clear dotfiles caches
+    dot purge                     # Remove stale symlinks in ~/.config etc.
+    dot purge --force             # Remove stale symlinks without confirmation
     dot -n                        # Regenerate Brewfile and install
     dot -x                        # Export current installations to Brewfile
     dot -v -n                     # Verbose output with new installation
@@ -216,6 +219,65 @@ if [[ $# -gt 0 ]]; then
                 echo "✅ Cache invalidated. Restart your shell to regenerate."
             else
                 echo "ℹ️  No cache directory found at: $cache_dir"
+            fi
+            exit 0
+            ;;
+        purge)
+            # Check for --force flag
+            FORCE=false
+            if [[ "$2" == "-f" || "$2" == "--force" ]]; then
+                FORCE=true
+            fi
+            
+            echo "🔍 Scanning for stale symlinks..."
+            
+            # Directories to scan for stale symlinks
+            xdg_dirs=(
+                "${XDG_CONFIG_HOME:-$HOME/.config}"
+                "${XDG_DATA_HOME:-$HOME/.local/share}"
+                "${XDG_STATE_HOME:-$HOME/.local/state}"
+                "${XDG_CACHE_HOME:-$HOME/.cache}"
+            )
+            
+            stale_links=()
+            for dir in "${xdg_dirs[@]}"; do
+                if [[ -d "$dir" ]]; then
+                    while IFS= read -r link; do
+                        [[ -n "$link" ]] && stale_links+=("$link")
+                    done < <(find "$dir" -maxdepth 2 -type l ! -exec test -e {} \; -print 2>/dev/null)
+                fi
+            done
+            
+            if [[ ${#stale_links[@]} -eq 0 ]]; then
+                echo "✅ No stale symlinks found"
+                exit 0
+            fi
+            
+            echo "Found ${#stale_links[@]} stale symlink(s):"
+            for link in "${stale_links[@]}"; do
+                target=$(readlink "$link" 2>/dev/null || echo "unknown")
+                echo "   🔗 $link -> $target"
+            done
+            echo ""
+            
+            # Skip confirmation if --force
+            if [[ "$FORCE" == true ]]; then
+                REPLY="y"
+            else
+                read -p "Remove these stale symlinks? [Y/n] " -n 1 -r
+                echo ""
+                # Default to yes if empty
+                [[ -z "$REPLY" ]] && REPLY="y"
+            fi
+            
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                for link in "${stale_links[@]}"; do
+                    rm -f "$link"
+                    echo "   Removed: $link"
+                done
+                echo "✅ Stale symlinks purged"
+            else
+                echo "ℹ️  No changes made"
             fi
             exit 0
             ;;
