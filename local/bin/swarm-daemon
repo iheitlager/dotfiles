@@ -928,6 +928,44 @@ class SwarmDaemon:
             log.warning(f"Agent {agent_id} appears stale (no heartbeat for 5m)")
             self.event_logger.log_event("swarm-daemon", "AGENT_STALE", agent_id)
 
+    def detect_patterns(self):
+        """Detect patterns and anomalies (Phase 3)"""
+        job_metrics = JobMetricsManager(self.context)
+        active_jobs = job_metrics.get_active_jobs()
+
+        # Pattern 1: Repeated test failures
+        for job_id, job in active_jobs.items():
+            test_failures = job.get("test_failures", 0)
+            if test_failures >= 3:
+                agent = job.get("agent", "unknown")
+                issue = job.get("issue", "?")
+                log.warning(f"Pattern detected: {agent} has {test_failures} test failures on #{issue}")
+                self.event_logger.log_event("swarm-daemon", "PATTERN_TEST_FAILURES",
+                                          f"{job_id} agent={agent} failures={test_failures}")
+
+        # Pattern 2: Stuck jobs (claimed for > 60m with minimal activity)
+        for job_id, job in active_jobs.items():
+            claimed_at = job.get("claimed_at")
+            if claimed_at:
+                try:
+                    claimed_time = datetime.fromisoformat(claimed_at)
+                    elapsed = datetime.now() - claimed_time
+                    minutes_elapsed = int(elapsed.total_seconds() / 60)
+
+                    if minutes_elapsed > 60:
+                        total_activity = (
+                            job.get("files_read", 0) +
+                            job.get("files_edited", 0) +
+                            job.get("commits", 0)
+                        )
+                        if total_activity < 2:
+                            agent = job.get("agent", "unknown")
+                            log.warning(f"Pattern detected: Job {job_id} stuck ({minutes_elapsed}m, minimal activity)")
+                            self.event_logger.log_event("swarm-daemon", "PATTERN_STUCK_JOB",
+                                                      f"{job_id} agent={agent} elapsed={minutes_elapsed}m")
+                except ValueError:
+                    pass
+
     def run(self):
         """Main daemon loop"""
         log.info("swarm-daemon starting")
@@ -939,9 +977,16 @@ class SwarmDaemon:
         self.event_logger.log_event("swarm-daemon", "STARTED", f"Poll interval: {self.poll_interval}s")
 
         try:
+            loop_count = 0
             while self.running:
-                # Check for stale agents
+                # Check for stale agents (every loop)
                 self.check_for_stale_agents()
+
+                # Detect patterns (every 12 loops = ~1 minute)
+                if loop_count % 12 == 0:
+                    self.detect_patterns()
+
+                loop_count += 1
 
                 # Sleep
                 time.sleep(self.poll_interval)
@@ -1467,6 +1512,139 @@ class SwarmREPL:
 
         print()
 
+    # Phase 3C: Advanced analytics commands
+    def cmd_bottlenecks(self, args):
+        """Identify bottlenecks and slowdowns (Phase 3)"""
+        print(f"{self.BOLD}Bottleneck Analysis:{self.NC}")
+        print()
+
+        # Check for stuck agents (no activity for > 15m)
+        stuck_agents = []
+        agents = self.state_manager.get_all_agents()
+        threshold = datetime.now() - timedelta(minutes=15)
+
+        for agent_id, state in agents.items():
+            if state.get("status") == "working":
+                last_heartbeat = state.get("last_heartbeat")
+                if last_heartbeat:
+                    try:
+                        last_time = datetime.fromisoformat(last_heartbeat)
+                        if last_time < threshold:
+                            stuck_agents.append((agent_id, last_time))
+                    except ValueError:
+                        pass
+
+        if stuck_agents:
+            print(f"{self.RED}Stuck Agents:{self.NC}")
+            for agent_id, last_time in stuck_agents:
+                elapsed = datetime.now() - last_time
+                minutes = int(elapsed.total_seconds() / 60)
+                print(f"  {agent_id}: No activity for {minutes}m")
+            print()
+        else:
+            print(f"{self.GREEN}✓ No stuck agents{self.NC}")
+            print()
+
+        # Check for repeated test failures
+        active_jobs = self.job_metrics.get_active_jobs()
+        high_failure_jobs = []
+
+        for job_id, job in active_jobs.items():
+            test_runs = job.get("test_runs", 0)
+            test_failures = job.get("test_failures", 0)
+            if test_runs > 0 and test_failures >= 2:
+                high_failure_jobs.append((job_id, job, test_runs, test_failures))
+
+        if high_failure_jobs:
+            print(f"{self.YELLOW}High Test Failure Rate:{self.NC}")
+            for job_id, job, runs, failures in high_failure_jobs:
+                agent = job.get("agent", "unknown")
+                issue = job.get("issue", "?")
+                print(f"  {agent} (#{issue}): {failures}/{runs} test runs failed")
+            print()
+        else:
+            print(f"{self.GREEN}✓ No excessive test failures{self.NC}")
+            print()
+
+        # Check for jobs with low activity
+        low_activity_jobs = []
+        for job_id, job in active_jobs.items():
+            claimed_at = job.get("claimed_at")
+            if claimed_at:
+                try:
+                    claimed_time = datetime.fromisoformat(claimed_at)
+                    elapsed = datetime.now() - claimed_time
+                    minutes_elapsed = int(elapsed.total_seconds() / 60)
+
+                    # If job has been claimed for > 30m with minimal activity
+                    if minutes_elapsed > 30:
+                        total_activity = (
+                            job.get("files_read", 0) +
+                            job.get("files_edited", 0) +
+                            job.get("commits", 0) +
+                            job.get("test_runs", 0)
+                        )
+                        if total_activity < 3:
+                            low_activity_jobs.append((job_id, job, minutes_elapsed))
+                except ValueError:
+                    pass
+
+        if low_activity_jobs:
+            print(f"{self.YELLOW}Low Activity Jobs:{self.NC}")
+            for job_id, job, elapsed in low_activity_jobs:
+                agent = job.get("agent", "unknown")
+                issue = job.get("issue", "?")
+                print(f"  {agent} (#{issue}): {elapsed}m with minimal activity")
+            print()
+
+    def cmd_compare(self, args):
+        """Compare agent performance (Phase 3)"""
+        completed = self.job_metrics.get_completed_jobs()
+
+        if not completed:
+            print(f"{self.DIM}No completed jobs to compare{self.NC}")
+            return
+
+        # Group by agent
+        agent_stats = {}
+        for job in completed:
+            agent = job.get("agent", "unknown")
+            if agent not in agent_stats:
+                agent_stats[agent] = {
+                    "jobs": 0,
+                    "total_time_minutes": 0,
+                    "test_runs": 0,
+                    "successful": 0
+                }
+
+            agent_stats[agent]["jobs"] += 1
+
+            # Parse total_time (e.g., "1h15m" or "42m")
+            total_time = job.get("total_time", "unknown")
+            if total_time != "unknown":
+                minutes = self._parse_duration(total_time)
+                agent_stats[agent]["total_time_minutes"] += minutes
+
+            # Count test runs (from job metadata if available)
+            # For now, assume successful completion
+            agent_stats[agent]["successful"] += 1
+
+        print(f"{self.BOLD}Agent Performance Comparison:{self.NC}")
+        print()
+        print(f"{'Agent':<15} {'Jobs':<6} {'Avg Time':<12} {'Success':<10}")
+        print(f"{'-' * 15} {'-' * 6} {'-' * 12} {'-' * 10}")
+
+        for agent, stats in sorted(agent_stats.items()):
+            jobs = stats["jobs"]
+            avg_time = stats["total_time_minutes"] // jobs if jobs > 0 else 0
+            success_rate = f"{stats['successful']}/{jobs}" if jobs > 0 else "0/0"
+
+            avg_time_str = self._format_minutes(avg_time) if avg_time > 0 else "-"
+
+            print(f"{agent:<15} {jobs:<6} {avg_time_str:<12} {success_rate:<10}")
+
+        print()
+
     def cmd_help(self, args):
         """Show help"""
         print(f"{self.BOLD}Available commands:{self.NC}")
@@ -1478,6 +1656,8 @@ class SwarmREPL:
         print(f"  {self.BOLD}metrics{self.NC}             Performance statistics (Phase 2)")
         print(f"  {self.BOLD}activity{self.NC} [agent]    Activity breakdown (Phase 3)")
         print(f"  {self.BOLD}timeline{self.NC} <job-id>   Visual job progression (Phase 3)")
+        print(f"  {self.BOLD}bottlenecks{self.NC}         Identify slowdowns and issues (Phase 3)")
+        print(f"  {self.BOLD}compare{self.NC}             Agent performance comparison (Phase 3)")
         print(f"  {self.BOLD}log{self.NC}                 Show recent events")
         print(f"    --tail N          Show last N events (default: 20)")
         print(f"    --agent <id>      Filter by agent")
@@ -1533,6 +1713,10 @@ class SwarmREPL:
                     self.cmd_activity(args)
                 elif command == "timeline":
                     self.cmd_timeline(args)
+                elif command == "bottlenecks":
+                    self.cmd_bottlenecks(args)
+                elif command == "compare":
+                    self.cmd_compare(args)
                 elif command == "log":
                     self.cmd_log(args)
                 elif command == "help":
