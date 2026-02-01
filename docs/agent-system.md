@@ -515,7 +515,34 @@ swarm-daemon log                   # Show recent events
 > log --agent agent-1   # Filter by agent
 ```
 
-**Future phases** will add job/PR tracking (Phase 2) and semantic events (Phase 3).
+**Phase 2 - Job & PR Tracking (Implemented):**
+
+| Event | Purpose |
+|-------|---------|
+| JOB_CLAIMED | Agent claims issue via /take |
+| JOB_PR_READY | PR created via /pr |
+| JOB_PR_MERGED | PR merged via /merge |
+| JOB_COMPLETED | Job marked complete |
+
+**Enhanced state tracking:**
+- Current job and issue per agent
+- Job metrics (active jobs, completed jobs)
+- Performance metrics (time-to-PR, time-to-merge, total time)
+- Automatic state updates on job lifecycle events
+
+**New REPL commands:**
+```
+> work                  # What is each agent working on?
+> queue [pending|active|done]  # Job queue status
+> metrics               # Performance statistics
+```
+
+**Reactive actions:**
+- Auto-update agent state to idle when PR merged
+- Calculate and log performance metrics
+- Support for sync broadcasts (via tmux send-keys)
+
+**Future phases:** Semantic events and deep visibility (Phase 3).
 
 **Graceful shutdown:** Press `Ctrl-C` in daemon mode to trigger swarm shutdown via `launch-agents stop`.
 
@@ -525,9 +552,9 @@ swarm-daemon log                   # Show recent events
 |--------|------|-----------|----------|
 | `swarm-job list` | Polling | Agent → Queue | Check for available work |
 | `tmux send-keys` | Direct | Agent → Agent | Peer-to-peer messaging |
-| `swarm-daemon hook` | Event | Agent → Daemon | Report work status, heartbeats |
-| Daemon notify | Async | Daemon → Capable | New/unblocked job alerts (Phase 2+) |
-| Daemon broadcast | Pub/sub | Daemon → All | Completion announcements (Phase 2+) |
+| `swarm-daemon hook` | Event | Agent → Daemon | Report work status, job lifecycle (Phase 2) |
+| Daemon notify | Async | Daemon → Capable | New/unblocked job alerts (Phase 3+) |
+| Daemon broadcast | Pub/sub | Daemon → All | Sync signals after PR merge (Phase 2) |
 | `events.log` | Append-only | All → File | Audit trail, swarm awareness |
 
 **Recommended agent behavior:**
@@ -921,8 +948,8 @@ specializations:                  # From profile or learned
 
 | Enhancement | Effort | Impact | Status |
 |-------------|--------|--------|--------|
-| Swarm Commands | Low | High | **Done** (swarm-job, swarm-daemon Phase 1) |
-| Job-Skill Binding | Low | Medium | Planned |
+| Swarm Commands | Low | High | **Done** (swarm-job, swarm-daemon Phase 1-2) |
+| Job-Skill Binding | Low | Medium | **Done** (Phase 2 hook integration) |
 | Project Skills | Medium | High | Planned |
 | Task Templates | Medium | Medium | Planned |
 | Agent Profiles | Medium | Medium | Planned |
