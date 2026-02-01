@@ -16,6 +16,12 @@ Phase 2: Issue & PR tracking
 - Calculate time-to-PR and time-to-merge metrics
 - Reactive actions (sync broadcast, work suggestions)
 
+Phase 3: Semantic events & deep visibility
+- Rich activity tracking (tasks, tools, git, tests)
+- Time breakdown by activity type
+- Pattern detection and bottleneck identification
+- Visual timelines and performance analytics
+
 Usage:
     swarm-daemon daemon         Run in background (monitoring mode)
     swarm-daemon repl           Interactive investigation shell
@@ -504,7 +510,18 @@ class JobMetricsManager:
             "agent": agent,
             "claimed_at": claimed_at,
             "pr_number": None,
-            "state": "working"
+            "state": "working",
+            # Phase 3: Initialize activity counters
+            "tasks_created": 0,
+            "tasks_completed": 0,
+            "files_read": 0,
+            "files_edited": 0,
+            "files_written": 0,
+            "lines_changed": 0,
+            "commits": 0,
+            "test_runs": 0,
+            "test_failures": 0,
+            "bash_commands": 0
         }
         self.save_state()
 
@@ -574,6 +591,50 @@ class JobMetricsManager:
         """Clear completed jobs (for daily reset)"""
         self.state["completed_today"] = []
         self.save_state()
+
+    # Phase 3: Activity tracking methods
+    def _ensure_activity_counters(self, job_id: str):
+        """Ensure job has activity counter fields"""
+        if job_id in self.state["active"]:
+            job = self.state["active"][job_id]
+            if "tasks_created" not in job:
+                job["tasks_created"] = 0
+                job["tasks_completed"] = 0
+                job["files_read"] = 0
+                job["files_edited"] = 0
+                job["files_written"] = 0
+                job["lines_changed"] = 0
+                job["commits"] = 0
+                job["test_runs"] = 0
+                job["test_failures"] = 0
+                job["bash_commands"] = 0
+
+    def increment_activity(self, job_id: str, activity: str, amount: int = 1):
+        """Increment activity counter for a job"""
+        self._ensure_activity_counters(job_id)
+        if job_id in self.state["active"]:
+            counter_map = {
+                "TASK_CREATED": "tasks_created",
+                "TASK_COMPLETED": "tasks_completed",
+                "TOOL_READ": "files_read",
+                "TOOL_EDIT": "files_edited",
+                "TOOL_WRITE": "files_written",
+                "GIT_COMMIT": "commits",
+                "TEST_STARTED": "test_runs",
+                "TEST_FAILED": "test_failures",
+                "TOOL_BASH": "bash_commands"
+            }
+            if activity in counter_map:
+                counter = counter_map[activity]
+                self.state["active"][job_id][counter] += amount
+                self.save_state()
+
+    def add_lines_changed(self, job_id: str, lines: int):
+        """Add to lines changed counter"""
+        self._ensure_activity_counters(job_id)
+        if job_id in self.state["active"]:
+            self.state["active"][job_id]["lines_changed"] += lines
+            self.save_state()
 
 # =============================================================================
 # EVENT LOGGING
@@ -656,10 +717,30 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     # Parse arguments
     data = " ".join(args)
 
-    # Quick validation (Phase 1 + Phase 2 events)
+    # Quick validation (Phase 1 + Phase 2 + Phase 3 events)
     valid_events = {
-        "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",  # Phase 1
-        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED"  # Phase 2
+        # Phase 1: Basic work visibility
+        "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",
+
+        # Phase 2: Job lifecycle
+        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
+
+        # Phase 3: Semantic events - Task tracking
+        "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
+
+        # Phase 3: Tool usage
+        "TOOL_READ", "TOOL_EDIT", "TOOL_WRITE", "TOOL_BASH",
+        "TOOL_GREP", "TOOL_GLOB", "TOOL_TASK",
+
+        # Phase 3: Git operations
+        "GIT_COMMIT", "GIT_PUSH", "GIT_REBASE", "GIT_CONFLICT",
+
+        # Phase 3: Test/Build
+        "TEST_STARTED", "TEST_PASSED", "TEST_FAILED",
+        "LINT_STARTED", "LINT_PASSED", "LINT_FAILED",
+
+        # Phase 3: Agent state
+        "AGENT_THINKING", "AGENT_WAITING", "AGENT_ERROR"
     }
     if event_type not in valid_events:
         print(f"Warning: Unknown event type: {event_type}", file=sys.stderr)
@@ -760,6 +841,48 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
                 current_issue=None,
                 last_stopped=now
             )
+
+    # Phase 3 events: Semantic tracking
+    # Get current job for this agent
+    current_job = job_metrics.get_job_by_agent(agent_id)
+
+    # Task events
+    elif event_type in ("TASK_CREATED", "TASK_COMPLETED"):
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Tool events
+    elif event_type in ("TOOL_READ", "TOOL_EDIT", "TOOL_WRITE"):
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+            # Parse --lines for TOOL_EDIT
+            if event_type == "TOOL_EDIT" and "--lines" in args:
+                try:
+                    idx = args.index("--lines")
+                    if idx + 1 < len(args):
+                        lines = int(args[idx + 1])
+                        job_metrics.add_lines_changed(current_job, lines)
+                except (ValueError, IndexError):
+                    pass
+
+    elif event_type == "TOOL_BASH":
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Git events
+    elif event_type == "GIT_COMMIT":
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Test events
+    elif event_type in ("TEST_STARTED", "TEST_FAILED"):
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Note: Other Phase 3 events (TOOL_GREP, TOOL_GLOB, TOOL_TASK, GIT_PUSH,
+    # GIT_REBASE, GIT_CONFLICT, TEST_PASSED, LINT_*, AGENT_THINKING, AGENT_WAITING,
+    # AGENT_ERROR, TASK_STARTED, TASK_BLOCKED) are logged but don't update counters yet.
+    # These can be used for timeline/pattern analysis in Phase 3B/3C.
 
     # Exit immediately (fire-and-forget)
     sys.exit(0)
