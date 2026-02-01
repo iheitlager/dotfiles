@@ -10,13 +10,16 @@
 
 set -euo pipefail
 
+# Disable job control to prevent background job messages
+set +m
+
 # Read JSON input
 INPUT=$(cat)
 
-# Extract tool name and parameters
-TOOL=$(echo "$INPUT" | jq -r '.tool // "unknown"')
-PARAMS=$(echo "$INPUT" | jq -c '.params // {}')
-RESULT=$(echo "$INPUT" | jq -c '.result // {}')
+# Extract tool name and parameters (handle both old and new Claude Code formats)
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // .tool // "unknown"')
+PARAMS=$(echo "$INPUT" | jq -c '.tool_input // .params // {}')
+RESULT=$(echo "$INPUT" | jq -c '.tool_response // .result // {}')
 
 # Determine event type based on tool
 case "$TOOL" in
