@@ -23,6 +23,7 @@ COMMANDS:
     status            Show installation status and outdated packages
     invalidate        Clear dotfiles caches (bash_env, bash_aliases, etc.)
     purge             Find and remove stale symlinks in XDG directories
+    clean             Clean Claude Code config files and backups from home directory
     (none)            Install homebrew packages (default behavior)
 
 OPTIONS:
@@ -42,6 +43,7 @@ Example:
     dot invalidate                # Clear dotfiles caches
     dot purge                     # Remove stale symlinks in ~/.config etc.
     dot purge --force             # Remove stale symlinks without confirmation
+    dot clean                     # Clean Claude Code files
     dot -n                        # Regenerate Brewfile and install
     dot -x                        # Export current installations to Brewfile
     dot -v -n                     # Verbose output with new installation
@@ -228,9 +230,7 @@ if [[ $# -gt 0 ]]; then
             if [[ "$2" == "-f" || "$2" == "--force" ]]; then
                 FORCE=true
             fi
-            
             echo "🔍 Scanning for stale symlinks..."
-            
             # Directories to scan for stale symlinks
             xdg_dirs=(
                 "${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -238,7 +238,6 @@ if [[ $# -gt 0 ]]; then
                 "${XDG_STATE_HOME:-$HOME/.local/state}"
                 "${XDG_CACHE_HOME:-$HOME/.cache}"
             )
-            
             stale_links=()
             for dir in "${xdg_dirs[@]}"; do
                 if [[ -d "$dir" ]]; then
@@ -247,19 +246,16 @@ if [[ $# -gt 0 ]]; then
                     done < <(find "$dir" -maxdepth 2 -type l ! -exec test -e {} \; -print 2>/dev/null)
                 fi
             done
-            
             if [[ ${#stale_links[@]} -eq 0 ]]; then
                 echo "✅ No stale symlinks found"
                 exit 0
             fi
-            
             echo "Found ${#stale_links[@]} stale symlink(s):"
             for link in "${stale_links[@]}"; do
                 target=$(readlink "$link" 2>/dev/null || echo "unknown")
                 echo "   🔗 $link -> $target"
             done
             echo ""
-            
             # Skip confirmation if --force
             if [[ "$FORCE" == true ]]; then
                 REPLY="y"
@@ -269,7 +265,6 @@ if [[ $# -gt 0 ]]; then
                 # Default to yes if empty
                 [[ -z "$REPLY" ]] && REPLY="y"
             fi
-            
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 for link in "${stale_links[@]}"; do
                     rm -f "$link"
@@ -280,6 +275,20 @@ if [[ $# -gt 0 ]]; then
                 echo "ℹ️  No changes made"
             fi
             exit 0
+            ;;
+        clean)
+            if [[ -z $DOTFILES ]]; then
+                echo "❌ DOTFILES variable not set, exiting"
+                exit 1
+            fi
+            CLEAN_SCRIPT="$DOTFILES/claude/bash_clean"
+            if [[ -f "$CLEAN_SCRIPT" ]]; then
+                source "$CLEAN_SCRIPT"
+                exit 0
+            else
+                echo "❌ Clean script not found at: $CLEAN_SCRIPT"
+                exit 1
+            fi
             ;;
     esac
 fi
@@ -373,8 +382,6 @@ do
     if [[ "$VERBOSE" == true ]]; then
         source "${src}" 2>&1 || exit 1
     else
-        source "${src}" >/dev/null 2>&1 || exit 1
-    fi
 done
 
 # Finally, export the Brewfile

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+#
+# Clean Claude Code configuration files and backups from home directory
+
+clean_claude_files() {
+    local files_removed=0
+    local total_size=0
+
+    echo "🧹 Cleaning Claude Code files from home directory..."
+    echo ""
+
+    # Find all .claude.json* files in home directory
+    for file in ~/.claude.json*; do
+        if [[ -f "$file" ]]; then
+            local size=$(stat -f %z "$file" 2>/dev/null || stat -c %s "$file" 2>/dev/null)
+            local basename=$(basename "$file")
+
+            # Show what we're removing
+            if [[ "$basename" == ".claude.json" ]]; then
+                echo "   🗑️  Removing: $basename (settings file, ${size} bytes)"
+            else
+                echo "   🗑️  Removing: $basename (backup, ${size} bytes)"
+            fi
+
+            rm -f "$file"
+            ((files_removed++))
+            ((total_size += size))
+        fi
+    done
+
+    echo ""
+
+    if [[ $files_removed -gt 0 ]]; then
+        # Convert bytes to human readable
+        if [[ $total_size -lt 1024 ]]; then
+            size_human="${total_size}B"
+        elif [[ $total_size -lt 1048576 ]]; then
+            size_human="$((total_size / 1024))KB"
+        else
+            size_human="$((total_size / 1048576))MB"
+        fi
+
+        echo "✅ Removed $files_removed file(s), freed $size_human"
+        echo ""
+        echo "⚠️  Note: Claude Code will recreate ~/.claude.json on next launch"
+        echo "   See: https://github.com/anthropics/claude-code/issues/22260"
+    else
+        echo "✨ No Claude files found to clean"
+    fi
+}
+
+# Run the cleanup
+clean_claude_files
