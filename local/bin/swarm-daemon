@@ -16,6 +16,12 @@ Phase 2: Issue & PR tracking
 - Calculate time-to-PR and time-to-merge metrics
 - Reactive actions (sync broadcast, work suggestions)
 
+Phase 3: Semantic events & deep visibility
+- Rich activity tracking (tasks, tools, git, tests)
+- Time breakdown by activity type
+- Pattern detection and bottleneck identification
+- Visual timelines and performance analytics
+
 Usage:
     swarm-daemon daemon         Run in background (monitoring mode)
     swarm-daemon repl           Interactive investigation shell
@@ -504,7 +510,18 @@ class JobMetricsManager:
             "agent": agent,
             "claimed_at": claimed_at,
             "pr_number": None,
-            "state": "working"
+            "state": "working",
+            # Phase 3: Initialize activity counters
+            "tasks_created": 0,
+            "tasks_completed": 0,
+            "files_read": 0,
+            "files_edited": 0,
+            "files_written": 0,
+            "lines_changed": 0,
+            "commits": 0,
+            "test_runs": 0,
+            "test_failures": 0,
+            "bash_commands": 0
         }
         self.save_state()
 
@@ -574,6 +591,50 @@ class JobMetricsManager:
         """Clear completed jobs (for daily reset)"""
         self.state["completed_today"] = []
         self.save_state()
+
+    # Phase 3: Activity tracking methods
+    def _ensure_activity_counters(self, job_id: str):
+        """Ensure job has activity counter fields"""
+        if job_id in self.state["active"]:
+            job = self.state["active"][job_id]
+            if "tasks_created" not in job:
+                job["tasks_created"] = 0
+                job["tasks_completed"] = 0
+                job["files_read"] = 0
+                job["files_edited"] = 0
+                job["files_written"] = 0
+                job["lines_changed"] = 0
+                job["commits"] = 0
+                job["test_runs"] = 0
+                job["test_failures"] = 0
+                job["bash_commands"] = 0
+
+    def increment_activity(self, job_id: str, activity: str, amount: int = 1):
+        """Increment activity counter for a job"""
+        self._ensure_activity_counters(job_id)
+        if job_id in self.state["active"]:
+            counter_map = {
+                "TASK_CREATED": "tasks_created",
+                "TASK_COMPLETED": "tasks_completed",
+                "TOOL_READ": "files_read",
+                "TOOL_EDIT": "files_edited",
+                "TOOL_WRITE": "files_written",
+                "GIT_COMMIT": "commits",
+                "TEST_STARTED": "test_runs",
+                "TEST_FAILED": "test_failures",
+                "TOOL_BASH": "bash_commands"
+            }
+            if activity in counter_map:
+                counter = counter_map[activity]
+                self.state["active"][job_id][counter] += amount
+                self.save_state()
+
+    def add_lines_changed(self, job_id: str, lines: int):
+        """Add to lines changed counter"""
+        self._ensure_activity_counters(job_id)
+        if job_id in self.state["active"]:
+            self.state["active"][job_id]["lines_changed"] += lines
+            self.save_state()
 
 # =============================================================================
 # EVENT LOGGING
@@ -656,10 +717,30 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     # Parse arguments
     data = " ".join(args)
 
-    # Quick validation (Phase 1 + Phase 2 events)
+    # Quick validation (Phase 1 + Phase 2 + Phase 3 events)
     valid_events = {
-        "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",  # Phase 1
-        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED"  # Phase 2
+        # Phase 1: Basic work visibility
+        "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",
+
+        # Phase 2: Job lifecycle
+        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
+
+        # Phase 3: Semantic events - Task tracking
+        "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
+
+        # Phase 3: Tool usage
+        "TOOL_READ", "TOOL_EDIT", "TOOL_WRITE", "TOOL_BASH",
+        "TOOL_GREP", "TOOL_GLOB", "TOOL_TASK",
+
+        # Phase 3: Git operations
+        "GIT_COMMIT", "GIT_PUSH", "GIT_REBASE", "GIT_CONFLICT",
+
+        # Phase 3: Test/Build
+        "TEST_STARTED", "TEST_PASSED", "TEST_FAILED",
+        "LINT_STARTED", "LINT_PASSED", "LINT_FAILED",
+
+        # Phase 3: Agent state
+        "AGENT_THINKING", "AGENT_WAITING", "AGENT_ERROR"
     }
     if event_type not in valid_events:
         print(f"Warning: Unknown event type: {event_type}", file=sys.stderr)
@@ -761,6 +842,48 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
                 last_stopped=now
             )
 
+    # Phase 3 events: Semantic tracking
+    # Get current job for this agent
+    current_job = job_metrics.get_job_by_agent(agent_id)
+
+    # Task events
+    elif event_type in ("TASK_CREATED", "TASK_COMPLETED"):
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Tool events
+    elif event_type in ("TOOL_READ", "TOOL_EDIT", "TOOL_WRITE"):
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+            # Parse --lines for TOOL_EDIT
+            if event_type == "TOOL_EDIT" and "--lines" in args:
+                try:
+                    idx = args.index("--lines")
+                    if idx + 1 < len(args):
+                        lines = int(args[idx + 1])
+                        job_metrics.add_lines_changed(current_job, lines)
+                except (ValueError, IndexError):
+                    pass
+
+    elif event_type == "TOOL_BASH":
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Git events
+    elif event_type == "GIT_COMMIT":
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Test events
+    elif event_type in ("TEST_STARTED", "TEST_FAILED"):
+        if current_job:
+            job_metrics.increment_activity(current_job, event_type)
+
+    # Note: Other Phase 3 events (TOOL_GREP, TOOL_GLOB, TOOL_TASK, GIT_PUSH,
+    # GIT_REBASE, GIT_CONFLICT, TEST_PASSED, LINT_*, AGENT_THINKING, AGENT_WAITING,
+    # AGENT_ERROR, TASK_STARTED, TASK_BLOCKED) are logged but don't update counters yet.
+    # These can be used for timeline/pattern analysis in Phase 3B/3C.
+
     # Exit immediately (fire-and-forget)
     sys.exit(0)
 
@@ -805,6 +928,44 @@ class SwarmDaemon:
             log.warning(f"Agent {agent_id} appears stale (no heartbeat for 5m)")
             self.event_logger.log_event("swarm-daemon", "AGENT_STALE", agent_id)
 
+    def detect_patterns(self):
+        """Detect patterns and anomalies (Phase 3)"""
+        job_metrics = JobMetricsManager(self.context)
+        active_jobs = job_metrics.get_active_jobs()
+
+        # Pattern 1: Repeated test failures
+        for job_id, job in active_jobs.items():
+            test_failures = job.get("test_failures", 0)
+            if test_failures >= 3:
+                agent = job.get("agent", "unknown")
+                issue = job.get("issue", "?")
+                log.warning(f"Pattern detected: {agent} has {test_failures} test failures on #{issue}")
+                self.event_logger.log_event("swarm-daemon", "PATTERN_TEST_FAILURES",
+                                          f"{job_id} agent={agent} failures={test_failures}")
+
+        # Pattern 2: Stuck jobs (claimed for > 60m with minimal activity)
+        for job_id, job in active_jobs.items():
+            claimed_at = job.get("claimed_at")
+            if claimed_at:
+                try:
+                    claimed_time = datetime.fromisoformat(claimed_at)
+                    elapsed = datetime.now() - claimed_time
+                    minutes_elapsed = int(elapsed.total_seconds() / 60)
+
+                    if minutes_elapsed > 60:
+                        total_activity = (
+                            job.get("files_read", 0) +
+                            job.get("files_edited", 0) +
+                            job.get("commits", 0)
+                        )
+                        if total_activity < 2:
+                            agent = job.get("agent", "unknown")
+                            log.warning(f"Pattern detected: Job {job_id} stuck ({minutes_elapsed}m, minimal activity)")
+                            self.event_logger.log_event("swarm-daemon", "PATTERN_STUCK_JOB",
+                                                      f"{job_id} agent={agent} elapsed={minutes_elapsed}m")
+                except ValueError:
+                    pass
+
     def run(self):
         """Main daemon loop"""
         log.info("swarm-daemon starting")
@@ -816,9 +977,16 @@ class SwarmDaemon:
         self.event_logger.log_event("swarm-daemon", "STARTED", f"Poll interval: {self.poll_interval}s")
 
         try:
+            loop_count = 0
             while self.running:
-                # Check for stale agents
+                # Check for stale agents (every loop)
                 self.check_for_stale_agents()
+
+                # Detect patterns (every 12 loops = ~1 minute)
+                if loop_count % 12 == 0:
+                    self.detect_patterns()
+
+                loop_count += 1
 
                 # Sleep
                 time.sleep(self.poll_interval)
@@ -1215,6 +1383,268 @@ class SwarmREPL:
         else:
             return f"{minutes}m"
 
+    # Phase 3B: Activity tracking commands
+    def cmd_activity(self, args):
+        """Show agent activity breakdown (Phase 3)"""
+        # Parse agent filter
+        agent_filter = args[0] if args else None
+
+        if agent_filter:
+            # Show specific agent activity
+            agent = self.state_manager.get_agent(agent_filter)
+            if not agent:
+                print(f"{self.RED}Agent not found: {agent_filter}{self.NC}")
+                return
+
+            current_job_id = agent.get("current_job")
+            if not current_job_id:
+                print(f"{self.DIM}Agent {agent_filter} has no active job{self.NC}")
+                return
+
+            active_jobs = self.job_metrics.get_active_jobs()
+            if current_job_id not in active_jobs:
+                print(f"{self.DIM}Job {current_job_id} not found in active jobs{self.NC}")
+                return
+
+            job = active_jobs[current_job_id]
+            print(f"{self.BOLD}Activity: {agent_filter}{self.NC}")
+            print(f"Job: #{job.get('issue')} - {job.get('title')}")
+            print()
+            self._show_job_activity(job)
+        else:
+            # Show all agents
+            agents = self.state_manager.get_all_agents()
+            active_jobs = self.job_metrics.get_active_jobs()
+
+            if not agents:
+                print(f"{self.DIM}No agents registered{self.NC}")
+                return
+
+            print(f"{self.BOLD}Agent Activity:{self.NC}")
+            print()
+
+            for agent_id, state in agents.items():
+                current_job_id = state.get("current_job")
+                if current_job_id and current_job_id in active_jobs:
+                    job = active_jobs[current_job_id]
+                    print(f"{self.BOLD}{agent_id}{self.NC}")
+                    self._show_job_activity(job)
+                    print()
+
+    def _show_job_activity(self, job: Dict):
+        """Display activity breakdown for a job"""
+        tasks_created = job.get("tasks_created", 0)
+        tasks_completed = job.get("tasks_completed", 0)
+        files_read = job.get("files_read", 0)
+        files_edited = job.get("files_edited", 0)
+        files_written = job.get("files_written", 0)
+        lines_changed = job.get("lines_changed", 0)
+        commits = job.get("commits", 0)
+        test_runs = job.get("test_runs", 0)
+        test_failures = job.get("test_failures", 0)
+        bash_commands = job.get("bash_commands", 0)
+
+        # Display counters
+        if tasks_created > 0:
+            print(f"  Tasks: {tasks_completed}/{tasks_created} completed")
+        if files_read > 0 or files_edited > 0 or files_written > 0:
+            print(f"  Files: {files_read} read, {files_edited} edited, {files_written} written")
+        if lines_changed > 0:
+            print(f"  Lines changed: {lines_changed}")
+        if commits > 0:
+            print(f"  Commits: {commits}")
+        if test_runs > 0:
+            status = f" ({test_failures} failed)" if test_failures > 0 else " (all passed)"
+            print(f"  Test runs: {test_runs}{status}")
+        if bash_commands > 0:
+            print(f"  Bash commands: {bash_commands}")
+
+        if all(v == 0 for v in [tasks_created, files_read, commits, test_runs]):
+            print(f"  {self.DIM}No activity recorded yet{self.NC}")
+
+    def cmd_timeline(self, args):
+        """Show visual job timeline (Phase 3)"""
+        if not args:
+            print(f"{self.RED}Usage: timeline <job-id>{self.NC}")
+            return
+
+        job_id = args[0]
+
+        # Get events for this job
+        events = self.event_logger.filter_events(limit=1000)
+
+        # Filter events related to this job
+        job_events = []
+        for event_line in events:
+            if job_id in event_line:
+                job_events.append(event_line)
+
+        if not job_events:
+            print(f"{self.DIM}No events found for job {job_id}{self.NC}")
+            return
+
+        print(f"{self.BOLD}Timeline: {job_id}{self.NC}")
+        print()
+
+        # Show simplified timeline
+        for event_line in job_events:
+            parts = event_line.strip().split(" | ")
+            if len(parts) >= 3:
+                timestamp = parts[0].split("T")[1][:8] if "T" in parts[0] else parts[0]
+                event = parts[2]
+                data = " | ".join(parts[3:]) if len(parts) > 3 else ""
+
+                # Color by event type
+                if "CLAIMED" in event or "START" in event:
+                    event_color = self.GREEN
+                elif "COMPLETE" in event or "PASSED" in event:
+                    event_color = self.GREEN
+                elif "FAILED" in event or "ERROR" in event:
+                    event_color = self.RED
+                elif "EDIT" in event or "WRITE" in event:
+                    event_color = self.CYAN
+                elif "PR" in event:
+                    event_color = self.YELLOW
+                else:
+                    event_color = self.NC
+
+                print(f"{self.DIM}{timestamp}{self.NC}  {event_color}{event:25}{self.NC}  {data}")
+
+        print()
+
+    # Phase 3C: Advanced analytics commands
+    def cmd_bottlenecks(self, args):
+        """Identify bottlenecks and slowdowns (Phase 3)"""
+        print(f"{self.BOLD}Bottleneck Analysis:{self.NC}")
+        print()
+
+        # Check for stuck agents (no activity for > 15m)
+        stuck_agents = []
+        agents = self.state_manager.get_all_agents()
+        threshold = datetime.now() - timedelta(minutes=15)
+
+        for agent_id, state in agents.items():
+            if state.get("status") == "working":
+                last_heartbeat = state.get("last_heartbeat")
+                if last_heartbeat:
+                    try:
+                        last_time = datetime.fromisoformat(last_heartbeat)
+                        if last_time < threshold:
+                            stuck_agents.append((agent_id, last_time))
+                    except ValueError:
+                        pass
+
+        if stuck_agents:
+            print(f"{self.RED}Stuck Agents:{self.NC}")
+            for agent_id, last_time in stuck_agents:
+                elapsed = datetime.now() - last_time
+                minutes = int(elapsed.total_seconds() / 60)
+                print(f"  {agent_id}: No activity for {minutes}m")
+            print()
+        else:
+            print(f"{self.GREEN}✓ No stuck agents{self.NC}")
+            print()
+
+        # Check for repeated test failures
+        active_jobs = self.job_metrics.get_active_jobs()
+        high_failure_jobs = []
+
+        for job_id, job in active_jobs.items():
+            test_runs = job.get("test_runs", 0)
+            test_failures = job.get("test_failures", 0)
+            if test_runs > 0 and test_failures >= 2:
+                high_failure_jobs.append((job_id, job, test_runs, test_failures))
+
+        if high_failure_jobs:
+            print(f"{self.YELLOW}High Test Failure Rate:{self.NC}")
+            for job_id, job, runs, failures in high_failure_jobs:
+                agent = job.get("agent", "unknown")
+                issue = job.get("issue", "?")
+                print(f"  {agent} (#{issue}): {failures}/{runs} test runs failed")
+            print()
+        else:
+            print(f"{self.GREEN}✓ No excessive test failures{self.NC}")
+            print()
+
+        # Check for jobs with low activity
+        low_activity_jobs = []
+        for job_id, job in active_jobs.items():
+            claimed_at = job.get("claimed_at")
+            if claimed_at:
+                try:
+                    claimed_time = datetime.fromisoformat(claimed_at)
+                    elapsed = datetime.now() - claimed_time
+                    minutes_elapsed = int(elapsed.total_seconds() / 60)
+
+                    # If job has been claimed for > 30m with minimal activity
+                    if minutes_elapsed > 30:
+                        total_activity = (
+                            job.get("files_read", 0) +
+                            job.get("files_edited", 0) +
+                            job.get("commits", 0) +
+                            job.get("test_runs", 0)
+                        )
+                        if total_activity < 3:
+                            low_activity_jobs.append((job_id, job, minutes_elapsed))
+                except ValueError:
+                    pass
+
+        if low_activity_jobs:
+            print(f"{self.YELLOW}Low Activity Jobs:{self.NC}")
+            for job_id, job, elapsed in low_activity_jobs:
+                agent = job.get("agent", "unknown")
+                issue = job.get("issue", "?")
+                print(f"  {agent} (#{issue}): {elapsed}m with minimal activity")
+            print()
+
+    def cmd_compare(self, args):
+        """Compare agent performance (Phase 3)"""
+        completed = self.job_metrics.get_completed_jobs()
+
+        if not completed:
+            print(f"{self.DIM}No completed jobs to compare{self.NC}")
+            return
+
+        # Group by agent
+        agent_stats = {}
+        for job in completed:
+            agent = job.get("agent", "unknown")
+            if agent not in agent_stats:
+                agent_stats[agent] = {
+                    "jobs": 0,
+                    "total_time_minutes": 0,
+                    "test_runs": 0,
+                    "successful": 0
+                }
+
+            agent_stats[agent]["jobs"] += 1
+
+            # Parse total_time (e.g., "1h15m" or "42m")
+            total_time = job.get("total_time", "unknown")
+            if total_time != "unknown":
+                minutes = self._parse_duration(total_time)
+                agent_stats[agent]["total_time_minutes"] += minutes
+
+            # Count test runs (from job metadata if available)
+            # For now, assume successful completion
+            agent_stats[agent]["successful"] += 1
+
+        print(f"{self.BOLD}Agent Performance Comparison:{self.NC}")
+        print()
+        print(f"{'Agent':<15} {'Jobs':<6} {'Avg Time':<12} {'Success':<10}")
+        print(f"{'-' * 15} {'-' * 6} {'-' * 12} {'-' * 10}")
+
+        for agent, stats in sorted(agent_stats.items()):
+            jobs = stats["jobs"]
+            avg_time = stats["total_time_minutes"] // jobs if jobs > 0 else 0
+            success_rate = f"{stats['successful']}/{jobs}" if jobs > 0 else "0/0"
+
+            avg_time_str = self._format_minutes(avg_time) if avg_time > 0 else "-"
+
+            print(f"{agent:<15} {jobs:<6} {avg_time_str:<12} {success_rate:<10}")
+
+        print()
+
     def cmd_help(self, args):
         """Show help"""
         print(f"{self.BOLD}Available commands:{self.NC}")
@@ -1224,6 +1654,10 @@ class SwarmREPL:
         print(f"  {self.BOLD}work{self.NC}                What is each agent working on? (Phase 2)")
         print(f"  {self.BOLD}queue{self.NC} [pending|active|done]  Job queue status (Phase 2)")
         print(f"  {self.BOLD}metrics{self.NC}             Performance statistics (Phase 2)")
+        print(f"  {self.BOLD}activity{self.NC} [agent]    Activity breakdown (Phase 3)")
+        print(f"  {self.BOLD}timeline{self.NC} <job-id>   Visual job progression (Phase 3)")
+        print(f"  {self.BOLD}bottlenecks{self.NC}         Identify slowdowns and issues (Phase 3)")
+        print(f"  {self.BOLD}compare{self.NC}             Agent performance comparison (Phase 3)")
         print(f"  {self.BOLD}log{self.NC}                 Show recent events")
         print(f"    --tail N          Show last N events (default: 20)")
         print(f"    --agent <id>      Filter by agent")
@@ -1275,6 +1709,14 @@ class SwarmREPL:
                     self.cmd_queue(args)
                 elif command == "metrics":
                     self.cmd_metrics(args)
+                elif command == "activity":
+                    self.cmd_activity(args)
+                elif command == "timeline":
+                    self.cmd_timeline(args)
+                elif command == "bottlenecks":
+                    self.cmd_bottlenecks(args)
+                elif command == "compare":
+                    self.cmd_compare(args)
                 elif command == "log":
                     self.cmd_log(args)
                 elif command == "help":

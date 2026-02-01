@@ -542,7 +542,46 @@ swarm-daemon log                   # Show recent events
 - Calculate and log performance metrics
 - Support for sync broadcasts (via tmux send-keys)
 
-**Future phases:** Semantic events and deep visibility (Phase 3).
+**Phase 3 - Semantic Events & Deep Visibility (Implemented):**
+
+**New event types (~20 total):**
+
+| Category | Events | Purpose |
+|----------|--------|---------|
+| Task tracking | TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED | Track subtask progression |
+| Tool usage | TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK | Monitor file operations and tool calls |
+| Git operations | GIT_COMMIT, GIT_PUSH, GIT_REBASE, GIT_CONFLICT | Track version control activity |
+| Test/Build | TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_* | Monitor quality checks |
+| Agent state | AGENT_THINKING, AGENT_WAITING, AGENT_ERROR | Track agent status changes |
+
+**Detailed activity tracking:**
+- Files: read/edited/written counts, lines changed
+- Tasks: created/completed counts
+- Tests: run count, failure count
+- Git: commit count
+- Commands: bash command count
+
+**New REPL commands:**
+```
+> activity [agent]     # Activity breakdown (files, tasks, tests, commits)
+> timeline <job-id>    # Visual job event timeline
+> bottlenecks          # Identify stuck agents, test failures, low activity
+> compare              # Agent performance comparison table
+```
+
+**Pattern detection (automatic):**
+- Detects repeated test failures (≥3 failures)
+- Identifies stuck jobs (>60m with minimal activity)
+- Flags stale agents (no heartbeat >5m)
+- Runs every ~1 minute in daemon mode
+- Logs patterns to events.log and daemon log
+
+**Analytics capabilities:**
+- Real-time activity monitoring
+- Bottleneck identification
+- Cross-agent performance comparison
+- Job timeline visualization
+- Pattern-based anomaly detection
 
 **Graceful shutdown:** Press `Ctrl-C` in daemon mode to trigger swarm shutdown via `launch-agents stop`.
 
@@ -552,10 +591,10 @@ swarm-daemon log                   # Show recent events
 |--------|------|-----------|----------|
 | `swarm-job list` | Polling | Agent → Queue | Check for available work |
 | `tmux send-keys` | Direct | Agent → Agent | Peer-to-peer messaging |
-| `swarm-daemon hook` | Event | Agent → Daemon | Report work status, job lifecycle (Phase 2) |
-| Daemon notify | Async | Daemon → Capable | New/unblocked job alerts (Phase 3+) |
+| `swarm-daemon hook` | Event | Agent → Daemon | Report work status, job lifecycle, semantic events (Phase 3) |
+| Daemon notify | Async | Daemon → Capable | New/unblocked job alerts (Future) |
 | Daemon broadcast | Pub/sub | Daemon → All | Sync signals after PR merge (Phase 2) |
-| `events.log` | Append-only | All → File | Audit trail, swarm awareness |
+| `events.log` | Append-only | All → File | Audit trail, swarm awareness, pattern detection (Phase 3) |
 
 **Recommended agent behavior:**
 - Poll `swarm-job list pending` every 30-60 seconds when idle
