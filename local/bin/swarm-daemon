@@ -10,6 +10,12 @@ Phase 1: Basic work visibility
 - Monitor agent heartbeats
 - Provide REPL for investigation
 
+Phase 2: Issue & PR tracking
+- Track job lifecycle (claimed → PR → merged)
+- Monitor what each agent is working on
+- Calculate time-to-PR and time-to-merge metrics
+- Reactive actions (sync broadcast, work suggestions)
+
 Usage:
     swarm-daemon daemon         Run in background (monitoring mode)
     swarm-daemon repl           Interactive investigation shell
@@ -104,6 +110,175 @@ class SimpleYAML:
                 f.write('\n'.join(lines) + '\n')
         except Exception as e:
             pass
+
+class SimpleJobMetricsYAML:
+    """Minimal YAML reader/writer for job-metrics.yaml"""
+
+    @staticmethod
+    def load(file_path: Path) -> Dict:
+        """Load job metrics YAML file"""
+        if not file_path.exists():
+            return {"active": {}, "completed_today": []}
+
+        try:
+            with open(file_path) as f:
+                content = f.read()
+
+            result = {"active": {}, "completed_today": []}
+            current_section = None
+            current_job = None
+            in_completed = False
+            current_completed_item = {}
+
+            for line in content.split('\n'):
+                line_stripped = line.rstrip()
+
+                if not line_stripped or line_stripped.startswith('#'):
+                    continue
+
+                # Top level sections
+                if line_stripped == "active:":
+                    current_section = "active"
+                    in_completed = False
+                    continue
+                elif line_stripped == "completed_today:":
+                    current_section = "completed_today"
+                    in_completed = True
+                    continue
+
+                # Active jobs (2-space indent for job ID, 4-space for properties)
+                if current_section == "active" and line.startswith('  ') and not line.startswith('    '):
+                    current_job = line.strip().rstrip(':')
+                    result["active"][current_job] = {}
+                elif current_section == "active" and line.startswith('    ') and current_job:
+                    key, value = line.strip().split(':', 1)
+                    value = value.strip()
+                    # Handle null
+                    if value == "null" or value == "~":
+                        value = None
+                    # Remove quotes
+                    elif value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+                    # Try to convert to int
+                    elif value.isdigit():
+                        value = int(value)
+                    result["active"][current_job][key] = value
+
+                # Completed jobs (list items starting with '- ')
+                elif in_completed and line.startswith('  - '):
+                    # Save previous item if exists
+                    if current_completed_item:
+                        result["completed_today"].append(current_completed_item)
+                    current_completed_item = {}
+                    # Parse first key-value
+                    rest = line[4:].strip()
+                    if ':' in rest:
+                        key, value = rest.split(':', 1)
+                        value = value.strip()
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                        elif value.isdigit():
+                            value = int(value)
+                        current_completed_item[key] = value
+                elif in_completed and line.startswith('    ') and not line.startswith('  - '):
+                    # Additional properties for list item
+                    key, value = line.strip().split(':', 1)
+                    value = value.strip()
+                    if value == "null" or value == "~":
+                        value = None
+                    elif value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.isdigit():
+                        value = int(value)
+                    current_completed_item[key] = value
+
+            # Save last completed item
+            if current_completed_item:
+                result["completed_today"].append(current_completed_item)
+
+            return result
+        except Exception as e:
+            return {"active": {}, "completed_today": []}
+
+    @staticmethod
+    def dump(data: Dict, file_path: Path):
+        """Write job metrics YAML file"""
+        lines = []
+
+        # Active jobs
+        lines.append("active:")
+        active = data.get("active", {})
+        if active:
+            for job_id, job_data in active.items():
+                lines.append(f"  {job_id}:")
+                for key, value in job_data.items():
+                    if value is None:
+                        value = "null"
+                    elif isinstance(value, str) and (':' in value or value.startswith(' ')):
+                        value = f'"{value}"'
+                    lines.append(f"    {key}: {value}")
+        else:
+            lines.append("  {}")
+
+        # Completed jobs
+        lines.append("")
+        lines.append("completed_today:")
+        completed = data.get("completed_today", [])
+        if completed:
+            for item in completed:
+                first_key = True
+                for key, value in item.items():
+                    if value is None:
+                        value = "null"
+                    elif isinstance(value, str) and (':' in value or value.startswith(' ')):
+                        value = f'"{value}"'
+
+                    if first_key:
+                        lines.append(f"  - {key}: {value}")
+                        first_key = False
+                    else:
+                        lines.append(f"    {key}: {value}")
+        else:
+            lines.append("  []")
+
+        try:
+            with open(file_path, 'w') as f:
+                f.write('\n'.join(lines) + '\n')
+        except Exception as e:
+            pass
+
+# =============================================================================
+# TIME UTILITIES
+# =============================================================================
+
+def format_duration(start_iso: str, end_iso: str) -> str:
+    """Calculate duration between two ISO timestamps and format as human-readable"""
+    try:
+        start = datetime.fromisoformat(start_iso)
+        end = datetime.fromisoformat(end_iso)
+        delta = end - start
+
+        total_seconds = int(delta.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+
+        if hours > 0:
+            return f"{hours}h{minutes}m"
+        else:
+            return f"{minutes}m"
+    except:
+        return "unknown"
+
+def calculate_duration_seconds(start_iso: str, end_iso: str) -> Optional[int]:
+    """Calculate duration in seconds between two ISO timestamps"""
+    try:
+        start = datetime.fromisoformat(start_iso)
+        end = datetime.fromisoformat(end_iso)
+        return int((end - start).total_seconds())
+    except:
+        return None
 
 # =============================================================================
 # LOGGING SETUP (XDG compliant with rotation)
@@ -212,6 +387,10 @@ class SwarmContext:
         return self.state_dir / "daemon" / "daemon.pid"
 
     @property
+    def job_metrics_file(self) -> Path:
+        return self.state_dir / "daemon" / "job-metrics.yaml"
+
+    @property
     def session_name(self) -> str:
         """Get tmux session name (sanitized)"""
         return f"claude-{self.repo_name.replace('.', '_')}"
@@ -289,6 +468,112 @@ class AgentStateManager:
                     pass
 
         return stale
+
+# =============================================================================
+# JOB METRICS MANAGEMENT (Phase 2)
+# =============================================================================
+
+class JobMetricsManager:
+    """Manages job metrics (active jobs, completed jobs, performance tracking)"""
+
+    def __init__(self, context: SwarmContext):
+        self.context = context
+        self.state: Dict = {"active": {}, "completed_today": []}
+        self.load_state()
+
+    def load_state(self):
+        """Load job metrics from YAML file"""
+        try:
+            self.state = SimpleJobMetricsYAML.load(self.context.job_metrics_file)
+        except Exception as e:
+            log.error(f"Failed to load job metrics: {e}")
+            self.state = {"active": {}, "completed_today": []}
+
+    def save_state(self):
+        """Save job metrics to YAML file"""
+        try:
+            SimpleJobMetricsYAML.dump(self.state, self.context.job_metrics_file)
+        except Exception as e:
+            log.error(f"Failed to save job metrics: {e}")
+
+    def claim_job(self, job_id: str, issue: int, title: str, agent: str, claimed_at: str):
+        """Register a new claimed job"""
+        self.state["active"][job_id] = {
+            "issue": issue,
+            "title": title,
+            "agent": agent,
+            "claimed_at": claimed_at,
+            "pr_number": None,
+            "state": "working"
+        }
+        self.save_state()
+
+    def mark_pr_ready(self, job_id: str, pr_number: int, pr_ready_at: str):
+        """Mark job as having a PR created"""
+        if job_id in self.state["active"]:
+            self.state["active"][job_id]["pr_number"] = pr_number
+            self.state["active"][job_id]["pr_ready_at"] = pr_ready_at
+            self.state["active"][job_id]["state"] = "pr_ready"
+            self.save_state()
+
+    def mark_pr_merged(self, job_id: str, pr_merged_at: str):
+        """Mark job as merged and move to completed"""
+        if job_id in self.state["active"]:
+            job = self.state["active"][job_id]
+            job["pr_merged_at"] = pr_merged_at
+            job["state"] = "pr_merged"
+
+            # Calculate metrics
+            claimed_at = job.get("claimed_at")
+            pr_ready_at = job.get("pr_ready_at")
+
+            time_to_pr = None
+            time_to_merge = None
+            total_time = None
+
+            if claimed_at and pr_ready_at:
+                time_to_pr = format_duration(claimed_at, pr_ready_at)
+            if pr_ready_at and pr_merged_at:
+                time_to_merge = format_duration(pr_ready_at, pr_merged_at)
+            if claimed_at and pr_merged_at:
+                total_time = format_duration(claimed_at, pr_merged_at)
+
+            # Move to completed
+            completed_job = {
+                "job_id": job_id,
+                "issue": job.get("issue"),
+                "title": job.get("title"),
+                "agent": job.get("agent"),
+                "pr_number": job.get("pr_number"),
+                "time_to_pr": time_to_pr or "unknown",
+                "time_to_merge": time_to_merge or "unknown",
+                "total_time": total_time or "unknown"
+            }
+            self.state["completed_today"].append(completed_job)
+
+            # Remove from active
+            del self.state["active"][job_id]
+            self.save_state()
+
+    def get_active_jobs(self) -> Dict:
+        """Get all active jobs"""
+        return self.state["active"]
+
+    def get_completed_jobs(self) -> List[Dict]:
+        """Get completed jobs"""
+        return self.state["completed_today"]
+
+    def get_job_by_agent(self, agent: str) -> Optional[str]:
+        """Find active job ID for an agent"""
+        for job_id, job in self.state["active"].items():
+            if job.get("agent") == agent:
+                return job_id
+        return None
+
+    def clear_completed(self):
+        """Clear completed jobs (for daily reset)"""
+        self.state["completed_today"] = []
+        self.save_state()
 
 # =============================================================================
 # EVENT LOGGING
@@ -371,8 +656,11 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     # Parse arguments
     data = " ".join(args)
 
-    # Quick validation
-    valid_events = {"AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT"}
+    # Quick validation (Phase 1 + Phase 2 events)
+    valid_events = {
+        "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",  # Phase 1
+        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED"  # Phase 2
+    }
     if event_type not in valid_events:
         print(f"Warning: Unknown event type: {event_type}", file=sys.stderr)
 
@@ -382,8 +670,10 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
 
     # Update agent state (quick YAML update)
     state_manager = AgentStateManager(context)
+    job_metrics = JobMetricsManager(context)
     now = datetime.now().isoformat()
 
+    # Phase 1 events
     if event_type == "AGENT_WORK_START":
         state_manager.update_agent(
             agent_id,
@@ -403,6 +693,73 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
             agent_id,
             last_heartbeat=now
         )
+
+    # Phase 2 events
+    elif event_type == "JOB_CLAIMED":
+        # Parse: job-id --issue N --title "Title"
+        job_id = args[0] if args else "unknown"
+        issue = None
+        title = ""
+
+        i = 1
+        while i < len(args):
+            if args[i] == "--issue" and i + 1 < len(args):
+                try:
+                    issue = int(args[i + 1])
+                    i += 2
+                except ValueError:
+                    i += 1
+            elif args[i] == "--title" and i + 1 < len(args):
+                title = args[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        if issue and title:
+            job_metrics.claim_job(job_id, issue, title, agent_id, now)
+            state_manager.update_agent(
+                agent_id,
+                current_job=job_id,
+                current_issue=issue,
+                claimed_at=now
+            )
+
+    elif event_type == "JOB_PR_READY":
+        # Parse: job-id pr-number
+        if len(args) >= 2:
+            job_id = args[0]
+            try:
+                pr_number = int(args[1])
+                job_metrics.mark_pr_ready(job_id, pr_number, now)
+            except ValueError:
+                pass
+
+    elif event_type == "JOB_PR_MERGED":
+        # Parse: job-id pr-number
+        if len(args) >= 1:
+            job_id = args[0]
+            job_metrics.mark_pr_merged(job_id, now)
+            # Clear current job from agent
+            state_manager.update_agent(
+                agent_id,
+                status="idle",
+                current_job=None,
+                current_issue=None,
+                last_stopped=now
+            )
+
+    elif event_type == "JOB_COMPLETED":
+        # Parse: job-id
+        if len(args) >= 1:
+            job_id = args[0]
+            # Clear current job from agent
+            state_manager.update_agent(
+                agent_id,
+                status="idle",
+                current_job=None,
+                current_issue=None,
+                last_stopped=now
+            )
 
     # Exit immediately (fire-and-forget)
     sys.exit(0)
