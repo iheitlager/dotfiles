@@ -256,6 +256,80 @@ class SimpleJobMetricsYAML:
             pass
 
 # =============================================================================
+# CONFIGURATION LOADING
+# =============================================================================
+
+class DaemonConfig:
+    """Configuration for swarm-daemon"""
+
+    def __init__(self):
+        # Default values
+        self.stale_check_interval = 5
+        self.stale_log_interval = 300
+        self.stale_threshold_minutes = 5
+        self.log_level = "INFO"
+        self.max_log_size_mb = 10
+        self.backup_count = 5
+
+    @classmethod
+    def load(cls, config_path: Path) -> 'DaemonConfig':
+        """Load configuration from YAML file"""
+        config = cls()
+
+        if not config_path.exists():
+            return config  # Return defaults
+
+        try:
+            with open(config_path) as f:
+                content = f.read()
+
+            # Simple YAML parsing for our config structure
+            current_section = None
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+
+                # Section headers
+                if line == "monitoring:":
+                    current_section = "monitoring"
+                elif line == "logging:":
+                    current_section = "logging"
+                elif ':' in line:
+                    key, value = line.split(':', 1)
+                    key = key.strip()
+                    value = value.strip()
+
+                    # Parse values
+                    if value.isdigit():
+                        value = int(value)
+                    elif value in ('true', 'True'):
+                        value = True
+                    elif value in ('false', 'False'):
+                        value = False
+
+                    # Assign to config
+                    if current_section == "monitoring":
+                        if key == "stale_check_interval":
+                            config.stale_check_interval = value
+                        elif key == "stale_log_interval":
+                            config.stale_log_interval = value
+                        elif key == "stale_threshold_minutes":
+                            config.stale_threshold_minutes = value
+                    elif current_section == "logging":
+                        if key == "level":
+                            config.log_level = value
+                        elif key == "max_log_size_mb":
+                            config.max_log_size_mb = value
+                        elif key == "backup_count":
+                            config.backup_count = value
+
+        except Exception as e:
+            pass  # Use defaults on error
+
+        return config
+
+# =============================================================================
 # TIME UTILITIES
 # =============================================================================
 
@@ -336,6 +410,7 @@ class SwarmContext:
         self.repo_root = self._get_repo_root()
         self.repo_name = self._get_repo_name()
         self.state_dir = self._get_state_dir()
+        self.config_path = self._get_config_path()
         self.ensure_directories()
 
     def _get_repo_root(self) -> Path:
@@ -369,6 +444,17 @@ class SwarmContext:
         """Get XDG state directory for this project"""
         xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
         return Path(xdg_state) / "agent-context" / self.repo_name
+
+    def _get_config_path(self) -> Path:
+        """Get configuration file path (check dotfiles, then XDG config)"""
+        # First check if we're in dotfiles repo
+        dotfiles_config = self.repo_root / "config" / "swarm-daemon" / "config.yml"
+        if dotfiles_config.exists():
+            return dotfiles_config
+
+        # Fall back to XDG config
+        xdg_config = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+        return Path(xdg_config) / "swarm-daemon" / "config.yml"
 
     def ensure_directories(self):
         """Ensure all required directories exist"""
@@ -905,7 +991,13 @@ class SwarmDaemon:
         self.state_manager = AgentStateManager(context)
         self.event_logger = EventLogger(context)
         self.running = True
-        self.poll_interval = int(os.environ.get("POLL_INTERVAL", "5"))
+
+        # Load configuration
+        self.config = DaemonConfig.load(context.config_path)
+        self.poll_interval = self.config.stale_check_interval
+
+        # Track last log time for each agent (for rate-limiting)
+        self.last_stale_log: Dict[str, float] = {}
 
         # Register signal handlers
         signal.signal(signal.SIGINT, self.handle_shutdown)
@@ -928,11 +1020,25 @@ class SwarmDaemon:
             self.context.daemon_pid_file.unlink()
 
     def check_for_stale_agents(self):
-        """Check for agents with no recent heartbeat"""
-        stale = self.state_manager.check_stale_agents(threshold_minutes=5)
+        """Check for agents with no recent heartbeat (with rate-limited logging)"""
+        stale = self.state_manager.check_stale_agents(
+            threshold_minutes=self.config.stale_threshold_minutes
+        )
+
+        current_time = time.time()
+
         for agent_id in stale:
-            log.warning(f"Agent {agent_id} appears stale (no heartbeat for 5m)")
+            # Always log event (for tracking)
             self.event_logger.log_event("swarm-daemon", "AGENT_STALE", agent_id)
+
+            # Rate-limit warning logs
+            last_log_time = self.last_stale_log.get(agent_id, 0)
+            if current_time - last_log_time >= self.config.stale_log_interval:
+                log.warning(
+                    f"Agent {agent_id} appears stale "
+                    f"(no heartbeat for {self.config.stale_threshold_minutes}m)"
+                )
+                self.last_stale_log[agent_id] = current_time
 
     def detect_patterns(self):
         """Detect patterns and anomalies (Phase 3)"""

@@ -1,0 +1,29 @@
+# swarm-daemon configuration
+#
+# This file configures the behavior of the swarm-daemon monitoring system.
+
+# Agent monitoring settings
+monitoring:
+  # How often to check for stale agents (in seconds)
+  # Default: 5 seconds
+  stale_check_interval: 5
+
+  # How often to log stale agent warnings (in seconds)
+  # Default: 300 seconds (5 minutes)
+  # Note: Checks still happen at stale_check_interval, but logs are rate-limited
+  stale_log_interval: 300
+
+  # Threshold for considering an agent stale (in minutes)
+  # Default: 5 minutes
+  stale_threshold_minutes: 5
+
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+  # Maximum log file size (in MB) before rotation
+  max_log_size_mb: 10
+
+  # Number of backup log files to keep
+  backup_count: 5

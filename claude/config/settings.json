@@ -57,6 +57,17 @@
     "~/wc/**"
   ],
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.dotfiles/claude/config/hooks/agent-register.sh"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Read|Edit|Write|Bash|Grep|Glob|Task",
