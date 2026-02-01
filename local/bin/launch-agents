@@ -636,12 +636,12 @@ create_tmux_layout() {
         fi
     done
 
-    # Add watcher window if daemon mode enabled
+    # Add daemon window if daemon mode enabled
     if [[ "$DAEMON_MODE" == true ]]; then
-        tmux new-window -t "$SESSION" -n "watcher" -c "$REPO_ROOT"
+        tmux new-window -t "$SESSION" -n "daemon" -c "$REPO_ROOT"
         sleep 0.2
-        tmux send-keys -t "$SESSION:watcher" "swarm-watcher" C-m
-        echo -e "${GREEN}✓ Swarm watcher started${NC}"
+        tmux send-keys -t "$SESSION:daemon" "swarm-daemon daemon" C-m
+        echo -e "${GREEN}✓ Swarm daemon started${NC}"
     fi
 
     tmux select-window -t "$SESSION:agents"

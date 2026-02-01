@@ -213,7 +213,7 @@ Commands:
 
 Options:
     -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
-    -d, --daemon    Start swarm-watcher daemon (monitors queue, broadcasts notifications)
+    -d, --daemon    Start swarm-daemon (monitors agent activity, provides REPL)
     -r              Shortcut for 'restart'
     -a              Shortcut for 'attach'
     -w              Shortcut for 'workspace'
@@ -230,7 +230,7 @@ Options:
 ```bash
 launch-agents                   # Smart default: start or attach
 launch-agents -n 4 start        # Start 4 agents
-launch-agents -d start          # Start with swarm-watcher daemon
+launch-agents -d start          # Start with swarm-daemon
 launch-agents -r                # Restart session
 launch-agents workspace         # Simple workspace (claude + shell)
 launch-agents -w                # Shortcut for workspace
@@ -479,35 +479,45 @@ tmux send-keys -t claude-<project>:agents.N Enter  # Extra enter for visibility
 
 Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (1-based)
 
-### Swarm Watcher Daemon
+### Swarm Daemon
 
-The `swarm-watcher` daemon monitors the job queue and broadcasts notifications:
+**Note:** `swarm-watcher` has been replaced by `swarm-daemon` (Phase 1: basic work visibility).
+
+The `swarm-daemon` provides unified monitoring, scheduling, and investigation capabilities:
 
 ```bash
-swarm-watcher                      # Start daemon (usually via launch-agents -d)
-swarm-watcher -i 10                # Custom poll interval (10 seconds)
+swarm-daemon daemon                # Background monitoring mode
+swarm-daemon repl                  # Interactive investigation shell
+swarm-daemon status                # Quick status check
+swarm-daemon agents                # List agent states
+swarm-daemon log                   # Show recent events
 ```
 
-**What it monitors:**
+**Phase 1 - What it tracks:**
 
-| Event | Action |
-|-------|--------|
-| New pending job | Notifies capable agents (by tier) |
-| Job claimed | Logs pickup with agent ID |
-| Job completed | Broadcasts to ALL agents |
-| Job unblocked | Notifies capable agents |
+| Event | Purpose |
+|-------|---------|
+| AGENT_WORK_START | Agent begins working |
+| AGENT_WORK_STOP | Agent finishes working |
+| AGENT_HEARTBEAT | Periodic pulse (every 30s) |
 
-**Output example:**
+**Agent state tracking:**
+- Working/idle status
+- Start/stop timestamps
+- Heartbeat monitoring (detects stale agents)
+
+**REPL commands:**
 ```
-[14:32:10] INFO    Watching: ~/.local/state/agent-context/project/jobs/pending
-[14:32:15] TASK    New: job-123 [high/complex] Add authentication
-[14:32:15] NOTIFY  Notifying agents: 1,2 (tier >= 3)
-[14:33:20] CLAIMED job-123 picked up by agent-1
-[14:45:30] DONE    job-123 completed by agent-1 [success]
-[14:45:30] UNBLOCK job-456 is now unblocked: Add tests
+> status                # System overview
+> agents                # Agent status list
+> log                   # Recent events
+> log --follow          # Live tail
+> log --agent agent-1   # Filter by agent
 ```
 
-**Graceful shutdown:** Press `Ctrl-C` to trigger swarm shutdown via `launch-agents stop`.
+**Future phases** will add job/PR tracking (Phase 2) and semantic events (Phase 3).
+
+**Graceful shutdown:** Press `Ctrl-C` in daemon mode to trigger swarm shutdown via `launch-agents stop`.
 
 ### Communication Summary
 
@@ -515,8 +525,9 @@ swarm-watcher -i 10                # Custom poll interval (10 seconds)
 |--------|------|-----------|----------|
 | `swarm-job list` | Polling | Agent → Queue | Check for available work |
 | `tmux send-keys` | Direct | Agent → Agent | Peer-to-peer messaging |
-| Watcher notify | Async | Daemon → Capable | New/unblocked job alerts |
-| Watcher broadcast | Pub/sub | Daemon → All | Completion announcements |
+| `swarm-daemon hook` | Event | Agent → Daemon | Report work status, heartbeats |
+| Daemon notify | Async | Daemon → Capable | New/unblocked job alerts (Phase 2+) |
+| Daemon broadcast | Pub/sub | Daemon → All | Completion announcements (Phase 2+) |
 | `events.log` | Append-only | All → File | Audit trail, swarm awareness |
 
 **Recommended agent behavior:**
@@ -653,7 +664,7 @@ tmux send-keys -t "$SESSION:agents.$pane" \
 
 Other coordination (job claimed, job completed, new job) is handled by:
 - The file-based queue system (atomic claims)
-- The swarm-watcher daemon (broadcasts completions)
+- The swarm-daemon (Phase 1: tracks agent activity; Phase 2+: broadcasts completions)
 
 ### Pre-flight Checks (enforced by /take)
 
@@ -864,13 +875,14 @@ swarm-job complete <job-id> [-r result]
 swarm-job list [pending|active|done|all]
 ```
 
-The `swarm-watcher` daemon provides queue monitoring and notifications:
+The `swarm-daemon` provides monitoring, investigation, and (future) scheduling:
 
 ```bash
-swarm-watcher [-i interval]
+swarm-daemon daemon    # Background monitoring
+swarm-daemon repl      # Interactive investigation
 ```
 
-See [Job Management with swarm-job](#job-management-with-swarm-job) and [Swarm Watcher Daemon](#swarm-watcher-daemon) for details.
+See [Job Management with swarm-job](#job-management-with-swarm-job) and [Swarm Daemon](#swarm-daemon) for details.
 
 ### Agent Registry
 
@@ -909,7 +921,7 @@ specializations:                  # From profile or learned
 
 | Enhancement | Effort | Impact | Status |
 |-------------|--------|--------|--------|
-| Swarm Commands | Low | High | **Done** (swarm-job, swarm-watcher) |
+| Swarm Commands | Low | High | **Done** (swarm-job, swarm-daemon Phase 1) |
 | Job-Skill Binding | Low | Medium | Planned |
 | Project Skills | Medium | High | Planned |
 | Task Templates | Medium | Medium | Planned |

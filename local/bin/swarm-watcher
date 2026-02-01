@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Copyright 2026 Ilja Heitlager
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache 2.0
+
+# =============================================================================
+# DEPRECATED: This tool is being replaced by swarm-daemon
+# Use: swarm-daemon daemon
+# This file is kept for backward compatibility during transition
+# =============================================================================
 
 # swarm-watcher - Job queue monitor daemon for agent swarm
-# Version: 2.0.0
+# Version: 2.0.0 (DEPRECATED)
 #
 # Monitors job queue and broadcasts notifications to agents:
 # - New jobs: notifies capable agents

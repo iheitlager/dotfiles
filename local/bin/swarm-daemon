@@ -1,0 +1,802 @@
+#!/usr/bin/env python3
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+"""
+swarm-daemon - Unified scheduler, watcher, and REPL for agent swarms
+
+Phase 1: Basic work visibility
+- Track when agents start/stop working
+- Monitor agent heartbeats
+- Provide REPL for investigation
+
+Usage:
+    swarm-daemon daemon         Run in background (monitoring mode)
+    swarm-daemon repl           Interactive investigation shell
+    swarm-daemon status         Quick status overview
+    swarm-daemon agents         List agent status
+    swarm-daemon log            Show recent events
+    swarm-daemon hook <EVENT>   Record event (called by agents)
+
+Note: This script has zero external dependencies - pure stdlib only.
+"""
+
+import logging
+import logging.handlers
+import os
+import sys
+import time
+import signal
+from pathlib import Path
+from datetime import datetime, timedelta
+from typing import Dict, Optional, List
+import subprocess
+import json
+
+# =============================================================================
+# INLINE YAML HANDLING (Minimal implementation - no external deps)
+# =============================================================================
+
+class SimpleYAML:
+    """Minimal YAML reader/writer for our simple state files"""
+
+    @staticmethod
+    def load(file_path: Path) -> Dict:
+        """Load simple YAML file (agents state only)"""
+        if not file_path.exists():
+            return {"agents": {}}
+
+        try:
+            with open(file_path) as f:
+                content = f.read()
+
+            # Simple parsing for our specific structure
+            result = {"agents": {}}
+            current_agent = None
+
+            for line in content.split('\n'):
+                line = line.rstrip()
+
+                if not line or line.startswith('#'):
+                    continue
+
+                # Top level key
+                if line.startswith('agents:'):
+                    continue
+
+                # Agent ID
+                if line.startswith('  ') and line[2:3] != ' ' and ':' in line:
+                    current_agent = line.strip().rstrip(':')
+                    result["agents"][current_agent] = {}
+
+                # Agent properties
+                elif line.startswith('    ') and current_agent and ':' in line:
+                    key, value = line.strip().split(':', 1)
+                    value = value.strip()
+
+                    # Remove quotes
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+
+                    result["agents"][current_agent][key] = value
+
+            return result
+        except Exception as e:
+            return {"agents": {}}
+
+    @staticmethod
+    def dump(data: Dict, file_path: Path):
+        """Write simple YAML file"""
+        lines = ["agents:"]
+
+        for agent_id, agent_data in data.get("agents", {}).items():
+            lines.append(f"  {agent_id}:")
+            for key, value in agent_data.items():
+                # Quote strings with special chars
+                if isinstance(value, str) and (':' in value or value.startswith(' ')):
+                    value = f'"{value}"'
+                lines.append(f"    {key}: {value}")
+
+        try:
+            with open(file_path, 'w') as f:
+                f.write('\n'.join(lines) + '\n')
+        except Exception as e:
+            pass
+
+# =============================================================================
+# LOGGING SETUP (XDG compliant with rotation)
+# =============================================================================
+
+def setup_logging(daemon_mode: bool = False):
+    """Configure logging to XDG_STATE_HOME with rotation"""
+    xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
+    log_dir = Path(xdg_state) / "swarm-daemon"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    log_file = log_dir / "swarm-daemon.log"
+
+    # Rotating file handler: 1MB max, keep 3 backups
+    handler = logging.handlers.RotatingFileHandler(
+        log_file,
+        maxBytes=1_000_000,  # 1MB
+        backupCount=3,
+    )
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+
+    # Console handler for non-daemon mode
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter("%(message)s"))
+
+    logger = logging.getLogger("swarm-daemon")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    # Only log to console in non-daemon mode or if interactive
+    if not daemon_mode or sys.stderr.isatty():
+        logger.addHandler(console)
+
+    return logger
+
+log = None  # Will be set in main()
+
+# =============================================================================
+# REPOSITORY & STATE DETECTION
+# =============================================================================
+
+class SwarmContext:
+    """Manages paths and state for the current swarm"""
+
+    def __init__(self):
+        self.repo_root = self._get_repo_root()
+        self.repo_name = self._get_repo_name()
+        self.state_dir = self._get_state_dir()
+        self.ensure_directories()
+
+    def _get_repo_root(self) -> Path:
+        """Get git repository root"""
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return Path(result.stdout.strip())
+        except subprocess.CalledProcessError:
+            print("Error: Not in a git repository", file=sys.stderr)
+            sys.exit(1)
+
+    def _get_repo_name(self) -> str:
+        """Get repository name (handles worktree paths)"""
+        local_repo_name = self.repo_root.name
+        local_repo_parent = self.repo_root.parent.name
+
+        # Handle worktree paths
+        if local_repo_parent.endswith("-worktree"):
+            return local_repo_parent.replace("-worktree", "")
+        elif local_repo_name.endswith("-worktree"):
+            return local_repo_name.replace("-worktree", "")
+        else:
+            return local_repo_name
+
+    def _get_state_dir(self) -> Path:
+        """Get XDG state directory for this project"""
+        xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
+        return Path(xdg_state) / "agent-context" / self.repo_name
+
+    def ensure_directories(self):
+        """Ensure all required directories exist"""
+        # Job queue directories (should already exist from swarm-job)
+        (self.state_dir / "jobs" / "pending").mkdir(parents=True, exist_ok=True)
+        (self.state_dir / "jobs" / "active").mkdir(parents=True, exist_ok=True)
+        (self.state_dir / "jobs" / "done").mkdir(parents=True, exist_ok=True)
+
+        # Daemon state directory (new)
+        (self.state_dir / "daemon").mkdir(parents=True, exist_ok=True)
+
+    @property
+    def events_log(self) -> Path:
+        return self.state_dir / "events.log"
+
+    @property
+    def agent_state_file(self) -> Path:
+        return self.state_dir / "daemon" / "agent-state.yaml"
+
+    @property
+    def daemon_pid_file(self) -> Path:
+        return self.state_dir / "daemon" / "daemon.pid"
+
+    @property
+    def session_name(self) -> str:
+        """Get tmux session name (sanitized)"""
+        return f"claude-{self.repo_name.replace('.', '_')}"
+
+# =============================================================================
+# AGENT STATE MANAGEMENT
+# =============================================================================
+
+class AgentStateManager:
+    """Manages agent state (working/idle, heartbeats)"""
+
+    def __init__(self, context: SwarmContext):
+        self.context = context
+        self.state: Dict = {"agents": {}}
+        self.load_state()
+
+    def load_state(self):
+        """Load agent state from YAML file"""
+        try:
+            self.state = SimpleYAML.load(self.context.agent_state_file)
+        except Exception as e:
+            log.error(f"Failed to load agent state: {e}")
+            self.state = {"agents": {}}
+
+    def save_state(self):
+        """Save agent state to YAML file"""
+        try:
+            SimpleYAML.dump(self.state, self.context.agent_state_file)
+        except Exception as e:
+            log.error(f"Failed to save agent state: {e}")
+
+    def update_agent(self, agent_id: str, **kwargs):
+        """Update agent state fields"""
+        if agent_id not in self.state["agents"]:
+            self.state["agents"][agent_id] = {}
+
+        self.state["agents"][agent_id].update(kwargs)
+        self.save_state()
+
+    def get_agent(self, agent_id: str) -> Optional[Dict]:
+        """Get agent state"""
+        return self.state["agents"].get(agent_id)
+
+    def get_all_agents(self) -> Dict:
+        """Get all agent states"""
+        return self.state["agents"]
+
+    def get_working_agents(self) -> List[str]:
+        """Get list of agents currently working"""
+        return [
+            agent_id for agent_id, state in self.state["agents"].items()
+            if state.get("status") == "working"
+        ]
+
+    def get_idle_agents(self) -> List[str]:
+        """Get list of idle agents"""
+        return [
+            agent_id for agent_id, state in self.state["agents"].items()
+            if state.get("status") == "idle"
+        ]
+
+    def check_stale_agents(self, threshold_minutes: int = 5) -> List[str]:
+        """Find agents with no heartbeat in threshold_minutes"""
+        stale = []
+        threshold = datetime.now() - timedelta(minutes=threshold_minutes)
+
+        for agent_id, state in self.state["agents"].items():
+            last_heartbeat = state.get("last_heartbeat")
+            if last_heartbeat:
+                try:
+                    last_time = datetime.fromisoformat(last_heartbeat)
+                    if last_time < threshold:
+                        stale.append(agent_id)
+                except ValueError:
+                    pass
+
+        return stale
+
+# =============================================================================
+# EVENT LOGGING
+# =============================================================================
+
+class EventLogger:
+    """Handles event logging to events.log"""
+
+    def __init__(self, context: SwarmContext):
+        self.context = context
+        self.ensure_log_file()
+
+    def ensure_log_file(self):
+        """Ensure events.log exists"""
+        if not self.context.events_log.exists():
+            self.context.events_log.touch()
+
+    def log_event(self, agent_id: str, event_type: str, data: str = ""):
+        """Append event to events.log"""
+        timestamp = datetime.now().isoformat()
+        line = f"{timestamp} | {agent_id} | {event_type} | {data}\n"
+
+        try:
+            with open(self.context.events_log, 'a') as f:
+                f.write(line)
+        except Exception as e:
+            log.error(f"Failed to write event: {e}")
+
+    def read_recent_events(self, limit: int = 20) -> List[str]:
+        """Read recent events from log"""
+        if not self.context.events_log.exists():
+            return []
+
+        try:
+            with open(self.context.events_log) as f:
+                lines = f.readlines()
+            return lines[-limit:]
+        except Exception as e:
+            log.error(f"Failed to read events: {e}")
+            return []
+
+    def filter_events(self, agent_id: Optional[str] = None, event_type: Optional[str] = None, limit: int = 50) -> List[str]:
+        """Filter events by agent or event type"""
+        if not self.context.events_log.exists():
+            return []
+
+        try:
+            with open(self.context.events_log) as f:
+                lines = f.readlines()
+
+            filtered = []
+            for line in reversed(lines):
+                parts = line.split(" | ")
+                if len(parts) >= 3:
+                    line_agent = parts[1].strip()
+                    line_event = parts[2].strip()
+
+                    if agent_id and line_agent != agent_id:
+                        continue
+                    if event_type and line_event != event_type:
+                        continue
+
+                    filtered.append(line)
+                    if len(filtered) >= limit:
+                        break
+
+            return list(reversed(filtered))
+        except Exception as e:
+            log.error(f"Failed to filter events: {e}")
+            return []
+
+# =============================================================================
+# HOOK HANDLER (Fast Event Recording)
+# =============================================================================
+
+def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
+    """Handle hook events from agents - MUST BE FAST"""
+    agent_id = os.environ.get("AGENT_ID", "unknown")
+
+    # Parse arguments
+    data = " ".join(args)
+
+    # Quick validation
+    valid_events = {"AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT"}
+    if event_type not in valid_events:
+        print(f"Warning: Unknown event type: {event_type}", file=sys.stderr)
+
+    # Log event (fast append)
+    event_logger = EventLogger(context)
+    event_logger.log_event(agent_id, event_type, data)
+
+    # Update agent state (quick YAML update)
+    state_manager = AgentStateManager(context)
+    now = datetime.now().isoformat()
+
+    if event_type == "AGENT_WORK_START":
+        state_manager.update_agent(
+            agent_id,
+            status="working",
+            started_at=now,
+            last_heartbeat=now
+        )
+    elif event_type == "AGENT_WORK_STOP":
+        state_manager.update_agent(
+            agent_id,
+            status="idle",
+            last_stopped=now,
+            last_heartbeat=now
+        )
+    elif event_type == "AGENT_HEARTBEAT":
+        state_manager.update_agent(
+            agent_id,
+            last_heartbeat=now
+        )
+
+    # Exit immediately (fire-and-forget)
+    sys.exit(0)
+
+# =============================================================================
+# DAEMON MODE (Background Monitoring)
+# =============================================================================
+
+class SwarmDaemon:
+    """Background daemon that monitors agent activity"""
+
+    def __init__(self, context: SwarmContext):
+        self.context = context
+        self.state_manager = AgentStateManager(context)
+        self.event_logger = EventLogger(context)
+        self.running = True
+        self.poll_interval = int(os.environ.get("POLL_INTERVAL", "5"))
+
+        # Register signal handlers
+        signal.signal(signal.SIGINT, self.handle_shutdown)
+        signal.signal(signal.SIGTERM, self.handle_shutdown)
+
+    def handle_shutdown(self, signum, frame):
+        """Graceful shutdown handler"""
+        log.info("Shutdown signal received - stopping daemon...")
+        self.event_logger.log_event("swarm-daemon", "SHUTDOWN", "Daemon stopping")
+        self.running = False
+
+    def write_pid_file(self):
+        """Write PID file for daemon tracking"""
+        with open(self.context.daemon_pid_file, 'w') as f:
+            f.write(str(os.getpid()))
+
+    def remove_pid_file(self):
+        """Remove PID file on shutdown"""
+        if self.context.daemon_pid_file.exists():
+            self.context.daemon_pid_file.unlink()
+
+    def check_for_stale_agents(self):
+        """Check for agents with no recent heartbeat"""
+        stale = self.state_manager.check_stale_agents(threshold_minutes=5)
+        for agent_id in stale:
+            log.warning(f"Agent {agent_id} appears stale (no heartbeat for 5m)")
+            self.event_logger.log_event("swarm-daemon", "AGENT_STALE", agent_id)
+
+    def run(self):
+        """Main daemon loop"""
+        log.info("swarm-daemon starting")
+        log.info(f"Monitoring: {self.context.state_dir}")
+        log.info(f"Session: {self.context.session_name}")
+        log.info(f"Poll interval: {self.poll_interval}s")
+
+        self.write_pid_file()
+        self.event_logger.log_event("swarm-daemon", "STARTED", f"Poll interval: {self.poll_interval}s")
+
+        try:
+            while self.running:
+                # Check for stale agents
+                self.check_for_stale_agents()
+
+                # Sleep
+                time.sleep(self.poll_interval)
+
+        finally:
+            self.remove_pid_file()
+            log.info("swarm-daemon stopped")
+
+# =============================================================================
+# REPL MODE (Interactive Investigation)
+# =============================================================================
+
+class SwarmREPL:
+    """Interactive REPL for investigating swarm state"""
+
+    # ANSI colors
+    RED = '\033[0;31m'
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[0;33m'
+    BLUE = '\033[0;34m'
+    CYAN = '\033[0;36m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    NC = '\033[0m'
+
+    def __init__(self, context: SwarmContext):
+        self.context = context
+        self.state_manager = AgentStateManager(context)
+        self.event_logger = EventLogger(context)
+        self.running = True
+
+    def print_banner(self):
+        """Print REPL banner"""
+        working = len(self.state_manager.get_working_agents())
+        idle = len(self.state_manager.get_idle_agents())
+        total = len(self.state_manager.get_all_agents())
+
+        print(f"{self.BOLD}{self.CYAN}swarm-daemon v1.0.0 - Interactive REPL{self.NC}")
+        print(f"Connected to: {self.BOLD}{self.context.repo_name}{self.NC}")
+        print(f"Agents: {total} total ({working} working, {idle} idle)")
+        print()
+        print(f"Type {self.BOLD}help{self.NC} for commands, {self.BOLD}quit{self.NC} to exit")
+        print()
+
+    def cmd_status(self, args):
+        """Show system status"""
+        agents = self.state_manager.get_all_agents()
+        working = self.state_manager.get_working_agents()
+        idle = self.state_manager.get_idle_agents()
+
+        print(f"{self.BOLD}Swarm: {self.context.repo_name}{self.NC}")
+        print(f"  Agents: {len(agents)} total ({len(working)} working, {len(idle)} idle)")
+        print()
+
+    def cmd_agents(self, args):
+        """List all agents with status"""
+        agents = self.state_manager.get_all_agents()
+
+        if not agents:
+            print(f"{self.DIM}No agents registered yet{self.NC}")
+            return
+
+        for agent_id, state in agents.items():
+            status = state.get("status", "unknown")
+
+            if status == "working":
+                status_color = self.GREEN
+                started = state.get("started_at", "")
+                if started:
+                    elapsed = self._format_elapsed(started)
+                    status_display = f"{status_color}WORKING{self.NC}  {elapsed}"
+                else:
+                    status_display = f"{status_color}WORKING{self.NC}"
+            else:
+                status_color = self.DIM
+                stopped = state.get("last_stopped", "")
+                if stopped:
+                    elapsed = self._format_elapsed(stopped)
+                    status_display = f"{status_color}IDLE{self.NC}     {elapsed}"
+                else:
+                    status_display = f"{status_color}IDLE{self.NC}"
+
+            print(f"{agent_id}  {status_display}")
+
+    def cmd_log(self, args):
+        """Show recent events"""
+        # Parse arguments
+        follow = "--follow" in args or "-f" in args
+        agent_filter = None
+        limit = 20
+
+        # Parse --agent filter
+        if "--agent" in args:
+            idx = args.index("--agent")
+            if idx + 1 < len(args):
+                agent_filter = args[idx + 1]
+
+        # Parse --tail limit
+        if "--tail" in args:
+            idx = args.index("--tail")
+            if idx + 1 < len(args):
+                try:
+                    limit = int(args[idx + 1])
+                except ValueError:
+                    pass
+
+        if follow:
+            self._log_follow(agent_filter)
+        else:
+            events = self.event_logger.filter_events(agent_id=agent_filter, limit=limit)
+            for event in events:
+                self._print_event(event)
+
+    def _log_follow(self, agent_filter: Optional[str]):
+        """Follow events log (like tail -f)"""
+        print(f"{self.DIM}Following events... (Ctrl-C to stop){self.NC}")
+
+        # Get initial position
+        if not self.context.events_log.exists():
+            return
+
+        with open(self.context.events_log) as f:
+            # Seek to end
+            f.seek(0, 2)
+
+            try:
+                while True:
+                    line = f.readline()
+                    if line:
+                        if agent_filter:
+                            if f" | {agent_filter} | " in line:
+                                self._print_event(line)
+                        else:
+                            self._print_event(line)
+                    else:
+                        time.sleep(0.5)
+            except KeyboardInterrupt:
+                print()
+
+    def _print_event(self, event_line: str):
+        """Print formatted event line"""
+        parts = event_line.strip().split(" | ")
+        if len(parts) >= 3:
+            timestamp = parts[0].split("T")[1][:8] if "T" in parts[0] else parts[0]
+            agent = parts[1]
+            event = parts[2]
+            data = " | ".join(parts[3:]) if len(parts) > 3 else ""
+
+            # Color by event type
+            if "START" in event:
+                event_color = self.GREEN
+            elif "STOP" in event:
+                event_color = self.YELLOW
+            elif "HEARTBEAT" in event:
+                event_color = self.DIM
+            else:
+                event_color = self.NC
+
+            print(f"{self.DIM}{timestamp}{self.NC}  {event_color}{event:20}{self.NC}  {agent}  {data}")
+
+    def cmd_help(self, args):
+        """Show help"""
+        print(f"{self.BOLD}Available commands:{self.NC}")
+        print()
+        print(f"  {self.BOLD}status{self.NC}              System overview")
+        print(f"  {self.BOLD}agents{self.NC}              List all agents with status")
+        print(f"  {self.BOLD}log{self.NC}                 Show recent events")
+        print(f"    --tail N          Show last N events (default: 20)")
+        print(f"    --agent <id>      Filter by agent")
+        print(f"    --follow, -f      Follow events (live tail)")
+        print(f"  {self.BOLD}help{self.NC}                Show this help")
+        print(f"  {self.BOLD}quit{self.NC}, {self.BOLD}exit{self.NC}          Exit REPL")
+        print()
+
+    def _format_elapsed(self, timestamp_str: str) -> str:
+        """Format elapsed time from ISO timestamp"""
+        try:
+            dt = datetime.fromisoformat(timestamp_str)
+            elapsed = datetime.now() - dt
+
+            minutes = int(elapsed.total_seconds() / 60)
+            if minutes < 60:
+                return f"{minutes}m"
+            else:
+                hours = minutes // 60
+                mins = minutes % 60
+                return f"{hours}h{mins}m"
+        except:
+            return ""
+
+    def run(self):
+        """Main REPL loop"""
+        self.print_banner()
+
+        while self.running:
+            try:
+                line = input(f"{self.BOLD}>{self.NC} ").strip()
+
+                if not line:
+                    continue
+
+                parts = line.split()
+                command = parts[0]
+                args = parts[1:]
+
+                if command in ("quit", "exit"):
+                    break
+                elif command == "status":
+                    self.cmd_status(args)
+                elif command == "agents":
+                    self.cmd_agents(args)
+                elif command == "log":
+                    self.cmd_log(args)
+                elif command == "help":
+                    self.cmd_help(args)
+                else:
+                    print(f"{self.RED}Unknown command: {command}{self.NC}")
+                    print(f"Type {self.BOLD}help{self.NC} for available commands")
+
+            except KeyboardInterrupt:
+                print()
+                continue
+            except EOFError:
+                break
+
+# =============================================================================
+# CLI MODE (One-off Commands)
+# =============================================================================
+
+def run_cli_status(context: SwarmContext):
+    """Quick status output"""
+    state_manager = AgentStateManager(context)
+    agents = state_manager.get_all_agents()
+    working = state_manager.get_working_agents()
+    idle = state_manager.get_idle_agents()
+
+    print(f"Swarm: {context.repo_name}")
+    print(f"  Agents: {len(agents)} total ({len(working)} working, {len(idle)} idle)")
+
+def run_cli_agents(context: SwarmContext):
+    """List agents"""
+    state_manager = AgentStateManager(context)
+    agents = state_manager.get_all_agents()
+
+    if not agents:
+        print("No agents registered yet")
+        return
+
+    for agent_id, state in agents.items():
+        status = state.get("status", "unknown")
+        print(f"{agent_id:12} {status:8}")
+
+def run_cli_log(context: SwarmContext):
+    """Show recent log"""
+    event_logger = EventLogger(context)
+    events = event_logger.read_recent_events(limit=20)
+
+    for event in events:
+        print(event.rstrip())
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
+
+def print_usage():
+    print(__doc__)
+    print("\nCommands:")
+    print("  daemon              Run in background (monitoring mode)")
+    print("  repl                Interactive investigation shell")
+    print("  status              Quick status overview")
+    print("  agents              List agent status")
+    print("  log                 Show recent events")
+    print("  hook <EVENT> [...]  Record event (called by agents)")
+    print()
+    print("Options:")
+    print("  -h, --help          Show this help")
+    print()
+    print("Environment:")
+    print("  POLL_INTERVAL       Polling interval in seconds (default: 5)")
+    print("  AGENT_ID            Agent identifier (for hook calls)")
+
+def main():
+    global log
+
+    if len(sys.argv) < 2:
+        print_usage()
+        sys.exit(0)
+
+    command = sys.argv[1]
+
+    if command in ("-h", "--help"):
+        print_usage()
+        sys.exit(0)
+
+    # Initialize context
+    context = SwarmContext()
+
+    # Route to appropriate mode
+    if command == "daemon":
+        log = setup_logging(daemon_mode=True)
+        daemon = SwarmDaemon(context)
+        daemon.run()
+
+    elif command == "repl":
+        log = setup_logging(daemon_mode=False)
+        repl = SwarmREPL(context)
+        repl.run()
+
+    elif command == "status":
+        log = setup_logging(daemon_mode=False)
+        run_cli_status(context)
+
+    elif command == "agents":
+        log = setup_logging(daemon_mode=False)
+        run_cli_agents(context)
+
+    elif command == "log":
+        log = setup_logging(daemon_mode=False)
+        run_cli_log(context)
+
+    elif command == "hook":
+        # Hook mode - MUST BE FAST
+        log = setup_logging(daemon_mode=True)
+        if len(sys.argv) < 3:
+            print("Usage: swarm-daemon hook <EVENT_TYPE> [args...]", file=sys.stderr)
+            sys.exit(1)
+
+        event_type = sys.argv[2]
+        args = sys.argv[3:]
+        handle_hook(context, event_type, args)
+
+    else:
+        print(f"Unknown command: {command}", file=sys.stderr)
+        print_usage()
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
