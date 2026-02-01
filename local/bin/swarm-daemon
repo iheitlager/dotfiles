@@ -1338,6 +1338,135 @@ class SwarmREPL:
         else:
             return f"{minutes}m"
 
+    # Phase 3B: Activity tracking commands
+    def cmd_activity(self, args):
+        """Show agent activity breakdown (Phase 3)"""
+        # Parse agent filter
+        agent_filter = args[0] if args else None
+
+        if agent_filter:
+            # Show specific agent activity
+            agent = self.state_manager.get_agent(agent_filter)
+            if not agent:
+                print(f"{self.RED}Agent not found: {agent_filter}{self.NC}")
+                return
+
+            current_job_id = agent.get("current_job")
+            if not current_job_id:
+                print(f"{self.DIM}Agent {agent_filter} has no active job{self.NC}")
+                return
+
+            active_jobs = self.job_metrics.get_active_jobs()
+            if current_job_id not in active_jobs:
+                print(f"{self.DIM}Job {current_job_id} not found in active jobs{self.NC}")
+                return
+
+            job = active_jobs[current_job_id]
+            print(f"{self.BOLD}Activity: {agent_filter}{self.NC}")
+            print(f"Job: #{job.get('issue')} - {job.get('title')}")
+            print()
+            self._show_job_activity(job)
+        else:
+            # Show all agents
+            agents = self.state_manager.get_all_agents()
+            active_jobs = self.job_metrics.get_active_jobs()
+
+            if not agents:
+                print(f"{self.DIM}No agents registered{self.NC}")
+                return
+
+            print(f"{self.BOLD}Agent Activity:{self.NC}")
+            print()
+
+            for agent_id, state in agents.items():
+                current_job_id = state.get("current_job")
+                if current_job_id and current_job_id in active_jobs:
+                    job = active_jobs[current_job_id]
+                    print(f"{self.BOLD}{agent_id}{self.NC}")
+                    self._show_job_activity(job)
+                    print()
+
+    def _show_job_activity(self, job: Dict):
+        """Display activity breakdown for a job"""
+        tasks_created = job.get("tasks_created", 0)
+        tasks_completed = job.get("tasks_completed", 0)
+        files_read = job.get("files_read", 0)
+        files_edited = job.get("files_edited", 0)
+        files_written = job.get("files_written", 0)
+        lines_changed = job.get("lines_changed", 0)
+        commits = job.get("commits", 0)
+        test_runs = job.get("test_runs", 0)
+        test_failures = job.get("test_failures", 0)
+        bash_commands = job.get("bash_commands", 0)
+
+        # Display counters
+        if tasks_created > 0:
+            print(f"  Tasks: {tasks_completed}/{tasks_created} completed")
+        if files_read > 0 or files_edited > 0 or files_written > 0:
+            print(f"  Files: {files_read} read, {files_edited} edited, {files_written} written")
+        if lines_changed > 0:
+            print(f"  Lines changed: {lines_changed}")
+        if commits > 0:
+            print(f"  Commits: {commits}")
+        if test_runs > 0:
+            status = f" ({test_failures} failed)" if test_failures > 0 else " (all passed)"
+            print(f"  Test runs: {test_runs}{status}")
+        if bash_commands > 0:
+            print(f"  Bash commands: {bash_commands}")
+
+        if all(v == 0 for v in [tasks_created, files_read, commits, test_runs]):
+            print(f"  {self.DIM}No activity recorded yet{self.NC}")
+
+    def cmd_timeline(self, args):
+        """Show visual job timeline (Phase 3)"""
+        if not args:
+            print(f"{self.RED}Usage: timeline <job-id>{self.NC}")
+            return
+
+        job_id = args[0]
+
+        # Get events for this job
+        events = self.event_logger.filter_events(limit=1000)
+
+        # Filter events related to this job
+        job_events = []
+        for event_line in events:
+            if job_id in event_line:
+                job_events.append(event_line)
+
+        if not job_events:
+            print(f"{self.DIM}No events found for job {job_id}{self.NC}")
+            return
+
+        print(f"{self.BOLD}Timeline: {job_id}{self.NC}")
+        print()
+
+        # Show simplified timeline
+        for event_line in job_events:
+            parts = event_line.strip().split(" | ")
+            if len(parts) >= 3:
+                timestamp = parts[0].split("T")[1][:8] if "T" in parts[0] else parts[0]
+                event = parts[2]
+                data = " | ".join(parts[3:]) if len(parts) > 3 else ""
+
+                # Color by event type
+                if "CLAIMED" in event or "START" in event:
+                    event_color = self.GREEN
+                elif "COMPLETE" in event or "PASSED" in event:
+                    event_color = self.GREEN
+                elif "FAILED" in event or "ERROR" in event:
+                    event_color = self.RED
+                elif "EDIT" in event or "WRITE" in event:
+                    event_color = self.CYAN
+                elif "PR" in event:
+                    event_color = self.YELLOW
+                else:
+                    event_color = self.NC
+
+                print(f"{self.DIM}{timestamp}{self.NC}  {event_color}{event:25}{self.NC}  {data}")
+
+        print()
+
     def cmd_help(self, args):
         """Show help"""
         print(f"{self.BOLD}Available commands:{self.NC}")
@@ -1347,6 +1476,8 @@ class SwarmREPL:
         print(f"  {self.BOLD}work{self.NC}                What is each agent working on? (Phase 2)")
         print(f"  {self.BOLD}queue{self.NC} [pending|active|done]  Job queue status (Phase 2)")
         print(f"  {self.BOLD}metrics{self.NC}             Performance statistics (Phase 2)")
+        print(f"  {self.BOLD}activity{self.NC} [agent]    Activity breakdown (Phase 3)")
+        print(f"  {self.BOLD}timeline{self.NC} <job-id>   Visual job progression (Phase 3)")
         print(f"  {self.BOLD}log{self.NC}                 Show recent events")
         print(f"    --tail N          Show last N events (default: 20)")
         print(f"    --agent <id>      Filter by agent")
@@ -1398,6 +1529,10 @@ class SwarmREPL:
                     self.cmd_queue(args)
                 elif command == "metrics":
                     self.cmd_metrics(args)
+                elif command == "activity":
+                    self.cmd_activity(args)
+                elif command == "timeline":
+                    self.cmd_timeline(args)
                 elif command == "log":
                     self.cmd_log(args)
                 elif command == "help":
