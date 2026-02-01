@@ -458,6 +458,12 @@ class AgentStateManager:
             if state.get("status") == "idle"
         ]
 
+    def remove_agent(self, agent_id: str):
+        """Remove an agent from the state"""
+        if agent_id in self.state["agents"]:
+            del self.state["agents"][agent_id]
+            self.save_state()
+
     def check_stale_agents(self, threshold_minutes: int = 5) -> List[str]:
         """Find agents with no heartbeat in threshold_minutes"""
         stale = []
@@ -754,6 +760,9 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     job_metrics = JobMetricsManager(context)
     now = datetime.now().isoformat()
 
+    # Get current job for this agent (used by Phase 3 events)
+    current_job = job_metrics.get_job_by_agent(agent_id)
+
     # Phase 1 events
     if event_type == "AGENT_WORK_START":
         state_manager.update_agent(
@@ -843,9 +852,6 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
             )
 
     # Phase 3 events: Semantic tracking
-    # Get current job for this agent
-    current_job = job_metrics.get_job_by_agent(agent_id)
-
     # Task events
     elif event_type in ("TASK_CREATED", "TASK_COMPLETED"):
         if current_job:
@@ -1645,6 +1651,70 @@ class SwarmREPL:
 
         print()
 
+    def cmd_cleanup(self, args):
+        """Remove stale agent entries"""
+        # Parse arguments
+        dry_run = "--dry-run" in args
+        hours = 24  # Default threshold
+
+        # Check for --hours argument
+        if "--hours" in args:
+            try:
+                idx = args.index("--hours")
+                if idx + 1 < len(args):
+                    hours = int(args[idx + 1])
+            except (ValueError, IndexError):
+                print(f"{self.RED}Invalid --hours value{self.NC}")
+                return
+
+        state_manager = AgentStateManager(self.context)
+        agents = state_manager.get_all_agents()
+
+        if not agents:
+            print("No agents to clean up")
+            return
+
+        now = datetime.now()
+        threshold = timedelta(hours=hours)
+        stale_agents = []
+
+        for agent_id, data in agents.items():
+            last_activity = None
+
+            # Get most recent activity timestamp
+            for field in ["last_stopped", "last_heartbeat", "started_at"]:
+                if field in data and data[field]:
+                    try:
+                        last_activity = datetime.fromisoformat(data[field])
+                        break
+                    except:
+                        continue
+
+            if last_activity:
+                age = now - last_activity
+                if age > threshold:
+                    stale_agents.append((agent_id, age))
+
+        if not stale_agents:
+            print(f"No stale agents found (threshold: {hours}h)")
+            return
+
+        # Show what will be/was cleaned
+        print(f"{self.BOLD}Stale agents (inactive > {hours}h):{self.NC}")
+        for agent_id, age in stale_agents:
+            hours_ago = int(age.total_seconds() / 3600)
+            print(f"  {agent_id:20s} (inactive {hours_ago}h)")
+
+        if dry_run:
+            print(f"\n{self.YELLOW}Dry run - no changes made{self.NC}")
+            return
+
+        # Remove stale agents
+        for agent_id, _ in stale_agents:
+            state_manager.remove_agent(agent_id)
+
+        print(f"\n{self.GREEN}Removed {len(stale_agents)} stale agent(s){self.NC}")
+
     def cmd_help(self, args):
         """Show help"""
         print(f"{self.BOLD}Available commands:{self.NC}")
@@ -1658,6 +1728,9 @@ class SwarmREPL:
         print(f"  {self.BOLD}timeline{self.NC} <job-id>   Visual job progression (Phase 3)")
         print(f"  {self.BOLD}bottlenecks{self.NC}         Identify slowdowns and issues (Phase 3)")
         print(f"  {self.BOLD}compare{self.NC}             Agent performance comparison (Phase 3)")
+        print(f"  {self.BOLD}cleanup{self.NC}             Remove stale agent entries")
+        print(f"    --hours N         Inactivity threshold (default: 24)")
+        print(f"    --dry-run         Preview without removing")
         print(f"  {self.BOLD}log{self.NC}                 Show recent events")
         print(f"    --tail N          Show last N events (default: 20)")
         print(f"    --agent <id>      Filter by agent")
@@ -1717,6 +1790,8 @@ class SwarmREPL:
                     self.cmd_bottlenecks(args)
                 elif command == "compare":
                     self.cmd_compare(args)
+                elif command == "cleanup":
+                    self.cmd_cleanup(args)
                 elif command == "log":
                     self.cmd_log(args)
                 elif command == "help":
@@ -1759,12 +1834,125 @@ def run_cli_agents(context: SwarmContext):
         print(f"{agent_id:12} {status:8}")
 
 def run_cli_log(context: SwarmContext):
-    """Show recent log"""
-    event_logger = EventLogger(context)
-    events = event_logger.read_recent_events(limit=20)
+    """Show recent log with optional follow mode"""
+    # Parse arguments from sys.argv
+    args = sys.argv[2:]  # Skip 'swarm-daemon' and 'log'
 
-    for event in events:
-        print(event.rstrip())
+    follow = "--follow" in args or "-f" in args
+    agent_filter = None
+    limit = 20
+
+    # Parse --agent filter
+    if "--agent" in args:
+        idx = args.index("--agent")
+        if idx + 1 < len(args):
+            agent_filter = args[idx + 1]
+
+    # Parse --tail limit
+    if "--tail" in args:
+        idx = args.index("--tail")
+        if idx + 1 < len(args):
+            try:
+                limit = int(args[idx + 1])
+            except ValueError:
+                pass
+
+    event_logger = EventLogger(context)
+
+    if follow:
+        # Follow mode (like tail -f)
+        print("\033[2mFollowing events... (Ctrl-C to stop)\033[0m")
+
+        if not context.events_log.exists():
+            return
+
+        with open(context.events_log) as f:
+            # Seek to end
+            f.seek(0, 2)
+
+            try:
+                while True:
+                    line = f.readline()
+                    if line:
+                        if agent_filter:
+                            if f" | {agent_filter} | " in line:
+                                print(line.rstrip())
+                        else:
+                            print(line.rstrip())
+                    else:
+                        time.sleep(0.5)
+            except KeyboardInterrupt:
+                print()
+    else:
+        # Normal mode - show recent events
+        events = event_logger.filter_events(agent_id=agent_filter, limit=limit)
+        for event in events:
+            print(event.rstrip())
+
+def run_cli_cleanup(context: SwarmContext):
+    """Remove stale agent entries"""
+    # Parse arguments from sys.argv
+    args = sys.argv[2:]  # Skip 'swarm-daemon' and 'cleanup'
+    dry_run = "--dry-run" in args
+    hours = 24  # Default threshold
+
+    # Check for --hours argument
+    if "--hours" in args:
+        try:
+            idx = args.index("--hours")
+            if idx + 1 < len(args):
+                hours = int(args[idx + 1])
+        except (ValueError, IndexError):
+            print("Error: Invalid --hours value", file=sys.stderr)
+            sys.exit(1)
+
+    state_manager = AgentStateManager(context)
+    agents = state_manager.get_all_agents()
+
+    if not agents:
+        print("No agents to clean up")
+        return
+
+    now = datetime.now()
+    threshold = timedelta(hours=hours)
+    stale_agents = []
+
+    for agent_id, data in agents.items():
+        last_activity = None
+
+        # Get most recent activity timestamp
+        for field in ["last_stopped", "last_heartbeat", "started_at"]:
+            if field in data and data[field]:
+                try:
+                    last_activity = datetime.fromisoformat(data[field])
+                    break
+                except:
+                    continue
+
+        if last_activity:
+            age = now - last_activity
+            if age > threshold:
+                stale_agents.append((agent_id, age))
+
+    if not stale_agents:
+        print(f"No stale agents found (threshold: {hours}h)")
+        return
+
+    # Show what will be/was cleaned
+    print(f"Stale agents (inactive > {hours}h):")
+    for agent_id, age in stale_agents:
+        hours_ago = int(age.total_seconds() / 3600)
+        print(f"  {agent_id:20s} (inactive {hours_ago}h)")
+
+    if dry_run:
+        print("\nDry run - no changes made")
+        return
+
+    # Remove stale agents
+    for agent_id, _ in stale_agents:
+        state_manager.remove_agent(agent_id)
+
+    print(f"\nRemoved {len(stale_agents)} stale agent(s)")
 
 # =============================================================================
 # MAIN ENTRY POINT
@@ -1777,7 +1965,10 @@ def print_usage():
     print("  repl                Interactive investigation shell")
     print("  status              Quick status overview")
     print("  agents              List agent status")
+    print("  cleanup             Remove stale agent entries")
+    print("                      Options: --hours N (default: 24), --dry-run")
     print("  log                 Show recent events")
+    print("                      Options: -f/--follow, --agent <id>, --tail <N>")
     print("  hook <EVENT> [...]  Record event (called by agents)")
     print()
     print("Options:")
@@ -1821,6 +2012,10 @@ def main():
     elif command == "agents":
         log = setup_logging(daemon_mode=False)
         run_cli_agents(context)
+
+    elif command == "cleanup":
+        log = setup_logging(daemon_mode=False)
+        run_cli_cleanup(context)
 
     elif command == "log":
         log = setup_logging(daemon_mode=False)
