@@ -583,6 +583,44 @@ swarm-daemon log                   # Show recent events
 - Job timeline visualization
 - Pattern-based anomaly detection
 
+**Automatic event emission (Claude Code hooks):**
+
+Semantic events are automatically emitted when Claude uses tools, via PostToolUse hooks configured in `claude/config/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Bash|Grep|Glob|Task",
+        "hooks": [{
+          "type": "command",
+          "command": "~/.dotfiles/claude/config/hooks/swarm-hook.sh"
+        }]
+      }
+    ]
+  }
+}
+```
+
+The hook script (`claude/config/hooks/swarm-hook.sh`) automatically:
+- Maps tool calls to semantic events (Read → TOOL_READ, Edit → TOOL_EDIT, etc.)
+- Detects specialized events from Bash commands (git commit → GIT_COMMIT, pytest → TEST_STARTED, etc.)
+- Extracts metadata (file paths, line counts, patterns, commands)
+- Emits events to swarm-daemon in background (fire-and-forget, < 10ms)
+- Always returns `{"decision": "allow"}` to not block tool execution
+
+**Event mappings:**
+- `Read` → `TOOL_READ` + file path
+- `Edit` → `TOOL_EDIT` + file path + lines changed
+- `Write` → `TOOL_WRITE` + file path + lines
+- `Bash` → `TOOL_BASH` or specialized (`GIT_COMMIT`, `GIT_PUSH`, `GIT_REBASE`, `TEST_STARTED`, `LINT_STARTED`)
+- `Grep` → `TOOL_GREP` + pattern
+- `Glob` → `TOOL_GLOB` + pattern
+- `Task` → `TOOL_TASK` + subagent type
+
+This automation eliminates manual hook calls in `/take`, `/pr`, `/merge` commands—events are now emitted automatically as Claude works.
+
 **Graceful shutdown:** Press `Ctrl-C` in daemon mode to trigger swarm shutdown via `launch-agents stop`.
 
 ### Communication Summary
