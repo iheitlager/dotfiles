@@ -847,6 +847,7 @@ class SwarmREPL:
     def __init__(self, context: SwarmContext):
         self.context = context
         self.state_manager = AgentStateManager(context)
+        self.job_metrics = JobMetricsManager(context)
         self.event_logger = EventLogger(context)
         self.running = True
 
@@ -979,12 +980,250 @@ class SwarmREPL:
 
             print(f"{self.DIM}{timestamp}{self.NC}  {event_color}{event:20}{self.NC}  {agent}  {data}")
 
+    def cmd_work(self, args):
+        """Show what each agent is currently working on (Phase 2)"""
+        agents = self.state_manager.get_all_agents()
+        active_jobs = self.job_metrics.get_active_jobs()
+
+        if not agents:
+            print(f"{self.DIM}No agents registered yet{self.NC}")
+            return
+
+        print(f"{self.BOLD}Current Work:{self.NC}")
+        print()
+
+        for agent_id, state in agents.items():
+            status = state.get("status", "unknown")
+            current_job = state.get("current_job")
+            current_issue = state.get("current_issue")
+
+            if current_job and current_job in active_jobs:
+                job = active_jobs[current_job]
+                job_state = job.get("state", "working")
+                title = job.get("title", "")
+                pr_number = job.get("pr_number")
+
+                # Calculate elapsed time since claimed
+                claimed_at = state.get("claimed_at", "")
+                elapsed = self._format_elapsed(claimed_at) if claimed_at else ""
+
+                # Format status
+                if job_state == "pr_ready" and pr_number:
+                    status_display = f"{self.YELLOW}pr_ready{self.NC}  (PR #{pr_number})"
+                elif job_state == "working":
+                    status_display = f"{self.GREEN}working{self.NC}  "
+                else:
+                    status_display = f"{self.CYAN}{job_state}{self.NC}  "
+
+                print(f"{agent_id:12}  #{current_issue:<5}  {status_display}  {elapsed:6}  \"{title}\"")
+            elif status == "working":
+                # Working but no tracked job
+                print(f"{agent_id:12}  {self.DIM}working (no tracked job){self.NC}")
+            else:
+                # Idle
+                print(f"{agent_id:12}  {self.DIM}idle{self.NC}")
+
+        print()
+
+    def cmd_queue(self, args):
+        """Show job queue status (Phase 2)"""
+        # Parse subcommand
+        subcommand = args[0] if args else "active"
+
+        if subcommand == "pending":
+            self._queue_pending()
+        elif subcommand == "active":
+            self._queue_active()
+        elif subcommand == "done":
+            self._queue_done()
+        else:
+            # Show overview
+            active_jobs = self.job_metrics.get_active_jobs()
+            completed = self.job_metrics.get_completed_jobs()
+
+            # Count pending jobs from filesystem
+            pending_path = self.context.state_dir / "jobs" / "pending"
+            pending_count = len(list(pending_path.glob("*.yaml"))) if pending_path.exists() else 0
+
+            print(f"{self.BOLD}Queue Overview:{self.NC}")
+            print(f"  Pending: {pending_count}")
+            print(f"  Active:  {len(active_jobs)}")
+            print(f"  Done:    {len(completed)} (today)")
+            print()
+            print(f"Use: {self.BOLD}queue pending{self.NC}, {self.BOLD}queue active{self.NC}, {self.BOLD}queue done{self.NC}")
+            print()
+
+    def _queue_pending(self):
+        """Show pending jobs from filesystem"""
+        pending_path = self.context.state_dir / "jobs" / "pending"
+        if not pending_path.exists():
+            print(f"{self.DIM}No pending jobs{self.NC}")
+            return
+
+        pending_files = sorted(pending_path.glob("*.yaml"))
+        if not pending_files:
+            print(f"{self.DIM}No pending jobs{self.NC}")
+            return
+
+        print(f"{self.BOLD}Pending Jobs:{self.NC}")
+        print()
+
+        for job_file in pending_files:
+            # Quick parse of YAML to get title
+            try:
+                with open(job_file) as f:
+                    for line in f:
+                        if line.startswith("id:"):
+                            job_id = line.split(":", 1)[1].strip()
+                        elif line.startswith("title:"):
+                            title = line.split(":", 1)[1].strip().strip('"')
+                            print(f"  {job_id}  \"{title}\"")
+                            break
+            except:
+                pass
+
+        print()
+
+    def _queue_active(self):
+        """Show active jobs"""
+        active_jobs = self.job_metrics.get_active_jobs()
+
+        if not active_jobs:
+            print(f"{self.DIM}No active jobs{self.NC}")
+            return
+
+        print(f"{self.BOLD}Active Jobs:{self.NC}")
+        print()
+
+        for job_id, job in active_jobs.items():
+            issue = job.get("issue")
+            title = job.get("title", "")
+            agent = job.get("agent", "unknown")
+            state = job.get("state", "working")
+            pr_number = job.get("pr_number")
+            claimed_at = job.get("claimed_at", "")
+
+            elapsed = self._format_elapsed(claimed_at) if claimed_at else ""
+
+            if state == "pr_ready" and pr_number:
+                status = f"{self.YELLOW}pr_ready{self.NC} (PR #{pr_number})"
+            else:
+                status = f"{self.GREEN}working{self.NC}"
+
+            print(f"  {job_id}  {agent:12}  {elapsed:6}  {status}  #{issue} \"{title}\"")
+
+        print()
+
+    def _queue_done(self):
+        """Show completed jobs"""
+        completed = self.job_metrics.get_completed_jobs()
+
+        if not completed:
+            print(f"{self.DIM}No completed jobs today{self.NC}")
+            return
+
+        print(f"{self.BOLD}Completed Jobs (today):{self.NC}")
+        print()
+
+        for job in completed:
+            job_id = job.get("job_id", "unknown")
+            issue = job.get("issue")
+            title = job.get("title", "")
+            agent = job.get("agent", "unknown")
+            pr_number = job.get("pr_number")
+            total_time = job.get("total_time", "unknown")
+
+            print(f"  {job_id}  {agent:12}  {total_time:8}  #{issue} \"{title}\" (PR #{pr_number})")
+
+        print()
+
+    def cmd_metrics(self, args):
+        """Show performance metrics (Phase 2)"""
+        completed = self.job_metrics.get_completed_jobs()
+
+        if not completed:
+            print(f"{self.DIM}No completed jobs today{self.NC}")
+            return
+
+        print(f"{self.BOLD}Metrics (today):{self.NC}")
+        print()
+
+        # Calculate averages
+        time_to_pr_values = []
+        time_to_merge_values = []
+        total_time_values = []
+
+        for job in completed:
+            # Parse time strings like "42m" or "1h15m"
+            if job.get("time_to_pr") and job["time_to_pr"] != "unknown":
+                time_to_pr_values.append(self._parse_duration(job["time_to_pr"]))
+            if job.get("time_to_merge") and job["time_to_merge"] != "unknown":
+                time_to_merge_values.append(self._parse_duration(job["time_to_merge"]))
+            if job.get("total_time") and job["total_time"] != "unknown":
+                total_time_values.append(self._parse_duration(job["total_time"]))
+
+        # Calculate averages
+        avg_to_pr = sum(time_to_pr_values) // len(time_to_pr_values) if time_to_pr_values else 0
+        avg_to_merge = sum(time_to_merge_values) // len(time_to_merge_values) if time_to_merge_values else 0
+        avg_total = sum(total_time_values) // len(total_time_values) if total_time_values else 0
+
+        print(f"  Completed: {len(completed)} jobs")
+        print()
+        if avg_to_pr > 0:
+            print(f"  Avg time-to-PR:    {self._format_minutes(avg_to_pr)}")
+        if avg_to_merge > 0:
+            print(f"  Avg time-to-merge: {self._format_minutes(avg_to_merge)}")
+        if avg_total > 0:
+            print(f"  Avg total time:    {self._format_minutes(avg_total)}")
+        print()
+
+        # By agent breakdown
+        agent_stats = {}
+        for job in completed:
+            agent = job.get("agent", "unknown")
+            if agent not in agent_stats:
+                agent_stats[agent] = {"count": 0, "jobs": []}
+            agent_stats[agent]["count"] += 1
+            agent_stats[agent]["jobs"].append(job)
+
+        print(f"{self.BOLD}By Agent:{self.NC}")
+        for agent, stats in sorted(agent_stats.items()):
+            print(f"  {agent}: {stats['count']} completed")
+        print()
+
+    def _parse_duration(self, duration_str: str) -> int:
+        """Parse duration string like '1h15m' or '42m' to minutes"""
+        try:
+            total_minutes = 0
+            if 'h' in duration_str:
+                parts = duration_str.split('h')
+                total_minutes += int(parts[0]) * 60
+                if 'm' in parts[1]:
+                    total_minutes += int(parts[1].replace('m', ''))
+            elif 'm' in duration_str:
+                total_minutes = int(duration_str.replace('m', ''))
+            return total_minutes
+        except:
+            return 0
+
+    def _format_minutes(self, minutes: int) -> str:
+        """Format minutes as '1h15m' or '42m'"""
+        if minutes >= 60:
+            hours = minutes // 60
+            mins = minutes % 60
+            return f"{hours}h{mins}m" if mins > 0 else f"{hours}h"
+        else:
+            return f"{minutes}m"
+
     def cmd_help(self, args):
         """Show help"""
         print(f"{self.BOLD}Available commands:{self.NC}")
         print()
         print(f"  {self.BOLD}status{self.NC}              System overview")
         print(f"  {self.BOLD}agents{self.NC}              List all agents with status")
+        print(f"  {self.BOLD}work{self.NC}                What is each agent working on? (Phase 2)")
+        print(f"  {self.BOLD}queue{self.NC} [pending|active|done]  Job queue status (Phase 2)")
+        print(f"  {self.BOLD}metrics{self.NC}             Performance statistics (Phase 2)")
         print(f"  {self.BOLD}log{self.NC}                 Show recent events")
         print(f"    --tail N          Show last N events (default: 20)")
         print(f"    --agent <id>      Filter by agent")
@@ -1030,6 +1269,12 @@ class SwarmREPL:
                     self.cmd_status(args)
                 elif command == "agents":
                     self.cmd_agents(args)
+                elif command == "work":
+                    self.cmd_work(args)
+                elif command == "queue":
+                    self.cmd_queue(args)
+                elif command == "metrics":
+                    self.cmd_metrics(args)
                 elif command == "log":
                     self.cmd_log(args)
                 elif command == "help":
