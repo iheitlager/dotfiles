@@ -18,35 +18,68 @@ Why would you want this? Because one agent writing code while another reviews it
 
 ## The Problem: Context Isolation
 
-Running multiple Claude Code agents simultaneously creates three challenges:
+Running multiple Claude Code agents simultaneously creates four challenges:
 
 First, **workspace conflicts**. Each agent needs its own working directory. If they share the same git checkout, they'll trip over each other's file changes, creating merge conflicts faster than you can say "git stash".
 
-Second, **state management**. Agents need to share context—what's being worked on, what's complete, what's blocked—without stepping on each other's toes.
+Second, **configuration**. Each agent needs access to the same generic configuration—coding standards, allowed commands, workflow rules—but also needs to know *who it is*. Is it the implementer? The reviewer? The documentation writer? Generic config plus agent identity.
 
-Third, **coordination**. Someone has to assign work, track progress, and integrate results. That someone shouldn't be you, manually copying files between terminals.
+Third, **coordination**. Someone has to assign work, track progress, and integrate results. Agents need shared context—what's being worked on, what's complete, what's blocked. GitHub Issues turns out to be perfect for this: it's already your task tracker, agents can read and update issues, and you get a natural audit trail.
+
+Fourth, **visibility**. Running three agents means three terminal windows. Or does it? You could use split panes in your terminal—iTerm2, Ghostty, WezTerm all support this. I chose tmux. One terminal, multiple panes, all agents visible at once. Tmux deserves its own article, but for now: it's essential infrastructure for agent swarms.
 
 ## Enter Git Worktrees
 
-Git worktrees solve the first problem elegantly. One repository, multiple checkpoints, separate working directories:
+Git worktrees solve the first problem elegantly. One repository, multiple checkpoints, separate working directories. I've [written about worktrees before](https://medium.com/lab271/stop-switching-branches-a-better-git-workflow-with-worktrees-4353509b73b4)—they're underrated. For parallel agents, they're essential.
+
+My convention: if a project lives at `~/wc/<project>`, worktrees go in `~/wc/<project>-worktree/`. This keeps the main checkout clean while letting me navigate to worktrees with predictable paths:
 
 ```bash
 # Main development happens here
-~/.dotfiles/
+~/wc/myproject/
 
-# Agent 1: implementing a feature
-~/code/.worktrees/feature-auth/
+# Agent 1: its own workspace, creates branches as needed
+~/wc/myproject-worktree/agent-1/
 
-# Agent 2: reviewing changes  
-~/code/.worktrees/review-auth/
+# Agent 2: same repo, isolated checkout
+~/wc/myproject-worktree/agent-2/
 
-# Agent 3: updating docs
-~/code/.worktrees/docs-update/
+# Agent 3: you get the pattern
+~/wc/myproject-worktree/agent-3/
 ```
 
-Same git history, different branches, isolated file systems. Each agent sees a clean checkout. No conflicts. No confusion.
+Each agent gets a numbered worktree. Inside that worktree, it creates and switches branches as needed—`feature/auth`, `fix/typo`, whatever the task requires. Same git history, isolated file systems. Each agent sees a clean checkout. No conflicts. No confusion.
 
-The magic is that configuration remains centralized. All three worktrees read from `~/.config/claude/` via symlinks. Update your `CLAUDE.md` once, and all agents see the change immediately.
+## Configuration: Central Plus Identity
+
+Git worktrees solve workspace isolation. The second challenge, configuration, is solved in another way. Each agent needs the same rules *and* its own identity.
+
+The solution is three layers:
+
+**Layer 1: Central config** at `~/.claude/`. This is where `CLAUDE.md` lives, along with `commands/`, `skills/`, and `agents/` directories. I maintain this through my dotfiles, as described in [Part 2](https://medium.com/lab271/teaching-claude-code-where-to-live-52e1acfed96b). All agents read from here. Coding standards, workflow rules, allowed tools—shared everywhere.
+
+**Layer 2: Agent identity** via `AGENT.md`. This is injected at launch time through the command line. It tells each agent who it is, what its role is, and that it's part of a swarm:
+
+```markdown
+# Agent Identity
+
+You are agent-2 in a parallel swarm of 3 agents.
+Your role: code reviewer
+Your worktree: ~/wc/myproject-worktree/agent-2/
+
+## Coordination
+- Check ~/.local/state/agents/ for task status
+- Your task file: agent-2/current-task.txt
+- Other agents are working in parallel—don't duplicate effort
+```
+
+The `launch-agents` script generates and injects this dynamically. Same generic config, unique identity per agent.
+
+**Layer 3: Project-local `CLAUDE.md`**. Each project can still have its own instructions in the repository root. Project-specific conventions, architecture decisions, domain knowledge. This layer remains untouched—agents pick it up automatically from their worktree.
+
+The `settings.json` also lives centrally in `~/.claude/settings.json`. Command allowlists, blocked patterns, model preferences—all version controlled in my dotfiles, applied to every agent instance.
+
+This provided three layers with a clear separation: global rules, agent identity, project specifics.
 
 ## The Launch Script
 
@@ -57,183 +90,86 @@ The core workflow:
 ```bash
 #!/usr/bin/env bash
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-WORKTREE_DIR="$HOME/code/.worktrees"
+REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+WORKTREE_ROOT="$HOME/wc/${REPO_NAME}-worktree"
+SESSION="claude-${REPO_NAME}"
 
-create_worktree() {
-    local branch="$1"
-    local path="$WORKTREE_DIR/$branch"
+setup_worktree() {
+    local agent=$1
+    local worktree_path="$WORKTREE_ROOT/agent-$agent"
     
-    # Create worktree if it doesn't exist
-    if [ ! -d "$path" ]; then
-        git worktree add "$path" "$branch"
-    fi
-    
-    echo "$path"
+    [[ -d "$worktree_path" ]] && return
+    mkdir -p "$WORKTREE_ROOT"
+    git branch "agent-$agent" 2>/dev/null || true
+    git worktree add "$worktree_path" "agent-$agent"
 }
 
-launch_agent() {
-    local worktree="$1"
-    local task="$2"
+generate_agent_manifest() {
+    local agent=$1
+    cat > "$WORKTREE_ROOT/agent-$agent/AGENTS.md" << EOF
+# Agent Identity
+You are agent-$agent in a parallel swarm for project: $REPO_NAME
+Worktree: $WORKTREE_ROOT/agent-$agent
+EOF
+}
+
+launch_agents() {
+    local count=$1
     
-    # Launch Claude Code in the worktree
-    osascript -e "
-        tell application \"Terminal\"
-            do script \"cd $worktree && code .\"
-        end tell
-    "
+    # Create tmux session with agent panes
+    tmux new-session -d -s "$SESSION" -c "$WORKTREE_ROOT/agent-1"
+    tmux split-window -h -t "$SESSION" -c "$WORKTREE_ROOT/agent-2"
     
-    # Log the task
-    echo "$task" > "$XDG_STATE_HOME/agents/$worktree/current-task.txt"
+    for i in $(seq 1 $count); do
+        # Inject AGENTS.md via --append-system-prompt
+        # This makes the agent aware of its number and role
+        tmux send-keys -t "$SESSION.$i" \
+            "claude --append-system-prompt \"\$(cat AGENTS.md)\"" C-m
+    done
 }
 ```
 
 Usage is simple:
 
 ```bash
-$ launch-agents feature/auth-system implement review docs
+$ launch-agents start    # Creates worktrees, tmux panes, launches agents
 ```
 
 This creates three worktrees, launches three Claude Code instances, and logs their assigned tasks. Each agent starts in its own directory with access to the shared configuration.
 
-## State Sharing Through XDG
+## Coordination Through GitHub Issues
 
-Remember `XDG_STATE_HOME` from Part 1? This is where it shines. Agents share state through `~/.local/state/agents/`:
+For coordination, I use what's already there: GitHub Issues. Each issue becomes a task. The workflow is simple: start with an issue, create a branch, end with a PR.
+
+Inside any agent, two slash commands handle the flow:
 
 ```
-~/.local/state/agents/
-├── context/
-│   ├── active-tasks.json       # What's being worked on
-│   ├── completed.json          # What's done
-│   └── blockers.json           # What's stuck
-├── feature-auth/
-│   └── current-task.txt        # Agent 1's current focus
-├── review-auth/
-│   └── current-task.txt        # Agent 2's current focus
-└── docs-update/
-    └── current-task.txt        # Agent 3's current focus
+/issue Implement OAuth flow with Google provider
 ```
 
-State files are JSON. Simple structure, easy to parse, agents can read and write without coordination:
+This creates a GitHub issue with proper labels, say #42. The agent can break down work into issues for itself or others.
 
-```json
-{
-  "tasks": [
-    {
-      "id": "auth-001",
-      "title": "Implement OAuth flow",
-      "agent": "feature-auth",
-      "status": "in-progress",
-      "started": "2026-01-30T10:00:00Z"
-    },
-    {
-      "id": "review-001", 
-      "title": "Review authentication PR",
-      "agent": "review-auth",
-      "status": "waiting",
-      "blocked_by": "auth-001"
-    }
-  ]
-}
+```
+/take #42
 ```
 
-Each agent reads `active-tasks.json` to see what others are doing. Updates its own task status. The launch script aggregates this into a dashboard.
+This claims issue #42. The agent reads the issue, creates a feature branch, does the work, and opens a PR when done. The PR references the issue, so closing the PR closes the issue. Standard GitHub flow, driven by agents.
 
-## The Configuration Payoff
-
-This is where the triple-layer architecture from Part 2 pays off. All agents read from the same `CLAUDE.md`:
-
-```markdown
-# Global Agent Instructions
-
-## Code Standards
-- Follow PEP 8 for Python
-- Write tests before implementation
-- Document public APIs
-
-## Workflow
-- Check active-tasks.json before starting work
-- Update your status in current-task.txt
-- Mark tasks complete in completed.json
-```
-
-One file. All agents follow the same rules. Change it once, behavior updates everywhere.
-
-The `settings.json` allowlist becomes critical here. You don't want parallel agents running arbitrary commands:
-
-```json
-{
-  "allowedCommands": [
-    "git",
-    "uv",
-    "pytest",
-    "ruff"
-  ],
-  "blockedPatterns": [
-    "rm -rf",
-    "sudo",
-    "curl|sh"
-  ]
-}
-```
-
-Agents can run tests and lint code. They can't delete files or download random scripts. Version controlled. Auditable. Safe.
-
-## Integration Points
-
-The launch script creates natural integration points:
-
-**Task assignment** happens through a simple queue file:
-
-```bash
-echo "implement: Add OAuth provider" >> ~/.local/state/agents/queue.txt
-```
-
-The next idle agent picks it up.
-
-**Code review** is automatic. One agent implements, another reviews, a third runs tests. The launch script coordinates branches:
-
-```bash
-# Agent 1 completes feature
-git push origin feature/auth
-
-# Launch script triggers Agent 2
-launch-agents --review feature/auth
-```
-
-**Documentation** stays current. Any commit to `src/` triggers a docs agent:
-
-```bash
-# In .git/hooks/post-commit
-if git diff-tree --no-commit-id --name-only -r HEAD | grep -q "^src/"; then
-    launch-agents --docs update-api-docs
-fi
-```
+The audit trail lives in GitHub where it belongs. Issues track what needs doing. PRs track what got done. Branch history shows how.
 
 ## Why This Matters
 
 Parallel agents aren't just faster—they're better. Code review by a separate agent catches issues the implementing agent misses. Documentation written by an agent that didn't write the code is clearer. Tests written before implementation catch design issues early.
 
-The launch script makes this coordination trivial. What would take an hour of manual git juggling becomes `launch-agents task1 task2 task3`.
+The launch script makes this coordination trivial. What would take an hour of manual git juggling becomes easier when setup before with these conventions. The XDG foundation makes it safe. State is isolated. Config is centralized. History is preserved.
 
-The XDG foundation makes it safe. State is isolated. Config is centralized. History is preserved.
-
-And when something goes wrong? Git worktrees mean you can blow away any agent's workspace and recreate it in seconds:
-
-```bash
-git worktree remove feature-auth
-launch-agents feature/auth implement
-```
-
-Clean slate. Same config. No data loss.
+And when something goes wrong? Git worktrees mean you can blow away any agent's workspace and recreate it in seconds. Providing a clean slate with the same config and no data loss.
 
 ## Next Steps
 
 The foundation is complete. XDG-compliant dotfiles from Part 1. Version-controlled agent config from Part 2. Parallel execution from this part.
 
-What's next depends on your workflow. I use this setup for feature development, code review, and documentation maintenance. Others use it for parallel test execution or multi-language projects.
-
-The pattern scales. Add more agents. Add more worktrees. The launch script handles the orchestration.
+What's next depends on your workflow. I use this setup for feature development, code review, and documentation maintenance. Others use it for parallel test execution or multi-language projects. I am currnetly working on synchronization and my own role in the workflow. That is ongoing stuff.
 
 But first: go launch your first parallel agent swarm. You'll wonder how you ever worked any other way.
 

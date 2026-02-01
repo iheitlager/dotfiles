@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# deepclean - Comprehensive macOS disk space cleanup utility
+# Version: 1.0.0
+# Safely removes redundant container runtimes, caches, logs, and temporary files
+
+set -euo pipefail
+
+# Source shared utilities
+DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+source "$DOTFILES/local/lib/shell-common.sh"
+
+# Cleanup tracking
+TOTAL_FREED=0
+
+# Helper functions
+print_header() {
+    echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+}
+
+get_size() {
+    local path="$1"
+    if [[ -e "$path" ]]; then
+        du -sh "$path" 2>/dev/null | awk '{print $1}' || echo "0B"
+    else
+        echo "0B"
+    fi
+}
+
+get_size_bytes() {
+    local path="$1"
+    if [[ -e "$path" ]]; then
+        du -sk "$path" 2>/dev/null | awk '{print $1}' || echo "0"
+    else
+        echo "0"
+    fi
+}
+
+cleanup_item() {
+    local name="$1"
+    local path="$2"
+    local prompt="$3"
+
+    if [[ ! -e "$path" ]]; then
+        info "$name: Not found, skipping"
+        return 0
+    fi
+
+    local size=$(get_size "$path")
+    local size_bytes=$(get_size_bytes "$path")
+
+    if confirm "$prompt ($size)"; then
+        rm -rf "$path"
+        success "Removed $name ($size)"
+        TOTAL_FREED=$((TOTAL_FREED + size_bytes))
+    else
+        info "Skipped $name"
+    fi
+}
+
+# Main cleanup functions
+show_disk_usage() {
+    print_header "Current Disk Usage"
+    df -h / | grep -E "(Filesystem|disk3s1s1|disk3s5)"
+    echo ""
+    info "Home directory: $(get_size ~)"
+    info "Library: $(get_size ~/Library)"
+    info "Caches: $(get_size ~/Library/Caches)"
+    info "Logs: $(get_size ~/Library/Logs)"
+}
+
+cleanup_container_runtimes() {
+    print_header "Container Runtime Cleanup"
+
+    # Docker Desktop
+    if [[ -d ~/Library/Containers/com.docker.docker ]]; then
+        local size=$(get_size ~/Library/Containers/com.docker.docker)
+        warn "Docker Desktop found ($size)"
+        info "You're using Colima - Docker Desktop is redundant"
+        cleanup_item "Docker Desktop" \
+                     ~/Library/Containers/com.docker.docker \
+                     "Remove Docker Desktop?"
+    else
+        success "Docker Desktop not found (good!)"
+    fi
+
+    # Podman
+    if [[ -d ~/.local/share/containers/podman ]]; then
+        local size=$(get_size ~/.local/share/containers/podman)
+        warn "Podman found ($size)"
+        info "You're using Colima - Podman is redundant"
+        cleanup_item "Podman" \
+                     ~/.local/share/containers/podman \
+                     "Remove Podman?"
+    else
+        success "Podman not found (good!)"
+    fi
+
+    # Docker build cache (Colima)
+    if has_cmd docker; then
+        info "Checking Docker build cache..."
+        if confirm "Clean Docker build cache?"; then
+            docker builder prune -af 2>/dev/null && success "Docker build cache cleaned" || error "Failed to clean Docker build cache"
+        fi
+
+        if confirm "Remove unused Docker images?"; then
+            docker image prune -af 2>/dev/null && success "Unused Docker images removed" || error "Failed to remove Docker images"
+        fi
+    fi
+}
+
+cleanup_caches() {
+    print_header "Cache Cleanup"
+
+    if [[ -d ~/Library/Caches ]] && [[ -n "$(ls -A ~/Library/Caches 2>/dev/null)" ]]; then
+        local size=$(get_size ~/Library/Caches)
+        warn "User caches: $size"
+        info "Caches will regenerate as needed"
+        if confirm "Clean all user caches?"; then
+            rm -rf ~/Library/Caches/* 2>/dev/null
+            local freed=$(get_size_bytes ~/Library/Caches)
+            success "User caches cleaned"
+            TOTAL_FREED=$((TOTAL_FREED + freed))
+        fi
+    else
+        success "Caches already clean"
+    fi
+
+    # Homebrew
+    if has_cmd brew; then
+        info "Cleaning Homebrew cache..."
+        if confirm "Clean Homebrew cache?"; then
+            brew cleanup --prune=all -s 2>/dev/null && success "Homebrew cleaned" || error "Homebrew cleanup failed"
+        fi
+    fi
+}
+
+cleanup_logs() {
+    print_header "Log Cleanup"
+
+    if [[ -d ~/Library/Logs ]] && [[ -n "$(ls -A ~/Library/Logs 2>/dev/null)" ]]; then
+        local size=$(get_size ~/Library/Logs)
+        warn "Log files: $size"
+        if confirm "Clean all log files?"; then
+            rm -rf ~/Library/Logs/* 2>/dev/null
+            success "Log files cleaned"
+        fi
+    else
+        success "Logs already clean"
+    fi
+}
+
+cleanup_trash() {
+    print_header "Trash Cleanup"
+
+    if [[ -d ~/.Trash ]] && [[ -n "$(ls -A ~/.Trash 2>/dev/null)" ]]; then
+        local size=$(get_size ~/.Trash)
+        warn "Trash: $size"
+        if confirm "Empty trash?"; then
+            rm -rf ~/.Trash/* 2>/dev/null
+            success "Trash emptied"
+        fi
+    else
+        success "Trash already empty"
+    fi
+}
+
+cleanup_development() {
+    print_header "Development Tools Cleanup"
+
+    # npm cache
+    if [[ -d ~/.npm ]]; then
+        local size=$(get_size ~/.npm)
+        info "npm cache: $size"
+        if confirm "Clean npm cache?"; then
+            npm cache clean --force 2>/dev/null && success "npm cache cleaned" || warn "npm cache clean failed"
+        fi
+    fi
+
+    # Cargo cache (Rust)
+    if [[ -d ~/.cargo/registry ]]; then
+        local size=$(get_size ~/.cargo/registry)
+        info "Cargo registry: $size"
+        if confirm "Clean Cargo cache?"; then
+            rm -rf ~/.cargo/registry/cache ~/.cargo/git/db 2>/dev/null
+            success "Cargo cache cleaned"
+        fi
+    fi
+
+    # Python caches
+    if has_cmd python3; then
+        info "Cleaning Python caches..."
+        find ~ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null && success "Python caches cleaned" || true
+    fi
+}
+
+cleanup_downloads() {
+    print_header "Downloads Cleanup"
+
+    if [[ -d ~/Downloads ]] && [[ -n "$(ls -A ~/Downloads 2>/dev/null)" ]]; then
+        local size=$(get_size ~/Downloads)
+        warn "Downloads folder: $size"
+        info "Review contents before cleaning"
+        if confirm "Open Downloads folder for manual cleanup?"; then
+            open ~/Downloads
+            info "Downloads folder opened - clean manually"
+        fi
+    else
+        success "Downloads already clean"
+    fi
+}
+
+show_large_files() {
+    print_header "Large Files Analysis"
+
+    info "Finding files larger than 1GB (this may take a moment)..."
+
+    # Find large files but timeout after 30 seconds
+    timeout 30s find ~ -type f -size +1G 2>/dev/null | while read -r file; do
+        local size=$(ls -lh "$file" | awk '{print $5}')
+        echo "  $size  ${file/#$HOME/~}"
+    done || warn "Search timed out or interrupted"
+}
+
+show_summary() {
+    print_header "Cleanup Summary"
+
+    local freed_mb=$((TOTAL_FREED / 1024))
+    local freed_gb=$(echo "scale=2; $freed_mb / 1024" | bc)
+
+    if [[ $TOTAL_FREED -gt 0 ]]; then
+        success "Total space freed: ${freed_gb}GB (${freed_mb}MB)"
+    else
+        info "No space was freed (nothing was cleaned)"
+    fi
+
+    echo ""
+    df -h / | grep -E "(Filesystem|disk3s1s1)"
+    echo ""
+
+    info "Home directory: $(get_size ~)"
+    info "Library: $(get_size ~/Library)"
+}
+
+# Main execution
+main() {
+    print_header "macOS Deep Clean Utility"
+
+    # Handle version flag
+    if [[ "${1:-}" == "--version" ]] || [[ "${1:-}" == "-v" ]]; then
+        show_version "deepclean" "$0"
+        exit 0
+    fi
+
+    if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+        show_help << 'EOF'
+Usage: deepclean [OPTIONS]
+
+Comprehensive macOS disk space cleanup utility.
+Safely removes redundant container runtimes, caches, logs, and temporary files.
+
+Options:
+    -h, --help          Show this help message
+    --skip-confirm      Skip all confirmations (dangerous!)
+    --dry-run          Show what would be cleaned without cleaning
+    --analysis-only    Only show disk usage and large files
+
+Examples:
+    deepclean                    # Interactive cleanup
+    deepclean --analysis-only    # Just analyze, don't clean
+
+Cleans:
+    • Redundant container runtimes (Docker Desktop, Podman)
+    • Docker build cache and unused images
+    • User caches (~/Library/Caches)
+    • Log files (~/Library/Logs)
+    • Homebrew cache
+    • npm, Cargo, Python caches
+    • Trash
+
+EOF
+        exit 0
+    fi
+
+    if [[ "${1:-}" == "--analysis-only" ]]; then
+        show_disk_usage
+        show_large_files
+        exit 0
+    fi
+
+    # Show initial state
+    show_disk_usage
+
+    echo ""
+    warn "This will help clean up disk space on your Mac"
+    info "You'll be prompted before each cleanup operation"
+
+    if ! confirm "Continue with cleanup?"; then
+        info "Cleanup cancelled"
+        exit 0
+    fi
+
+    # Run cleanup operations
+    cleanup_container_runtimes
+    cleanup_caches
+    cleanup_logs
+    cleanup_trash
+    cleanup_development
+    cleanup_downloads
+
+    # Show results
+    show_summary
+
+    echo ""
+    info "Consider running: show_large_files to find other space hogs"
+    success "Cleanup complete!"
+}
+
+# Check if bc is available (for calculations)
+has_cmd bc || warn "bc not found - install with: brew install bc"
+
+main "$@"

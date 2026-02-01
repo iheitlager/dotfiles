@@ -49,7 +49,7 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "model": "opus",
+  "model": "sonnet[1m]",
   "additionalDirectories": [
     ".",
     "~/.local/state/agent-context"
