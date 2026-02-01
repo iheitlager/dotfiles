@@ -624,13 +624,14 @@ After any operation, suggest relevant next actions:
 
 ### Complete Swarm Job
 
-If this PR was created from a `/take` workflow, mark the swarm job as done:
+If this PR was created from a `/take` workflow, record the PR ready event (Phase 2):
 
 ```bash
 # Find job for this issue (from PR body "Closes #N")
 JOB_ID=$(swarm-job list active | grep "#$ISSUE_NUM" | awk '{print $1}')
 if [[ -n "$JOB_ID" ]]; then
-  swarm-job complete "$JOB_ID" -r "PR #$PR_NUM created"
+  # Record PR ready event (Phase 2)
+  swarm-daemon hook JOB_PR_READY "$JOB_ID" "$PR_NUM"
 fi
 ```
 

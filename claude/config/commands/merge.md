@@ -193,15 +193,17 @@ To close manually:
 After merge, update the swarm queue and signal other agents:
 
 ```bash
-# Complete any swarm job associated with this PR's issues
+# Complete any swarm job associated with this PR's issues (Phase 2)
 for ISSUE in $LINKED_ISSUES; do
   JOB_ID=$(swarm-job list active 2>/dev/null | grep "#$ISSUE" | awk '{print $1}')
   if [[ -n "$JOB_ID" ]]; then
-    swarm-job complete "$JOB_ID" -r "merged via PR #$PR"
+    # Record PR merged event (Phase 2)
+    swarm-daemon hook JOB_PR_MERGED "$JOB_ID" "$PR"
   fi
 done
 
-# Signal other agents to sync (if in swarm mode)
+# Signal other agents to sync (reactive action - Phase 2)
+# Note: This can also be handled by swarm-daemon automatically
 if tmux has-session -t "claude-$PROJECT" 2>/dev/null; then
   # Get all panes and notify them
   for pane in $(tmux list-panes -t "claude-$PROJECT:agents" -F '#{pane_index}'); do

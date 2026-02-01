@@ -81,7 +81,11 @@ Use `swarm-job take` which atomically:
 - Claims it immediately
 
 ```bash
-swarm-job take $ISSUE_NUM -t "$TITLE" -p $PRIORITY -c $COMPLEXITY
+JOB_OUTPUT=$(swarm-job take $ISSUE_NUM -t "$TITLE" -p $PRIORITY -c $COMPLEXITY)
+JOB_ID=$(echo "$JOB_OUTPUT" | grep "Job ID:" | awk '{print $3}')
+
+# Record job claim event (Phase 2)
+swarm-daemon hook JOB_CLAIMED "$JOB_ID" --issue $ISSUE_NUM --title "$TITLE"
 ```
 
 **If already taken:**
