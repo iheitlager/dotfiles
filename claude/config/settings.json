@@ -52,6 +52,21 @@
   "model": "sonnet[1m]",
   "additionalDirectories": [
     ".",
-    "~/.local/state/agent-context"
-  ]
+    "~/.local/state/agent-context",
+    "~/.dotfiles",
+    "~/wc/**"
+  ],
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Bash|Grep|Glob|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.dotfiles/claude/config/hooks/swarm-hook.sh"
+          }
+        ]
+      }
+    ]
+  }
 }
