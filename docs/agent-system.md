@@ -481,147 +481,64 @@ Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (
 
 ### Swarm Daemon
 
-**Note:** `swarm-watcher` has been replaced by `swarm-daemon` (Phase 1: basic work visibility).
-
-The `swarm-daemon` provides unified monitoring, scheduling, and investigation capabilities:
+The `swarm-daemon` provides unified monitoring and investigation capabilities:
 
 ```bash
 swarm-daemon daemon                # Background monitoring mode
 swarm-daemon repl                  # Interactive investigation shell
-swarm-daemon status                # Quick status check
+swarm-daemon status                # Quick status overview
 swarm-daemon agents                # List agent states
 swarm-daemon log                   # Show recent events
+swarm-daemon log -f                # Follow events in real-time
+swarm-daemon --context <repo>      # Specify context from outside git repo
 ```
 
-**Phase 1 - What it tracks:**
+**Context Model:**
+- Context = git repository (one daemon per repo)
+- Agent ID = `<repo>` (e.g., "dotfiles", "my-project")
+- State files: `~/.local/state/agent-context/<repo>/`
+- Each context is isolated with its own events and state
 
-| Event | Purpose |
-|-------|---------|
-| AGENT_WORK_START | Agent begins working |
-| AGENT_WORK_STOP | Agent finishes working |
-| AGENT_HEARTBEAT | Periodic pulse (every 30s) |
+**Event Tracking:**
+Currently tracking essential events:
+- `AGENT_STARTUP` - When agent starts (via swarm-hook)
+- `REQUEST` - Tool usage tracking (via swarm-hook)
 
-**Agent state tracking:**
-- Working/idle status
-- Start/stop timestamps
-- Heartbeat monitoring (detects stale agents)
+Future events (planned, see issues #10-12):
+- Phase 2: Job lifecycle (JOB_CLAIMED, JOB_PR_READY, etc.)
+- Phase 3: Semantic events (TOOL_READ, GIT_COMMIT, TEST_STARTED, etc.)
 
-**REPL commands:**
-```
-> status                # System overview
-> agents                # Agent status list
-> log                   # Recent events
-> log --follow          # Live tail
-> log --agent agent-1   # Filter by agent
-```
+**Integration with Claude Code:**
+The daemon integrates with Claude Code via `swarm-hook` (Python hooks):
+- `SessionStart` → `swarm-hook register` → `AGENT_STARTUP` event
+- `PostToolUse` → `swarm-hook hook` → `REQUEST` event
 
-**Phase 2 - Job & PR Tracking (Implemented):**
-
-| Event | Purpose |
-|-------|---------|
-| JOB_CLAIMED | Agent claims issue via /take |
-| JOB_PR_READY | PR created via /pr |
-| JOB_PR_MERGED | PR merged via /merge |
-| JOB_COMPLETED | Job marked complete |
-
-**Enhanced state tracking:**
-- Current job and issue per agent
-- Job metrics (active jobs, completed jobs)
-- Performance metrics (time-to-PR, time-to-merge, total time)
-- Automatic state updates on job lifecycle events
-
-**New REPL commands:**
-```
-> work                  # What is each agent working on?
-> queue [pending|active|done]  # Job queue status
-> metrics               # Performance statistics
-```
-
-**Reactive actions:**
-- Auto-update agent state to idle when PR merged
-- Calculate and log performance metrics
-- Support for sync broadcasts (via tmux send-keys)
-
-**Phase 3 - Semantic Events & Deep Visibility (Implemented):**
-
-**New event types (~20 total):**
-
-| Category | Events | Purpose |
-|----------|--------|---------|
-| Task tracking | TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED | Track subtask progression |
-| Tool usage | TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK | Monitor file operations and tool calls |
-| Git operations | GIT_COMMIT, GIT_PUSH, GIT_REBASE, GIT_CONFLICT | Track version control activity |
-| Test/Build | TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_* | Monitor quality checks |
-| Agent state | AGENT_THINKING, AGENT_WAITING, AGENT_ERROR | Track agent status changes |
-
-**Detailed activity tracking:**
-- Files: read/edited/written counts, lines changed
-- Tasks: created/completed counts
-- Tests: run count, failure count
-- Git: commit count
-- Commands: bash command count
-
-**New REPL commands:**
-```
-> activity [agent]     # Activity breakdown (files, tasks, tests, commits)
-> timeline <job-id>    # Visual job event timeline
-> bottlenecks          # Identify stuck agents, test failures, low activity
-> compare              # Agent performance comparison table
-```
-
-**Pattern detection (automatic):**
-- Detects repeated test failures (≥3 failures)
-- Identifies stuck jobs (>60m with minimal activity)
-- Flags stale agents (no heartbeat >5m)
-- Runs every ~1 minute in daemon mode
-- Logs patterns to events.log and daemon log
-
-**Analytics capabilities:**
-- Real-time activity monitoring
-- Bottleneck identification
-- Cross-agent performance comparison
-- Job timeline visualization
-- Pattern-based anomaly detection
-
-**Automatic event emission (Claude Code hooks):**
-
-Semantic events are automatically emitted when Claude uses tools, via PostToolUse hooks configured in `claude/config/settings.json`:
-
+Configuration in `~/.dotfiles/claude/config/settings.json`:
 ```json
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Read|Edit|Write|Bash|Grep|Glob|Task",
-        "hooks": [{
-          "type": "command",
-          "command": "~/.dotfiles/claude/config/hooks/swarm-hook.sh"
-        }]
-      }
-    ]
+    "SessionStart": [{"command": "swarm-hook register"}],
+    "PostToolUse": [{"command": "swarm-hook hook"}]
   }
 }
 ```
 
-The hook script (`claude/config/hooks/swarm-hook.sh`) automatically:
-- Maps tool calls to semantic events (Read → TOOL_READ, Edit → TOOL_EDIT, etc.)
-- Detects specialized events from Bash commands (git commit → GIT_COMMIT, pytest → TEST_STARTED, etc.)
-- Extracts metadata (file paths, line counts, patterns, commands)
-- Emits events to swarm-daemon in background (fire-and-forget, < 10ms)
-- Always returns `{"decision": "allow"}` to not block tool execution
+**View events:**
+```bash
+swarm-daemon log              # All events
+swarm-daemon log -f           # Follow mode
+swarm-daemon log --agent dotfiles  # Filter by agent
+```
 
-**Event mappings:**
-- `Read` → `TOOL_READ` + file path
-- `Edit` → `TOOL_EDIT` + file path + lines changed
-- `Write` → `TOOL_WRITE` + file path + lines
-- `Bash` → `TOOL_BASH` or specialized (`GIT_COMMIT`, `GIT_PUSH`, `GIT_REBASE`, `TEST_STARTED`, `LINT_STARTED`)
-- `Grep` → `TOOL_GREP` + pattern
-- `Glob` → `TOOL_GLOB` + pattern
-- `Task` → `TOOL_TASK` + subagent type
-
-This automation eliminates manual hook calls in `/take`, `/pr`, `/merge` commands—events are now emitted automatically as Claude works.
-
-**Graceful shutdown:** Press `Ctrl-C` in daemon mode to trigger swarm shutdown via `launch-agents stop`.
+**State files per context:**
+```
+~/.local/state/agent-context/<repo>/
+├── events.log                # All events (append-only)
+├── daemon/
+│   ├── agent-state.yaml      # Current agent states
+│   └── daemon.pid            # Daemon process ID
+└── jobs/                     # Job queue (swarm-job)
+```
 
 ### Communication Summary
 
@@ -629,10 +546,9 @@ This automation eliminates manual hook calls in `/take`, `/pr`, `/merge` command
 |--------|------|-----------|----------|
 | `swarm-job list` | Polling | Agent → Queue | Check for available work |
 | `tmux send-keys` | Direct | Agent → Agent | Peer-to-peer messaging |
-| `swarm-daemon hook` | Event | Agent → Daemon | Report work status, job lifecycle, semantic events (Phase 3) |
-| Daemon notify | Async | Daemon → Capable | New/unblocked job alerts (Future) |
-| Daemon broadcast | Pub/sub | Daemon → All | Sync signals after PR merge (Phase 2) |
-| `events.log` | Append-only | All → File | Audit trail, swarm awareness, pattern detection (Phase 3) |
+| Watcher notify | Async | Daemon → Capable | New/unblocked job alerts |
+| Watcher broadcast | Pub/sub | Daemon → All | Completion announcements |
+| `events.log` | Append-only | All → File | Audit trail, swarm awareness |
 
 **Recommended agent behavior:**
 - Poll `swarm-job list pending` every 30-60 seconds when idle
@@ -768,7 +684,7 @@ tmux send-keys -t "$SESSION:agents.$pane" \
 
 Other coordination (job claimed, job completed, new job) is handled by:
 - The file-based queue system (atomic claims)
-- The swarm-daemon (Phase 1: tracks agent activity; Phase 2+: broadcasts completions)
+- The swarm-daemon (monitors agent activity)
 
 ### Pre-flight Checks (enforced by /take)
 
@@ -979,11 +895,13 @@ swarm-job complete <job-id> [-r result]
 swarm-job list [pending|active|done|all]
 ```
 
-The `swarm-daemon` provides monitoring, investigation, and (future) scheduling:
+The `swarm-daemon` provides agent monitoring and investigation:
 
 ```bash
-swarm-daemon daemon    # Background monitoring
-swarm-daemon repl      # Interactive investigation
+swarm-daemon daemon           # Start background monitoring
+swarm-daemon repl             # Interactive investigation
+swarm-daemon agents           # List agent states
+swarm-daemon log              # View events
 ```
 
 See [Job Management with swarm-job](#job-management-with-swarm-job) and [Swarm Daemon](#swarm-daemon) for details.
@@ -1025,8 +943,8 @@ specializations:                  # From profile or learned
 
 | Enhancement | Effort | Impact | Status |
 |-------------|--------|--------|--------|
-| Swarm Commands | Low | High | **Done** (swarm-job, swarm-daemon Phase 1-2) |
-| Job-Skill Binding | Low | Medium | **Done** (Phase 2 hook integration) |
+| Swarm Commands | Low | High | **Done** (swarm-job, swarm-daemon, swarm-hook) |
+| Job-Skill Binding | Low | Medium | Planned |
 | Project Skills | Medium | High | Planned |
 | Task Templates | Medium | Medium | Planned |
 | Agent Profiles | Medium | Medium | Planned |
@@ -1037,3 +955,107 @@ specializations:                  # From profile or learned
 Claude Swarm treats agents as fungible workers differentiated only by capability tier and client. Users interact through conversation or task files. Coordination happens through filesystem primitives. The result is a system that scales from 2 to 6 agents without architectural changes, debuggable with `ls` and `cat`, and recoverable by editing YAML files.
 
 No dispatcher. No hierarchy. Just peers, tasks, and git.
+
+## Evaluation of Existing Multi-Agent Frameworks
+
+Several multi-agent frameworks exist, but none match the design goals of Claude Swarm. Here's what's relevant for Claude-based coding:
+
+### 1. AutoGen (Microsoft)
+
+- Multi-agent conversations with different roles
+- Agents can be Claude, GPT, or local models
+- Good for: Task decomposition, peer review, debate patterns
+- Con: Heavily chat-based, not optimized for CLI workflows
+
+```python
+from autogen import AssistantAgent, UserProxyAgent
+
+architect = AssistantAgent("architect", llm_config={"model": "claude-sonnet-4"})
+coder = AssistantAgent("coder", llm_config={"model": "claude-sonnet-4"})
+reviewer = AssistantAgent("reviewer", llm_config={"model": "claude-sonnet-4"})
+```
+
+### 2. CrewAI
+
+- Role-based agents with hierarchical/sequential workflows
+- Supports Claude via LiteLLM
+- Good for: Defined roles (architect → coder → tester)
+- Con: More structured than the peer-based swarm design
+
+```python
+from crewai import Agent, Task, Crew
+
+architect_agent = Agent(
+    role='System Architect',
+    goal='Design system architecture',
+    llm='claude-sonnet-4'
+)
+```
+
+### 3. LangGraph
+
+- State machine-based agent orchestration
+- Good for: Complex workflows with cycles and conditions
+- Con: Requires learning the graph paradigm
+
+### 4. OpenHands (formerly OpenDevin)
+
+- Full coding agent with browser, terminal, editor
+- Multi-agent modes being developed
+- Good for: Complete autonomous coding
+- Con: Heavy framework, not lightweight coordination
+
+### 5. Sweep
+
+- GitHub-integrated coding agent
+- Mostly single-agent but can spawn sub-tasks
+- Con: Tied to GitHub workflow
+
+### Why None Match Claude Swarm's Design
+
+These frameworks are **task orchestrators** (top-down), while Claude Swarm enables **peer coordination** (emergent):
+
+- They abstract away the filesystem; Claude Swarm leverages it
+- They use their own state management; Claude Swarm uses hooks + tmux
+- They're Python frameworks; Claude Swarm is lightweight coordination
+- They impose role hierarchies; Claude Swarm treats agents as equals
+
+**What Claude Swarm resembles instead:**
+- **Ray** (distributed compute) but for AI agents
+- **Kafka/Event Bus** but with filesystem + hooks
+- **Actor Model** (Erlang/Akka) but pragmatic
+
+### Framework Comparison
+
+| Feature | AutoGen/CrewAI | Claude Swarm |
+|---------|----------------|--------------|
+| Agent equality | Hierarchical | Peer-based |
+| Communication | API calls | Filesystem + sockets |
+| State | Framework-managed | Git + shared files |
+| Coordination | Programmed flows | Emergent from hooks |
+| Overhead | High (Python frameworks) | Low (bash + python glue) |
+| Claude Code | Wrapper needed | Native |
+| Domain focus | General purpose | IT/OT operations optimized |
+
+### Could We Use Them?
+
+Yes, but we would lose:
+- Direct tmux visibility
+- Claude Code's native capabilities
+- Lightweight hook-based sync
+- WBSO/TSO domain-specific coordination
+
+### Should We Use Them?
+
+Only if we need their specific features:
+- **AutoGen:** If we want agent debates/voting
+- **CrewAI:** If we want strict role hierarchies
+- **LangGraph:** If our workflow is a complex state machine
+
+### Conclusion
+
+Claude Swarm builds something these frameworks don't address: **lightweight peer coordination for specialized domain work**. The frameworks are generic task orchestrators; Claude Swarm is domain-specific collaborative tooling.
+
+The hooks + daemon approach follows the **Unix philosophy** (small tools, composable) rather than adopting **monolithic frameworks**.
+
+This architectural choice maintains simplicity, debuggability, and direct integration with the tools developers already use (git, tmux, filesystem).
