@@ -1,0 +1,40 @@
+# This is a comment - should be YELLOW and italic
+# Test all YAML color highlights
+
+# Keys/fields are CYAN and bold
+monitoring:
+  # Comments throughout should be YELLOW
+  enable_stale_check: false  # Boolean - MAGENTA
+  stale_check_interval: 5    # Number - ORANGE
+  threshold: 3.14            # Float - ORANGE
+
+# String values are GREEN
+logging:
+  level: INFO                # String value - GREEN
+  format: "json"             # Quoted string - GREEN
+
+# Lists with special chars (-) in BLUE
+servers:
+  - name: server1            # - is BLUE, keys are CYAN, values are GREEN
+  - name: server2
+  - port: 8080               # Number - ORANGE
+
+# Constants are PURPLE
+database:
+  host: localhost
+  ssl: true                  # Boolean - MAGENTA
+  timeout: null              # null constant - PURPLE
+
+# YAML tags (if used) are RED and bold
+explicit: !!str "123"        # !!str tag - RED
+mapping: !!map               # !!map tag - RED
+  key: value
+
+# Multi-line strings with special chars
+description: |               # | is BLUE
+  This is a multi-line
+  string value in GREEN
+
+compact: >                   # > is BLUE
+  This is folded
+  into one line

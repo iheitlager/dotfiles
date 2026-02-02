@@ -135,15 +135,16 @@ require('lazy').setup({
       require('tokyonight').setup({
         style = 'night',
         on_highlights = function(hl, c)
-          -- Enhanced YAML highlighting
-          hl['@field.yaml'] = { fg = c.blue, bold = true }            -- Keys (brighter blue, bold)
+          -- Enhanced YAML highlighting with distinct colors
+          hl['@field.yaml'] = { fg = c.cyan, bold = true }            -- Keys/tags (cyan, bold)
           hl['@string.yaml'] = { fg = c.green }                       -- Values (green)
           hl['@punctuation.delimiter.yaml'] = { fg = c.fg_dark }      -- Colons (subtle)
-          hl['@punctuation.special.yaml'] = { fg = c.orange }         -- Special chars (-, |, >)
+          hl['@punctuation.special.yaml'] = { fg = c.blue }           -- Special chars (-, |, >)
           hl['@number.yaml'] = { fg = c.orange }                      -- Numbers
           hl['@boolean.yaml'] = { fg = c.magenta }                    -- true/false
-          hl['@constant.yaml'] = { fg = c.cyan }                      -- Constants
-          hl['@comment.yaml'] = { fg = c.comment, italic = true }     -- Comments
+          hl['@constant.yaml'] = { fg = c.purple }                    -- Constants (purple)
+          hl['@comment.yaml'] = { fg = c.yellow, italic = true }      -- Comments (yellow, italic)
+          hl['@tag.yaml'] = { fg = c.red, bold = true }               -- YAML tags (!!str, etc.) (red)
         end,
       })
       vim.cmd.colorscheme('tokyonight-night')
