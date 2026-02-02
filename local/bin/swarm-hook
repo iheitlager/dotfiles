@@ -114,6 +114,9 @@ def cmd_hook():
     # Extract tool information
     tool_name = hook_input.get("tool_name") or hook_input.get("tool", "unknown")
 
+    # Extract parameters (nested under 'tool_input' key)
+    params = hook_input.get("tool_input", {})
+
     # Emit REQUEST event with minimal metadata (fire-and-forget)
     metadata = {
         "tool": tool_name,
@@ -125,28 +128,28 @@ def cmd_hook():
     # Phase 3: Tool-specific event emission (ACTIVE - Enabled in Phase C of #14)
     # Emit specialized events based on tool type
     if tool_name == "Read":
-        file_path = hook_input.get("file_path", "unknown")
+        file_path = params.get("file_path", "unknown")
         metadata = {"file": file_path, "pid": os.getpid(), "context": context}
         emit_event(agent_id, context, "TOOL_READ", metadata)
 
     elif tool_name == "Edit":
-        file_path = hook_input.get("file_path", "unknown")
+        file_path = params.get("file_path", "unknown")
         # Try to estimate lines changed from old_string/new_string
-        old_string = hook_input.get("old_string", "")
-        new_string = hook_input.get("new_string", "")
+        old_string = params.get("old_string", "")
+        new_string = params.get("new_string", "")
         lines_changed = abs(len(new_string.splitlines()) - len(old_string.splitlines()))
         metadata = {"file": file_path, "lines": lines_changed, "pid": os.getpid(), "context": context}
         emit_event(agent_id, context, "TOOL_EDIT", metadata)
 
     elif tool_name == "Write":
-        file_path = hook_input.get("file_path", "unknown")
-        content = hook_input.get("content", "")
+        file_path = params.get("file_path", "unknown")
+        content = params.get("content", "")
         lines = len(content.splitlines())
         metadata = {"file": file_path, "lines": lines, "pid": os.getpid(), "context": context}
         emit_event(agent_id, context, "TOOL_WRITE", metadata)
 
     elif tool_name == "Bash":
-        command = hook_input.get("command", "")
+        command = params.get("command", "")
         # Detect specialized commands (git, test, lint)
         if "git commit" in command:
             emit_event(agent_id, context, "GIT_COMMIT", {"command": command[:100], "pid": os.getpid(), "context": context})
@@ -165,17 +168,17 @@ def cmd_hook():
             emit_event(agent_id, context, "TOOL_BASH", {"command": command[:100], "pid": os.getpid(), "context": context})
 
     elif tool_name == "Grep":
-        pattern = hook_input.get("pattern", "unknown")
+        pattern = params.get("pattern", "unknown")
         metadata = {"pattern": pattern, "pid": os.getpid(), "context": context}
         emit_event(agent_id, context, "TOOL_GREP", metadata)
 
     elif tool_name == "Glob":
-        pattern = hook_input.get("pattern", "unknown")
+        pattern = params.get("pattern", "unknown")
         metadata = {"pattern": pattern, "pid": os.getpid(), "context": context}
         emit_event(agent_id, context, "TOOL_GLOB", metadata)
 
     elif tool_name == "Task":
-        subagent = hook_input.get("subagent_type", "unknown")
+        subagent = params.get("subagent_type", "unknown")
         metadata = {"subagent": subagent, "pid": os.getpid(), "context": context}
         emit_event(agent_id, context, "TOOL_TASK", metadata)
 
