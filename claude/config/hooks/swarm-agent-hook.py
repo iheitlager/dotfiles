@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Swarm event hook for swarm-daemon (PostToolUse)
+Unified swarm agent hook for Claude Code
 
-Emits events to swarm-daemon when Claude uses tools.
-Currently tracking: REQUEST_START, REQUEST_END
+Usage:
+    swarm-agent-hook.py register    # SessionStart: Register agent
+    swarm-agent-hook.py hook         # PostToolUse: Track requests
 
-Future events (commented out for now):
-- Tool-specific events (TOOL_READ, TOOL_EDIT, etc.)
-- Git operations (GIT_COMMIT, GIT_PUSH, etc.)
-- Test/lint events
+Context = git repository (one daemon per repo)
+Agent ID = <repo> (simple for now, can extend to <repo>.agent-N)
 """
 
 import json
@@ -65,8 +64,33 @@ def emit_event(agent_id, context, event_type, metadata):
         pass  # Daemon not running or slow - that's OK
 
 
-def main():
-    """Main hook execution."""
+def cmd_register():
+    """Handle SessionStart: Register agent with swarm-daemon."""
+    context = get_git_repo_context()
+    if not context:
+        # Not in a git repo - allow but don't register
+        print(json.dumps({"decision": "allow"}))
+        return
+
+    agent_id = get_agent_id(context)
+
+    # Emit AGENT_STARTUP event
+    metadata = {"context": context}
+    emit_event(agent_id, context, "AGENT_STARTUP", metadata)
+
+    # Return response with agent ID and context in environment
+    response = {
+        "decision": "allow",
+        "env": {
+            "AGENT_ID": agent_id,
+            "AGENT_CONTEXT": context
+        }
+    }
+    print(json.dumps(response))
+
+
+def cmd_hook():
+    """Handle PostToolUse: Track request events."""
     # Read JSON input from stdin
     try:
         hook_input = json.loads(sys.stdin.read())
@@ -85,18 +109,12 @@ def main():
     # Extract tool information
     tool_name = hook_input.get("tool_name") or hook_input.get("tool", "unknown")
 
-    # Simple request tracking for now
-    # We emit REQUEST_START and REQUEST_END as markers
-    # In the future, we can add more granular tool-specific events
-
-    # For now, just emit a simple request event
+    # Emit REQUEST event with minimal metadata
     metadata = {
         "tool": tool_name,
         "pid": os.getpid(),
         "context": context
     }
-
-    # Emit REQUEST event (can be enhanced later to distinguish START/END)
     emit_event(agent_id, context, "REQUEST", metadata)
 
     # Future: Add tool-specific event logic here
@@ -108,6 +126,24 @@ def main():
 
     # Always allow the operation
     print(json.dumps({"decision": "allow"}))
+
+
+def main():
+    """Main entry point."""
+    if len(sys.argv) < 2:
+        print("Usage: swarm-agent-hook.py {register|hook}", file=sys.stderr)
+        sys.exit(1)
+
+    command = sys.argv[1]
+
+    if command == "register":
+        cmd_register()
+    elif command == "hook":
+        cmd_hook()
+    else:
+        print(f"Unknown command: {command}", file=sys.stderr)
+        print("Usage: swarm-agent-hook.py {register|hook}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
