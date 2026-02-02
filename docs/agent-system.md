@@ -501,20 +501,44 @@ swarm-daemon --context <repo>      # Specify context from outside git repo
 
 **Event Tracking:**
 
-**Currently Active (Phase 1):**
+**Currently Active:**
+
+**Phase 1 (Basic Lifecycle):**
 - `AGENT_STARTUP` - When agent starts (via swarm-hook)
 - `REQUEST` - Tool usage tracking (via swarm-hook)
 
+**Phase 2 (Job Lifecycle):**
+- `JOB_CLAIMED` - When agent claims job via `/take` skill
+- `JOB_PR_READY` - When PR created via `/pr` skill
+- `JOB_PR_MERGED` - When PR merged via `/merge` skill
+- `JOB_COMPLETED` - When job marked complete
+
 **Implementation Status:**
 - ✅ **Phase 1 Complete** - Basic agent lifecycle and request tracking
-- 🔨 **Phase 2 Ready** (~90% implemented, disabled) - Job lifecycle tracking infrastructure exists but events commented out. See issue #14 Phase B.
+- ✅ **Phase 2 Complete** - Job lifecycle tracking enabled (see job metrics below)
 - 🔨 **Phase 3 Ready** (~70% implemented, disabled) - Semantic event infrastructure exists but events commented out. See issue #14 Phase C.
 
-**Planned Events (see #14 for enablement roadmap):**
-- **Phase 2 (Job Lifecycle):** JOB_CLAIMED, JOB_PR_READY, JOB_PR_MERGED, JOB_COMPLETED
-- **Phase 3 (Semantic Events):** TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK, GIT_COMMIT, GIT_PUSH, GIT_REBASE, TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_*, TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED
+**Planned Events (Phase 3 - see #14 for enablement roadmap):**
+- **Tool Events:** TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK
+- **Git Events:** GIT_COMMIT, GIT_PUSH, GIT_REBASE
+- **Test Events:** TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_*
+- **Task Events:** TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED
 
-**Note:** Phase 2-3 event handlers and infrastructure are implemented in the codebase but deliberately disabled to maintain system simplicity. They can be enabled following the 3-phase plan in issue #14.
+**Job Metrics (Phase 2):**
+
+With Phase 2 enabled, swarm-daemon tracks:
+- Time from job claim to PR creation (time-to-PR)
+- Time from PR creation to merge (time-to-merge)
+- Current job per agent (visible in `swarm-daemon agents`)
+- Active jobs with metadata (issue #, title, PR #, timestamps)
+- Completed jobs with performance metrics
+
+View job tracking:
+```bash
+swarm-daemon agents              # See what each agent is working on
+swarm-daemon log --agent agent-1 # Filter events by agent
+swarm-daemon log | grep JOB_     # See all job lifecycle events
+```
 
 **Integration with Claude Code:**
 The daemon integrates with Claude Code via `swarm-hook` (Python hooks):
@@ -555,15 +579,17 @@ The swarm-daemon supports progressive event tracking through a 3-phase enablemen
 | Phase | Status | Events | Purpose |
 |-------|--------|--------|---------|
 | **Phase 1** | ✅ Active | AGENT_STARTUP, REQUEST | Basic agent lifecycle |
-| **Phase 2** | 🔨 Ready | JOB_CLAIMED, JOB_PR_READY, JOB_PR_MERGED, JOB_COMPLETED | Job lifecycle tracking |
+| **Phase 2** | ✅ Active | JOB_CLAIMED, JOB_PR_READY, JOB_PR_MERGED, JOB_COMPLETED | Job lifecycle tracking |
 | **Phase 3** | 🔨 Ready | TOOL_*, GIT_*, TEST_*, TASK_* | Fine-grained activity tracking |
 
-**Why phased?** Phase 2-3 infrastructure exists (~70-90% implemented) but is deliberately disabled to:
-- Keep the system simple and performant
-- Avoid event volume overwhelming users
-- Allow progressive adoption based on need
+**Why phased?** Phase 3 infrastructure exists (~70% implemented) but is deliberately disabled to:
+- Avoid high event volume
+- Keep system performant
+- Allow opt-in when detailed activity tracking is needed
 
-**To enable:** Follow the implementation plan in issue #14 (Phase A → Phase B → Phase C)
+**Phase 2 enabled:** Job lifecycle events now track time-to-PR, time-to-merge, and per-agent job metrics. See `/take`, `/pr`, and `/merge` skills for automatic event emission.
+
+**To enable Phase 3:** Follow the implementation plan in issue #14 Phase C
 
 ### Communication Summary
 
