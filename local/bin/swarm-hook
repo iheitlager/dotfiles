@@ -122,12 +122,31 @@ def cmd_hook():
     }
     emit_event(agent_id, context, "REQUEST", metadata)
 
-    # Future: Add tool-specific event logic here
+    # Phase 3: Tool-specific event logic (DISABLED - TODO: Enable in Phase C of #14)
+    # Currently emitting generic REQUEST event for all tools
+    # To enable Phase 3, uncomment below and emit specific events:
+    # - TOOL_READ for Read tool (with file metadata)
+    # - TOOL_EDIT for Edit tool (with file + lines changed)
+    # - TOOL_WRITE for Write tool (with file + lines)
+    # - TOOL_BASH for Bash tool (detect git/test/lint from command)
+    # - TOOL_GREP for Grep tool (with pattern)
+    # - TOOL_GLOB for Glob tool (with pattern)
+    # - TOOL_TASK for Task tool (with subagent type)
+    #
+    # Example (Phase C implementation):
     # if tool_name == "Read":
-    #     emit_event(agent_id, context, "TOOL_READ", {...})
+    #     metadata = {"file": hook_input.get("file_path"), "pid": os.getpid(), "context": context}
+    #     emit_event(agent_id, context, "TOOL_READ", metadata)
     # elif tool_name == "Edit":
-    #     emit_event(agent_id, context, "TOOL_EDIT", {...})
-    # etc.
+    #     metadata = {"file": hook_input.get("file_path"), "pid": os.getpid(), "context": context}
+    #     emit_event(agent_id, context, "TOOL_EDIT", metadata)
+    # elif tool_name == "Bash":
+    #     command = hook_input.get("command", "")
+    #     # Detect git/test/lint operations from command
+    #     if "git commit" in command:
+    #         emit_event(agent_id, context, "GIT_COMMIT", {"command": command[:100], "pid": os.getpid(), "context": context})
+    #     # ... etc for other special commands
+    # ... etc for other tools
 
     # Always allow the operation (empty response = continue)
     print(json.dumps({}), flush=True)

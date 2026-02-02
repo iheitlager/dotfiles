@@ -850,18 +850,25 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
 
     # Quick validation - simplified event types
     valid_events = {
-        # Core agent lifecycle
+        # Phase 1: Basic agent lifecycle (ACTIVE)
         "AGENT_STARTUP", "AGENT_SHUTDOWN",
 
-        # Request tracking (simplified from tool-specific events)
+        # Phase 1: Request tracking (ACTIVE)
+        # Simplified model: track each tool use as REQUEST instead of tool-specific events
         "REQUEST", "REQUEST_START", "REQUEST_END",
 
-        # Legacy events (for backward compatibility)
-        "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",
+        # Note: Original Phase 1 design (AGENT_WORK_START, AGENT_WORK_STOP, AGENT_HEARTBEAT)
+        # was replaced by the AGENT_STARTUP + REQUEST model for more granular tracking.
+        # See issue #10 for history.
 
-        # Future: Uncomment when needed
-        # # Job lifecycle
+        # Phase 2: Job lifecycle (DISABLED - TODO: Enable in Phase B of #14)
+        # Handlers exist (lines 936-1001), infrastructure ready (~90% implemented)
+        # Requires: Update /take, /pr, /merge skills to emit events
         # "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
+
+        # Phase 3: Semantic events (DISABLED - TODO: Enable in Phase C of #14)
+        # Handlers exist (lines 1003-1042), infrastructure ready (~70% implemented)
+        # Requires: Uncomment tool-specific emission in swarm-hook (lines 125-130)
         #
         # # Task tracking
         # "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
@@ -896,6 +903,9 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     current_job = job_metrics.get_job_by_agent(agent_id)
 
     # Phase 1 events
+    # Note: AGENT_WORK_START/STOP/HEARTBEAT are deprecated (original Phase 1 design)
+    # Kept for backward compatibility but never emitted by current swarm-hook
+    # Current model uses AGENT_STARTUP (one-time) + REQUEST (per-tool)
     if event_type == "AGENT_WORK_START":
         state_manager.update_agent(
             agent_id,

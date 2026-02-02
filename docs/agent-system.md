@@ -500,13 +500,21 @@ swarm-daemon --context <repo>      # Specify context from outside git repo
 - Each context is isolated with its own events and state
 
 **Event Tracking:**
-Currently tracking essential events:
+
+**Currently Active (Phase 1):**
 - `AGENT_STARTUP` - When agent starts (via swarm-hook)
 - `REQUEST` - Tool usage tracking (via swarm-hook)
 
-Future events (planned, see issues #10-12):
-- Phase 2: Job lifecycle (JOB_CLAIMED, JOB_PR_READY, etc.)
-- Phase 3: Semantic events (TOOL_READ, GIT_COMMIT, TEST_STARTED, etc.)
+**Implementation Status:**
+- ✅ **Phase 1 Complete** - Basic agent lifecycle and request tracking
+- 🔨 **Phase 2 Ready** (~90% implemented, disabled) - Job lifecycle tracking infrastructure exists but events commented out. See issue #14 Phase B.
+- 🔨 **Phase 3 Ready** (~70% implemented, disabled) - Semantic event infrastructure exists but events commented out. See issue #14 Phase C.
+
+**Planned Events (see #14 for enablement roadmap):**
+- **Phase 2 (Job Lifecycle):** JOB_CLAIMED, JOB_PR_READY, JOB_PR_MERGED, JOB_COMPLETED
+- **Phase 3 (Semantic Events):** TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK, GIT_COMMIT, GIT_PUSH, GIT_REBASE, TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_*, TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED
+
+**Note:** Phase 2-3 event handlers and infrastructure are implemented in the codebase but deliberately disabled to maintain system simplicity. They can be enabled following the 3-phase plan in issue #14.
 
 **Integration with Claude Code:**
 The daemon integrates with Claude Code via `swarm-hook` (Python hooks):
@@ -539,6 +547,23 @@ swarm-daemon log --agent dotfiles  # Filter by agent
 │   └── daemon.pid            # Daemon process ID
 └── jobs/                     # Job queue (swarm-job)
 ```
+
+**Phased Event Enablement Plan:**
+
+The swarm-daemon supports progressive event tracking through a 3-phase enablement approach (see #14):
+
+| Phase | Status | Events | Purpose |
+|-------|--------|--------|---------|
+| **Phase 1** | ✅ Active | AGENT_STARTUP, REQUEST | Basic agent lifecycle |
+| **Phase 2** | 🔨 Ready | JOB_CLAIMED, JOB_PR_READY, JOB_PR_MERGED, JOB_COMPLETED | Job lifecycle tracking |
+| **Phase 3** | 🔨 Ready | TOOL_*, GIT_*, TEST_*, TASK_* | Fine-grained activity tracking |
+
+**Why phased?** Phase 2-3 infrastructure exists (~70-90% implemented) but is deliberately disabled to:
+- Keep the system simple and performant
+- Avoid event volume overwhelming users
+- Allow progressive adoption based on need
+
+**To enable:** Follow the implementation plan in issue #14 (Phase A → Phase B → Phase C)
 
 ### Communication Summary
 
