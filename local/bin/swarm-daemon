@@ -861,10 +861,9 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
         # was replaced by the AGENT_STARTUP + REQUEST model for more granular tracking.
         # See issue #10 for history.
 
-        # Phase 2: Job lifecycle (DISABLED - TODO: Enable in Phase B of #14)
-        # Handlers exist (lines 936-1001), infrastructure ready (~90% implemented)
-        # Requires: Update /take, /pr, /merge skills to emit events
-        # "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
+        # Phase 2: Job lifecycle (ACTIVE - Enabled in Phase B of #14)
+        # Handlers exist (lines 936-1001), skills updated to emit events
+        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
 
         # Phase 3: Semantic events (DISABLED - TODO: Enable in Phase C of #14)
         # Handlers exist (lines 1003-1042), infrastructure ready (~70% implemented)
