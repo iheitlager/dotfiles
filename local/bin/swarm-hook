@@ -3,9 +3,9 @@
 swarm-hook - Unified hook for swarm-daemon integration with Claude Code
 
 Usage:
-    swarm-hook.py register    # SessionStart: Register agent
-    swarm-hook.py hook        # PostToolUse: Track requests
-    swarm-hook.py -h          # Show this help
+    swarm-hook register    # SessionStart: Register agent
+    swarm-hook hook        # PostToolUse: Track requests
+    swarm-hook -h          # Show this help
 
 Context = git repository (one daemon per repo)
 Agent ID = <repo> (simple for now, can extend to <repo>.agent-N)
@@ -162,7 +162,7 @@ def print_help():
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("Usage: swarm-hook.py {register|hook|-h}", file=sys.stderr)
+        print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
         sys.exit(1)
 
     command = sys.argv[1]
@@ -176,7 +176,7 @@ def main():
         cmd_hook()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
-        print("Usage: swarm-hook.py {register|hook|-h}", file=sys.stderr)
+        print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
         sys.exit(1)
 
 
