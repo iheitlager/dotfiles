@@ -404,17 +404,36 @@ log = None  # Will be set in main()
 # =============================================================================
 
 class SwarmContext:
-    """Manages paths and state for the current swarm"""
+    """Manages paths and state for the current swarm (git repo)
 
-    def __init__(self):
-        self.repo_root = self._get_repo_root()
-        self.repo_name = self._get_repo_name()
+    Context = git repository (whether in worktree or not).
+    One daemon per context, all state files isolated per context.
+    """
+
+    def __init__(self, context_override: Optional[str] = None):
+        """Initialize context.
+
+        Args:
+            context_override: Manually specify context (repo name) instead of
+                             detecting from current directory's git repo.
+        """
+        self.context_override = context_override
+
+        if context_override:
+            # Manual context mode - don't need to be in a git repo
+            self.repo_root = None
+            self.repo_name = context_override.lstrip('.')
+        else:
+            # Auto-detect from current git repo
+            self.repo_root = self._get_repo_root()
+            self.repo_name = self._get_repo_name()
+
         self.state_dir = self._get_state_dir()
         self.config_path = self._get_config_path()
         self.ensure_directories()
 
-    def _get_repo_root(self) -> Path:
-        """Get git repository root"""
+    def _get_repo_root(self) -> Optional[Path]:
+        """Get git repository root (None if not in a git repo)"""
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
@@ -424,19 +443,24 @@ class SwarmContext:
             )
             return Path(result.stdout.strip())
         except subprocess.CalledProcessError:
-            print("Error: Not in a git repository", file=sys.stderr)
+            if self.context_override:
+                return None  # OK if using --context
+            print("Error: Not in a git repository (use --context <repo>)", file=sys.stderr)
             sys.exit(1)
 
     def _get_repo_name(self) -> str:
-        """Get repository name (handles worktree paths)"""
-        local_repo_name = self.repo_root.name
+        """Get repository name (handles worktree paths and leading dots)"""
+        if not self.repo_root:
+            return "unknown"
+
+        local_repo_name = self.repo_root.name.lstrip('.')
         local_repo_parent = self.repo_root.parent.name
 
         # Handle worktree paths
         if local_repo_parent.endswith("-worktree"):
-            return local_repo_parent.replace("-worktree", "")
+            return local_repo_parent.replace("-worktree", "").lstrip('.')
         elif local_repo_name.endswith("-worktree"):
-            return local_repo_name.replace("-worktree", "")
+            return local_repo_name.replace("-worktree", "").lstrip('.')
         else:
             return local_repo_name
 
@@ -448,11 +472,16 @@ class SwarmContext:
     def _get_config_path(self) -> Path:
         """Get configuration file path (check dotfiles, then XDG config)"""
         # First check if we're in dotfiles repo
-        dotfiles_config = self.repo_root / "config" / "swarm-daemon" / "config.yml"
-        if dotfiles_config.exists():
-            return dotfiles_config
+        if self.repo_root:
+            dotfiles_config = self.repo_root / "config" / "swarm-daemon" / "config.yml"
+            if dotfiles_config.exists():
+                return dotfiles_config
 
-        # Fall back to XDG config
+        # Fall back to XDG config or dotfiles home
+        dotfiles_home = Path.home() / ".dotfiles" / "config" / "swarm-daemon" / "config.yml"
+        if dotfiles_home.exists():
+            return dotfiles_home
+
         xdg_config = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
         return Path(xdg_config) / "swarm-daemon" / "config.yml"
 
@@ -805,34 +834,42 @@ class EventLogger:
 def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     """Handle hook events from agents - MUST BE FAST"""
     agent_id = os.environ.get("AGENT_ID", "unknown")
+    agent_context = os.environ.get("AGENT_CONTEXT", "unknown")
 
     # Parse arguments
     data = " ".join(args)
 
-    # Quick validation (Phase 1 + Phase 2 + Phase 3 events)
+    # Quick validation - simplified event types
     valid_events = {
-        # Phase 1: Basic work visibility
+        # Core agent lifecycle
+        "AGENT_STARTUP", "AGENT_SHUTDOWN",
+
+        # Request tracking (simplified from tool-specific events)
+        "REQUEST", "REQUEST_START", "REQUEST_END",
+
+        # Legacy events (for backward compatibility)
         "AGENT_WORK_START", "AGENT_WORK_STOP", "AGENT_HEARTBEAT",
 
-        # Phase 2: Job lifecycle
-        "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
-
-        # Phase 3: Semantic events - Task tracking
-        "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
-
-        # Phase 3: Tool usage
-        "TOOL_READ", "TOOL_EDIT", "TOOL_WRITE", "TOOL_BASH",
-        "TOOL_GREP", "TOOL_GLOB", "TOOL_TASK",
-
-        # Phase 3: Git operations
-        "GIT_COMMIT", "GIT_PUSH", "GIT_REBASE", "GIT_CONFLICT",
-
-        # Phase 3: Test/Build
-        "TEST_STARTED", "TEST_PASSED", "TEST_FAILED",
-        "LINT_STARTED", "LINT_PASSED", "LINT_FAILED",
-
-        # Phase 3: Agent state
-        "AGENT_THINKING", "AGENT_WAITING", "AGENT_ERROR"
+        # Future: Uncomment when needed
+        # # Job lifecycle
+        # "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
+        #
+        # # Task tracking
+        # "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
+        #
+        # # Tool usage (granular)
+        # "TOOL_READ", "TOOL_EDIT", "TOOL_WRITE", "TOOL_BASH",
+        # "TOOL_GREP", "TOOL_GLOB", "TOOL_TASK",
+        #
+        # # Git operations
+        # "GIT_COMMIT", "GIT_PUSH", "GIT_REBASE", "GIT_CONFLICT",
+        #
+        # # Test/Build
+        # "TEST_STARTED", "TEST_PASSED", "TEST_FAILED",
+        # "LINT_STARTED", "LINT_PASSED", "LINT_FAILED",
+        #
+        # # Agent state
+        # "AGENT_THINKING", "AGENT_WAITING", "AGENT_ERROR"
     }
     if event_type not in valid_events:
         print(f"Warning: Unknown event type: {event_type}", file=sys.stderr)
@@ -865,6 +902,22 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
             last_heartbeat=now
         )
     elif event_type == "AGENT_HEARTBEAT":
+        state_manager.update_agent(
+            agent_id,
+            last_heartbeat=now
+        )
+
+    # New simplified events
+    elif event_type == "AGENT_STARTUP":
+        state_manager.update_agent(
+            agent_id,
+            status="working",
+            started_at=now,
+            last_heartbeat=now,
+            context=agent_context
+        )
+    elif event_type in ("REQUEST", "REQUEST_START", "REQUEST_END"):
+        # Just update heartbeat for request tracking
         state_manager.update_agent(
             agent_id,
             last_heartbeat=now
@@ -2079,10 +2132,13 @@ def print_usage():
     print()
     print("Options:")
     print("  -h, --help          Show this help")
+    print("  --context <repo>    Specify context (repo name) instead of auto-detect")
+    print("                      Useful for running daemon outside git repo")
     print()
     print("Environment:")
     print("  POLL_INTERVAL       Polling interval in seconds (default: 5)")
     print("  AGENT_ID            Agent identifier (for hook calls)")
+    print("  AGENT_CONTEXT       Context (repo name) for this agent")
 
 def main():
     global log
@@ -2097,8 +2153,22 @@ def main():
         print_usage()
         sys.exit(0)
 
+    # Parse --context option if provided
+    context_override = None
+    args_copy = sys.argv[2:]
+    if "--context" in args_copy:
+        try:
+            idx = args_copy.index("--context")
+            if idx + 1 < len(args_copy):
+                context_override = args_copy[idx + 1]
+                # Remove --context and its value from argv for further processing
+                sys.argv = sys.argv[:idx + 2] + sys.argv[idx + 4:]
+        except (ValueError, IndexError):
+            print("Error: --context requires a repository name", file=sys.stderr)
+            sys.exit(1)
+
     # Initialize context
-    context = SwarmContext()
+    context = SwarmContext(context_override=context_override)
 
     # Route to appropriate mode
     if command == "daemon":

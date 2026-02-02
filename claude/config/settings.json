@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.dotfiles/claude/config/hooks/agent-register.sh"
+            "command": "~/.dotfiles/claude/config/hooks/agent-register.py"
           }
         ]
       }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.dotfiles/claude/config/hooks/swarm-hook.sh"
+            "command": "~/.dotfiles/claude/config/hooks/swarm-hook.py"
           }
         ]
       }
