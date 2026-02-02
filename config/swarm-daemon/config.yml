@@ -4,17 +4,25 @@
 
 # Agent monitoring settings
 monitoring:
+  # Enable/disable stale agent detection
+  # Default: false (disabled)
+  # Set to true to enable stale agent warnings
+  enable_stale_check: false
+
   # How often to check for stale agents (in seconds)
   # Default: 5 seconds
+  # Only used if enable_stale_check is true
   stale_check_interval: 5
 
   # How often to log stale agent warnings (in seconds)
   # Default: 300 seconds (5 minutes)
   # Note: Checks still happen at stale_check_interval, but logs are rate-limited
+  # Only used if enable_stale_check is true
   stale_log_interval: 300
 
   # Threshold for considering an agent stale (in minutes)
   # Default: 5 minutes
+  # Only used if enable_stale_check is true
   stale_threshold_minutes: 5
 
 # Logging settings

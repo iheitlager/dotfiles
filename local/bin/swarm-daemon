@@ -264,6 +264,7 @@ class DaemonConfig:
 
     def __init__(self):
         # Default values
+        self.enable_stale_check = False  # Disabled by default
         self.stale_check_interval = 5
         self.stale_log_interval = 300
         self.stale_threshold_minutes = 5
@@ -310,7 +311,9 @@ class DaemonConfig:
 
                     # Assign to config
                     if current_section == "monitoring":
-                        if key == "stale_check_interval":
+                        if key == "enable_stale_check":
+                            config.enable_stale_check = value
+                        elif key == "stale_check_interval":
                             config.stale_check_interval = value
                         elif key == "stale_log_interval":
                             config.stale_log_interval = value
@@ -1091,6 +1094,10 @@ class SwarmDaemon:
 
     def check_for_stale_agents(self):
         """Check for agents with no recent heartbeat (with rate-limited logging)"""
+        # Skip if stale checking is disabled
+        if not self.config.enable_stale_check:
+            return
+
         stale = self.state_manager.check_stale_agents(
             threshold_minutes=self.config.stale_threshold_minutes
         )
