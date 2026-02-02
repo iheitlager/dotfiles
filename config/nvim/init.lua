@@ -92,6 +92,27 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
+-- YAML-specific settings
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'yaml',
+  group = vim.api.nvim_create_augroup('yaml_settings', { clear = true }),
+  callback = function()
+    -- Better indentation for YAML
+    vim.opt_local.shiftwidth = 2
+    vim.opt_local.tabstop = 2
+    vim.opt_local.softtabstop = 2
+    vim.opt_local.expandtab = true
+
+    -- Show whitespace (critical for YAML)
+    vim.opt_local.list = true
+    vim.opt_local.listchars = { tab = '→ ', trail = '·', nbsp = '␣' }
+
+    -- Folding by indentation for YAML
+    vim.opt_local.foldmethod = 'indent'
+    vim.opt_local.foldlevelstart = 99  -- Start with all folds open
+  end,
+})
+
 -- Bootstrap lazy.nvim plugin manager
 local lazypath = vim.fn.stdpath('data') .. '/lazy/lazy.nvim'
 if not vim.loop.fs_stat(lazypath) then
@@ -111,6 +132,20 @@ require('lazy').setup({
     lazy = false,
     priority = 1000,
     config = function()
+      require('tokyonight').setup({
+        style = 'night',
+        on_highlights = function(hl, c)
+          -- Enhanced YAML highlighting
+          hl['@field.yaml'] = { fg = c.blue, bold = true }            -- Keys (brighter blue, bold)
+          hl['@string.yaml'] = { fg = c.green }                       -- Values (green)
+          hl['@punctuation.delimiter.yaml'] = { fg = c.fg_dark }      -- Colons (subtle)
+          hl['@punctuation.special.yaml'] = { fg = c.orange }         -- Special chars (-, |, >)
+          hl['@number.yaml'] = { fg = c.orange }                      -- Numbers
+          hl['@boolean.yaml'] = { fg = c.magenta }                    -- true/false
+          hl['@constant.yaml'] = { fg = c.cyan }                      -- Constants
+          hl['@comment.yaml'] = { fg = c.comment, italic = true }     -- Comments
+        end,
+      })
       vim.cmd.colorscheme('tokyonight-night')
     end,
   },
@@ -138,8 +173,33 @@ require('lazy').setup({
       require('nvim-treesitter.config').setup({
         ensure_installed = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown' },
         auto_install = true,
-        highlight = { enable = true },
+        highlight = {
+          enable = true,
+          additional_vim_regex_highlighting = false,
+        },
         indent = { enable = true },
+      })
+    end,
+  },
+
+  -- Indent guides (essential for YAML)
+  {
+    'lukas-reineke/indent-blankline.nvim',
+    main = 'ibl',
+    config = function()
+      require('ibl').setup({
+        indent = {
+          char = '│',
+          tab_char = '│',
+        },
+        scope = {
+          enabled = true,
+          show_start = true,
+          show_end = false,
+        },
+        exclude = {
+          filetypes = { 'help', 'alpha', 'dashboard', 'neo-tree', 'Trouble', 'lazy' },
+        },
       })
     end,
   },
