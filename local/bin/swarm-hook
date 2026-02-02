@@ -76,12 +76,12 @@ def cmd_register():
     context = get_git_repo_context()
     if not context:
         # Not in a git repo - allow but don't register
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "allow"}), flush=True)
         return
 
     agent_id = get_agent_id(context)
 
-    # Emit AGENT_STARTUP event
+    # Emit AGENT_STARTUP event (fire-and-forget)
     metadata = {"context": context}
     emit_event(agent_id, context, "AGENT_STARTUP", metadata)
 
@@ -93,7 +93,7 @@ def cmd_register():
             "AGENT_CONTEXT": context
         }
     }
-    print(json.dumps(response))
+    print(json.dumps(response), flush=True)
 
 
 def cmd_hook():
@@ -102,13 +102,17 @@ def cmd_hook():
     try:
         hook_input = json.loads(sys.stdin.read())
     except json.JSONDecodeError:
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "allow"}), flush=True)
+        return
+    except Exception:
+        # Catch any other stdin reading errors
+        print(json.dumps({"decision": "allow"}), flush=True)
         return
 
     # Get context and agent ID
     context = get_git_repo_context()
     if not context:
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "allow"}), flush=True)
         return
 
     agent_id = get_agent_id(context)
@@ -116,7 +120,7 @@ def cmd_hook():
     # Extract tool information
     tool_name = hook_input.get("tool_name") or hook_input.get("tool", "unknown")
 
-    # Emit REQUEST event with minimal metadata
+    # Emit REQUEST event with minimal metadata (fire-and-forget)
     metadata = {
         "tool": tool_name,
         "pid": os.getpid(),
@@ -132,7 +136,7 @@ def cmd_hook():
     # etc.
 
     # Always allow the operation
-    print(json.dumps({"decision": "allow"}))
+    print(json.dumps({"decision": "allow"}), flush=True)
 
 
 def print_help():
@@ -161,23 +165,28 @@ def print_help():
 
 def main():
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
-        sys.exit(1)
+    try:
+        if len(sys.argv) < 2:
+            print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
+            sys.exit(1)
 
-    command = sys.argv[1]
+        command = sys.argv[1]
 
-    if command in ("-h", "--help"):
-        print_help()
+        if command in ("-h", "--help"):
+            print_help()
+            sys.exit(0)
+        elif command == "register":
+            cmd_register()
+        elif command == "hook":
+            cmd_hook()
+        else:
+            print(f"Unknown command: {command}", file=sys.stderr)
+            print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
+            sys.exit(1)
+    except Exception:
+        # Hooks should never fail - always allow the operation
+        print(json.dumps({"decision": "allow"}), flush=True)
         sys.exit(0)
-    elif command == "register":
-        cmd_register()
-    elif command == "hook":
-        cmd_hook()
-    else:
-        print(f"Unknown command: {command}", file=sys.stderr)
-        print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
-        sys.exit(1)
 
 
 if __name__ == "__main__":
