@@ -2001,10 +2001,11 @@ def run_cli_agents(context: SwarmContext):
         status = state.get("status", "unknown")
         print(f"{agent_id:12} {status:8}")
 
-def run_cli_log(context: SwarmContext):
+def run_cli_log(context: SwarmContext, args=None):
     """Show recent log with optional follow mode"""
-    # Parse arguments from sys.argv
-    args = sys.argv[2:]  # Skip 'swarm-daemon' and 'log'
+    # Parse arguments (either passed in or from sys.argv for backward compat)
+    if args is None:
+        args = sys.argv[2:]  # Skip 'swarm-daemon' and 'log'
 
     follow = "--follow" in args or "-f" in args
     agent_filter = None
@@ -2057,10 +2058,11 @@ def run_cli_log(context: SwarmContext):
         for event in events:
             print(event.rstrip())
 
-def run_cli_cleanup(context: SwarmContext):
+def run_cli_cleanup(context: SwarmContext, args=None):
     """Remove stale agent entries"""
-    # Parse arguments from sys.argv
-    args = sys.argv[2:]  # Skip 'swarm-daemon' and 'cleanup'
+    # Parse arguments (either passed in or from sys.argv for backward compat)
+    if args is None:
+        args = sys.argv[2:]  # Skip 'swarm-daemon' and 'cleanup'
     dry_run = "--dry-run" in args
     hours = 24  # Default threshold
 
@@ -2156,31 +2158,41 @@ def main():
         print_usage()
         sys.exit(0)
 
-    # Parse --context option first (can appear before or after command)
+    # Known commands for flexible parsing
+    known_commands = ["daemon", "repl", "status", "agents", "cleanup", "log", "hook"]
+
+    # Parse arguments flexibly (flags can appear anywhere)
     context_override = None
-    remaining_args = []
+    command = None
+    command_args = []
     i = 1
+
     while i < len(sys.argv):
-        if sys.argv[i] == "--context":
+        arg = sys.argv[i]
+
+        if arg == "--context":
             if i + 1 < len(sys.argv):
                 context_override = sys.argv[i + 1]
                 i += 2  # Skip both --context and its value
             else:
                 print("Error: --context requires a repository name", file=sys.stderr)
                 sys.exit(1)
-        elif sys.argv[i] in ("-h", "--help"):
+        elif arg in ("-h", "--help"):
             print_usage()
             sys.exit(0)
+        elif command is None and arg in known_commands:
+            # First known command we encounter is THE command
+            command = arg
+            i += 1
         else:
-            remaining_args.append(sys.argv[i])
+            # Everything else (flags, args) goes to the command
+            command_args.append(arg)
             i += 1
 
-    # Get command from remaining args
-    if not remaining_args:
+    # Check if we found a command
+    if not command:
         print_usage()
         sys.exit(0)
-
-    command = remaining_args[0]
 
     # Initialize context
     context = SwarmContext(context_override=context_override)
@@ -2206,21 +2218,21 @@ def main():
 
     elif command == "cleanup":
         log = setup_logging(daemon_mode=False, context=context)
-        run_cli_cleanup(context)
+        run_cli_cleanup(context, command_args)
 
     elif command == "log":
         log = setup_logging(daemon_mode=False, context=context)
-        run_cli_log(context)
+        run_cli_log(context, command_args)
 
     elif command == "hook":
         # Hook mode - MUST BE FAST
         log = setup_logging(daemon_mode=True, context=context)
-        if len(remaining_args) < 2:
+        if len(command_args) < 1:
             print("Usage: swarm-daemon hook <EVENT_TYPE> [args...]", file=sys.stderr)
             sys.exit(1)
 
-        event_type = remaining_args[1]
-        args = remaining_args[2:]
+        event_type = command_args[0]
+        args = command_args[1:]
         handle_hook(context, event_type, args)
 
     else:
