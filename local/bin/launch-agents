@@ -374,7 +374,8 @@ setup_shared_state() {
 
     if [[ ! -f "$SHARED_CONTEXT/events.log" ]]; then
         echo "# Agent Events Log - $REPO_NAME" > "$SHARED_CONTEXT/events.log"
-        echo "# Format: timestamp | agent | action | task | summary" >> "$SHARED_CONTEXT/events.log"
+        echo "# Format: timestamp | agent_id | event_type | metadata_json" >> "$SHARED_CONTEXT/events.log"
+        echo "# Example: 2026-02-02T17:30:00Z | agent-1 | REQUEST | {\"tool\": \"Read\", \"pid\": 12345}" >> "$SHARED_CONTEXT/events.log"
         echo "" >> "$SHARED_CONTEXT/events.log"
     fi
 
@@ -421,27 +422,27 @@ Users may talk to you directly. When receiving a request:
 
 ## Task Queue
 
-Use \`swarm-task\` for all task operations:
+Use \`swarm-job\` for all task operations:
 
 \`\`\`bash
 # List all tasks (pending/active/done)
-swarm-task list
+swarm-job list
 
 # List only pending tasks with scores
-swarm-task list pending
+swarm-job list pending
 
 # Claim best matching task for your model tier
-swarm-task claim
+swarm-job claim
 
 # Claim specific task
-swarm-task claim task-XXX
+swarm-job claim task-XXX
 
 # Complete a task
-swarm-task complete task-XXX
-swarm-task complete task-XXX -r "merged to main"
+swarm-job complete task-XXX
+swarm-job complete task-XXX -r "merged to main"
 
 # Create a new task for others
-swarm-task new "Task title" -p high -c complex
+swarm-job new "Task title" -p high -c complex
 \`\`\`
 
 ## Polling
@@ -449,10 +450,10 @@ swarm-task new "Task title" -p high -c complex
 Check for new tasks periodically. When idle:
 \`\`\`bash
 # Check every 30-60 seconds when not busy
-swarm-task list pending
+swarm-job list pending
 \`\`\`
 
-The swarm-watcher daemon will also send notifications via tmux when:
+The swarm-daemon will also send notifications via tmux when:
 - New tasks are available for your tier
 - Tasks you depend on are completed (unblocked)
 
@@ -488,7 +489,9 @@ result: null
 
 Check swarm activity:
 \`\`\`bash
-tail -30 $SHARED_CONTEXT/events.log
+swarm-daemon log              # View recent events (preferred)
+swarm-daemon log -f           # Follow events in real-time
+tail -30 $SHARED_CONTEXT/events.log  # Direct file access (alternative)
 \`\`\`
 
 Signal another agent via tmux:
@@ -509,8 +512,7 @@ tmux send-keys -t $SESSION:agents.N Enter
 Close the swarm:
 If the customer types shut down, gracefully wind down:
 1. Finish current task
-2. Log shutdown event
-3. Exit process
+2. Exit process (shutdown logged automatically)
 \`\`\`bash
 launch-agents stop
 \`\`\`
@@ -525,7 +527,7 @@ For each task:
 1. Ensure branch is up to date: git pull --rebase origin main
 2. Make changes, commit with clear messages
 3. Create PR when complete: gh pr create
-4. Log completion to events.log
+4. Mark job complete: swarm-job complete <job-id> (events logged automatically)
 
 ## Principles
 
