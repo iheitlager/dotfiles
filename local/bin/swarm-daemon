@@ -2156,25 +2156,31 @@ def main():
         print_usage()
         sys.exit(0)
 
-    command = sys.argv[1]
+    # Parse --context option first (can appear before or after command)
+    context_override = None
+    remaining_args = []
+    i = 1
+    while i < len(sys.argv):
+        if sys.argv[i] == "--context":
+            if i + 1 < len(sys.argv):
+                context_override = sys.argv[i + 1]
+                i += 2  # Skip both --context and its value
+            else:
+                print("Error: --context requires a repository name", file=sys.stderr)
+                sys.exit(1)
+        elif sys.argv[i] in ("-h", "--help"):
+            print_usage()
+            sys.exit(0)
+        else:
+            remaining_args.append(sys.argv[i])
+            i += 1
 
-    if command in ("-h", "--help"):
+    # Get command from remaining args
+    if not remaining_args:
         print_usage()
         sys.exit(0)
 
-    # Parse --context option if provided
-    context_override = None
-    args_copy = sys.argv[2:]
-    if "--context" in args_copy:
-        try:
-            idx = args_copy.index("--context")
-            if idx + 1 < len(args_copy):
-                context_override = args_copy[idx + 1]
-                # Remove --context and its value from argv for further processing
-                sys.argv = sys.argv[:idx + 2] + sys.argv[idx + 4:]
-        except (ValueError, IndexError):
-            print("Error: --context requires a repository name", file=sys.stderr)
-            sys.exit(1)
+    command = remaining_args[0]
 
     # Initialize context
     context = SwarmContext(context_override=context_override)
@@ -2209,12 +2215,12 @@ def main():
     elif command == "hook":
         # Hook mode - MUST BE FAST
         log = setup_logging(daemon_mode=True, context=context)
-        if len(sys.argv) < 3:
+        if len(remaining_args) < 2:
             print("Usage: swarm-daemon hook <EVENT_TYPE> [args...]", file=sys.stderr)
             sys.exit(1)
 
-        event_type = sys.argv[2]
-        args = sys.argv[3:]
+        event_type = remaining_args[1]
+        args = remaining_args[2:]
         handle_hook(context, event_type, args)
 
     else:
