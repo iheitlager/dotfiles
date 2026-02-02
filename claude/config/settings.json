@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.dotfiles/claude/config/hooks/swarm-agent-hook.py register"
+            "command": "~/.dotfiles/claude/config/hooks/swarm-hook.py register"
           }
         ]
       }
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.dotfiles/claude/config/hooks/swarm-agent-hook.py hook"
+            "command": "~/.dotfiles/claude/config/hooks/swarm-hook.py hook"
           }
         ]
       }

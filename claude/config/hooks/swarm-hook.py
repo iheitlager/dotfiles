@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-Unified swarm agent hook for Claude Code
+swarm-hook - Unified hook for swarm-daemon integration with Claude Code
 
 Usage:
-    swarm-agent-hook.py register    # SessionStart: Register agent
-    swarm-agent-hook.py hook         # PostToolUse: Track requests
+    swarm-hook.py register    # SessionStart: Register agent
+    swarm-hook.py hook        # PostToolUse: Track requests
+    swarm-hook.py -h          # Show this help
 
 Context = git repository (one daemon per repo)
 Agent ID = <repo> (simple for now, can extend to <repo>.agent-N)
+State files: ~/.local/state/agent-context/<repo>/
+
+Part of the swarm suite:
+- swarm-daemon: Background daemon for monitoring and coordination
+- swarm-hook: Claude Code hook for event emission
+- swarm-context: (future) Context management utilities
 """
 
 import json
@@ -128,21 +135,48 @@ def cmd_hook():
     print(json.dumps({"decision": "allow"}))
 
 
+def print_help():
+    """Print help message."""
+    print(__doc__)
+    print("\nCommands:")
+    print("  register    Register agent on session start (SessionStart hook)")
+    print("              Emits: AGENT_STARTUP")
+    print("              Returns: agent ID and context in environment")
+    print()
+    print("  hook        Track requests during session (PostToolUse hook)")
+    print("              Emits: REQUEST events with tool, pid, context")
+    print("              Always allows operation")
+    print()
+    print("Options:")
+    print("  -h, --help  Show this help message")
+    print()
+    print("Files updated:")
+    print("  ~/.local/state/agent-context/<repo>/events.log")
+    print("  ~/.local/state/agent-context/<repo>/daemon/agent-state.yaml")
+    print()
+    print("Environment:")
+    print("  AGENT_ID       Agent identifier (set by register, used by hook)")
+    print("  AGENT_CONTEXT  Context/repo name (set by register)")
+
+
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
-        print("Usage: swarm-agent-hook.py {register|hook}", file=sys.stderr)
+        print("Usage: swarm-hook.py {register|hook|-h}", file=sys.stderr)
         sys.exit(1)
 
     command = sys.argv[1]
 
-    if command == "register":
+    if command in ("-h", "--help"):
+        print_help()
+        sys.exit(0)
+    elif command == "register":
         cmd_register()
     elif command == "hook":
         cmd_hook()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
-        print("Usage: swarm-agent-hook.py {register|hook}", file=sys.stderr)
+        print("Usage: swarm-hook.py {register|hook|-h}", file=sys.stderr)
         sys.exit(1)
 
 
