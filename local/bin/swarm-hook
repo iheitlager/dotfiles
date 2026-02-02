@@ -76,7 +76,7 @@ def cmd_register():
     context = get_git_repo_context()
     if not context:
         # Not in a git repo - allow but don't register
-        print(json.dumps({"decision": "allow"}), flush=True)
+        print(json.dumps({}), flush=True)
         return
 
     agent_id = get_agent_id(context)
@@ -85,15 +85,9 @@ def cmd_register():
     metadata = {"context": context}
     emit_event(agent_id, context, "AGENT_STARTUP", metadata)
 
-    # Return response with agent ID and context in environment
-    response = {
-        "decision": "allow",
-        "env": {
-            "AGENT_ID": agent_id,
-            "AGENT_CONTEXT": context
-        }
-    }
-    print(json.dumps(response), flush=True)
+    # Return empty response (approve and continue)
+    # Note: Setting env vars via hooks is not supported by Claude Code's schema
+    print(json.dumps({}), flush=True)
 
 
 def cmd_hook():
@@ -102,17 +96,17 @@ def cmd_hook():
     try:
         hook_input = json.loads(sys.stdin.read())
     except json.JSONDecodeError:
-        print(json.dumps({"decision": "allow"}), flush=True)
+        print(json.dumps({}), flush=True)
         return
     except Exception:
         # Catch any other stdin reading errors
-        print(json.dumps({"decision": "allow"}), flush=True)
+        print(json.dumps({}), flush=True)
         return
 
     # Get context and agent ID
     context = get_git_repo_context()
     if not context:
-        print(json.dumps({"decision": "allow"}), flush=True)
+        print(json.dumps({}), flush=True)
         return
 
     agent_id = get_agent_id(context)
@@ -135,8 +129,8 @@ def cmd_hook():
     #     emit_event(agent_id, context, "TOOL_EDIT", {...})
     # etc.
 
-    # Always allow the operation
-    print(json.dumps({"decision": "allow"}), flush=True)
+    # Always allow the operation (empty response = continue)
+    print(json.dumps({}), flush=True)
 
 
 def print_help():
@@ -184,8 +178,8 @@ def main():
             print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
             sys.exit(1)
     except Exception:
-        # Hooks should never fail - always allow the operation
-        print(json.dumps({"decision": "allow"}), flush=True)
+        # Hooks should never fail - always allow the operation (empty response = continue)
+        print(json.dumps({}), flush=True)
         sys.exit(0)
 
 
