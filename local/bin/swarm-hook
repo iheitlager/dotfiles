@@ -122,31 +122,62 @@ def cmd_hook():
     }
     emit_event(agent_id, context, "REQUEST", metadata)
 
-    # Phase 3: Tool-specific event logic (DISABLED - TODO: Enable in Phase C of #14)
-    # Currently emitting generic REQUEST event for all tools
-    # To enable Phase 3, uncomment below and emit specific events:
-    # - TOOL_READ for Read tool (with file metadata)
-    # - TOOL_EDIT for Edit tool (with file + lines changed)
-    # - TOOL_WRITE for Write tool (with file + lines)
-    # - TOOL_BASH for Bash tool (detect git/test/lint from command)
-    # - TOOL_GREP for Grep tool (with pattern)
-    # - TOOL_GLOB for Glob tool (with pattern)
-    # - TOOL_TASK for Task tool (with subagent type)
-    #
-    # Example (Phase C implementation):
-    # if tool_name == "Read":
-    #     metadata = {"file": hook_input.get("file_path"), "pid": os.getpid(), "context": context}
-    #     emit_event(agent_id, context, "TOOL_READ", metadata)
-    # elif tool_name == "Edit":
-    #     metadata = {"file": hook_input.get("file_path"), "pid": os.getpid(), "context": context}
-    #     emit_event(agent_id, context, "TOOL_EDIT", metadata)
-    # elif tool_name == "Bash":
-    #     command = hook_input.get("command", "")
-    #     # Detect git/test/lint operations from command
-    #     if "git commit" in command:
-    #         emit_event(agent_id, context, "GIT_COMMIT", {"command": command[:100], "pid": os.getpid(), "context": context})
-    #     # ... etc for other special commands
-    # ... etc for other tools
+    # Phase 3: Tool-specific event emission (ACTIVE - Enabled in Phase C of #14)
+    # Emit specialized events based on tool type
+    if tool_name == "Read":
+        file_path = hook_input.get("file_path", "unknown")
+        metadata = {"file": file_path, "pid": os.getpid(), "context": context}
+        emit_event(agent_id, context, "TOOL_READ", metadata)
+
+    elif tool_name == "Edit":
+        file_path = hook_input.get("file_path", "unknown")
+        # Try to estimate lines changed from old_string/new_string
+        old_string = hook_input.get("old_string", "")
+        new_string = hook_input.get("new_string", "")
+        lines_changed = abs(len(new_string.splitlines()) - len(old_string.splitlines()))
+        metadata = {"file": file_path, "lines": lines_changed, "pid": os.getpid(), "context": context}
+        emit_event(agent_id, context, "TOOL_EDIT", metadata)
+
+    elif tool_name == "Write":
+        file_path = hook_input.get("file_path", "unknown")
+        content = hook_input.get("content", "")
+        lines = len(content.splitlines())
+        metadata = {"file": file_path, "lines": lines, "pid": os.getpid(), "context": context}
+        emit_event(agent_id, context, "TOOL_WRITE", metadata)
+
+    elif tool_name == "Bash":
+        command = hook_input.get("command", "")
+        # Detect specialized commands (git, test, lint)
+        if "git commit" in command:
+            emit_event(agent_id, context, "GIT_COMMIT", {"command": command[:100], "pid": os.getpid(), "context": context})
+        elif "git push" in command:
+            emit_event(agent_id, context, "GIT_PUSH", {"command": command[:100], "pid": os.getpid(), "context": context})
+        elif "git rebase" in command:
+            emit_event(agent_id, context, "GIT_REBASE", {"command": command[:100], "pid": os.getpid(), "context": context})
+        # Detect test commands
+        elif any(test_cmd in command for test_cmd in ["pytest", "npm test", "make test", "cargo test", "go test"]):
+            emit_event(agent_id, context, "TEST_STARTED", {"command": command[:100], "pid": os.getpid(), "context": context})
+        # Detect lint commands
+        elif any(lint_cmd in command for lint_cmd in ["ruff", "eslint", "mypy", "pylint", "flake8", "black"]):
+            emit_event(agent_id, context, "LINT_STARTED", {"command": command[:100], "pid": os.getpid(), "context": context})
+        else:
+            # Generic bash command
+            emit_event(agent_id, context, "TOOL_BASH", {"command": command[:100], "pid": os.getpid(), "context": context})
+
+    elif tool_name == "Grep":
+        pattern = hook_input.get("pattern", "unknown")
+        metadata = {"pattern": pattern, "pid": os.getpid(), "context": context}
+        emit_event(agent_id, context, "TOOL_GREP", metadata)
+
+    elif tool_name == "Glob":
+        pattern = hook_input.get("pattern", "unknown")
+        metadata = {"pattern": pattern, "pid": os.getpid(), "context": context}
+        emit_event(agent_id, context, "TOOL_GLOB", metadata)
+
+    elif tool_name == "Task":
+        subagent = hook_input.get("subagent_type", "unknown")
+        metadata = {"subagent": subagent, "pid": os.getpid(), "context": context}
+        emit_event(agent_id, context, "TOOL_TASK", metadata)
 
     # Always allow the operation (empty response = continue)
     print(json.dumps({}), flush=True)

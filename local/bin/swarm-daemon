@@ -865,26 +865,25 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
         # Handlers exist (lines 936-1001), skills updated to emit events
         "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
 
-        # Phase 3: Semantic events (DISABLED - TODO: Enable in Phase C of #14)
-        # Handlers exist (lines 1003-1042), infrastructure ready (~70% implemented)
-        # Requires: Uncomment tool-specific emission in swarm-hook (lines 125-130)
-        #
-        # # Task tracking
-        # "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
-        #
-        # # Tool usage (granular)
-        # "TOOL_READ", "TOOL_EDIT", "TOOL_WRITE", "TOOL_BASH",
-        # "TOOL_GREP", "TOOL_GLOB", "TOOL_TASK",
-        #
-        # # Git operations
-        # "GIT_COMMIT", "GIT_PUSH", "GIT_REBASE", "GIT_CONFLICT",
-        #
-        # # Test/Build
-        # "TEST_STARTED", "TEST_PASSED", "TEST_FAILED",
-        # "LINT_STARTED", "LINT_PASSED", "LINT_FAILED",
-        #
-        # # Agent state
-        # "AGENT_THINKING", "AGENT_WAITING", "AGENT_ERROR"
+        # Phase 3: Semantic events (ACTIVE - Enabled in Phase C of #14)
+        # Handlers exist (lines 1003-1042), tool-specific emission enabled in swarm-hook
+
+        # Task tracking
+        "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
+
+        # Tool usage (granular)
+        "TOOL_READ", "TOOL_EDIT", "TOOL_WRITE", "TOOL_BASH",
+        "TOOL_GREP", "TOOL_GLOB", "TOOL_TASK",
+
+        # Git operations
+        "GIT_COMMIT", "GIT_PUSH", "GIT_REBASE", "GIT_CONFLICT",
+
+        # Test/Build
+        "TEST_STARTED", "TEST_PASSED", "TEST_FAILED",
+        "LINT_STARTED", "LINT_PASSED", "LINT_FAILED",
+
+        # Agent state
+        "AGENT_THINKING", "AGENT_WAITING", "AGENT_ERROR"
     }
     if event_type not in valid_events:
         print(f"Warning: Unknown event type: {event_type}", file=sys.stderr)
