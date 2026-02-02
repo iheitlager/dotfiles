@@ -513,16 +513,38 @@ swarm-daemon --context <repo>      # Specify context from outside git repo
 - `JOB_PR_MERGED` - When PR merged via `/merge` skill
 - `JOB_COMPLETED` - When job marked complete
 
+**Phase 3 (Semantic Events):**
+- **Tool Events:** TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK
+- **Git Events:** GIT_COMMIT, GIT_PUSH, GIT_REBASE, GIT_CONFLICT
+- **Test/Lint Events:** TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_STARTED, LINT_PASSED, LINT_FAILED
+- **Task Events:** TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED
+- **Agent State:** AGENT_THINKING, AGENT_WAITING, AGENT_ERROR
+
 **Implementation Status:**
 - ✅ **Phase 1 Complete** - Basic agent lifecycle and request tracking
 - ✅ **Phase 2 Complete** - Job lifecycle tracking enabled (see job metrics below)
-- 🔨 **Phase 3 Ready** (~70% implemented, disabled) - Semantic event infrastructure exists but events commented out. See issue #14 Phase C.
+- ✅ **Phase 3 Complete** - Semantic event tracking enabled (see event mappings below)
 
-**Planned Events (Phase 3 - see #14 for enablement roadmap):**
-- **Tool Events:** TOOL_READ, TOOL_EDIT, TOOL_WRITE, TOOL_BASH, TOOL_GREP, TOOL_GLOB, TOOL_TASK
-- **Git Events:** GIT_COMMIT, GIT_PUSH, GIT_REBASE
-- **Test Events:** TEST_STARTED, TEST_PASSED, TEST_FAILED, LINT_*
-- **Task Events:** TASK_CREATED, TASK_STARTED, TASK_COMPLETED, TASK_BLOCKED
+**Event Mappings (Phase 3):**
+
+Phase 3 automatically emits semantic events based on tool usage:
+
+| Claude Tool | Event Emitted | Metadata Captured |
+|-------------|---------------|-------------------|
+| Read | TOOL_READ | File path |
+| Edit | TOOL_EDIT | File path, lines changed |
+| Write | TOOL_WRITE | File path, lines written |
+| Bash | TOOL_BASH (or specialized) | Command (first 100 chars) |
+| Bash (git commit) | GIT_COMMIT | Git command |
+| Bash (git push) | GIT_PUSH | Git command |
+| Bash (git rebase) | GIT_REBASE | Git command |
+| Bash (pytest, npm test, etc.) | TEST_STARTED | Test command |
+| Bash (ruff, eslint, mypy, etc.) | LINT_STARTED | Lint command |
+| Grep | TOOL_GREP | Search pattern |
+| Glob | TOOL_GLOB | File pattern |
+| Task | TOOL_TASK | Subagent type |
+
+All events include: agent ID, timestamp, process ID, and context (repo name).
 
 **Job Metrics (Phase 2):**
 
@@ -543,7 +565,11 @@ swarm-daemon log | grep JOB_     # See all job lifecycle events
 **Integration with Claude Code:**
 The daemon integrates with Claude Code via `swarm-hook` (Python hooks):
 - `SessionStart` → `swarm-hook register` → `AGENT_STARTUP` event
-- `PostToolUse` → `swarm-hook hook` → `REQUEST` event
+- `PostToolUse` → `swarm-hook hook` → `REQUEST` + tool-specific events (Phase 3)
+
+Every tool use triggers two events:
+1. Generic `REQUEST` event (Phase 1 - for basic tracking)
+2. Tool-specific event (Phase 3 - for detailed activity analysis)
 
 Configuration in `~/.dotfiles/claude/config/settings.json`:
 ```json
@@ -580,16 +606,19 @@ The swarm-daemon supports progressive event tracking through a 3-phase enablemen
 |-------|--------|--------|---------|
 | **Phase 1** | ✅ Active | AGENT_STARTUP, REQUEST | Basic agent lifecycle |
 | **Phase 2** | ✅ Active | JOB_CLAIMED, JOB_PR_READY, JOB_PR_MERGED, JOB_COMPLETED | Job lifecycle tracking |
-| **Phase 3** | 🔨 Ready | TOOL_*, GIT_*, TEST_*, TASK_* | Fine-grained activity tracking |
+| **Phase 3** | ✅ Active | TOOL_*, GIT_*, TEST_*, TASK_* | Fine-grained activity tracking |
 
-**Why phased?** Phase 3 infrastructure exists (~70% implemented) but is deliberately disabled to:
-- Avoid high event volume
-- Keep system performant
-- Allow opt-in when detailed activity tracking is needed
+**All phases enabled!** The swarm-daemon now provides comprehensive visibility into:
+- **Phase 1:** When agents start and what tools they use
+- **Phase 2:** Job lifecycle from claim to PR to merge with time metrics
+- **Phase 3:** Detailed activity including file operations, git commands, tests, and more
 
-**Phase 2 enabled:** Job lifecycle events now track time-to-PR, time-to-merge, and per-agent job metrics. See `/take`, `/pr`, and `/merge` skills for automatic event emission.
-
-**To enable Phase 3:** Follow the implementation plan in issue #14 Phase C
+**Event Volume:** Phase 3 generates high event volume. Use filtering to focus:
+```bash
+swarm-daemon log --agent agent-1      # Single agent
+swarm-daemon log | grep TOOL_EDIT     # Specific event type
+swarm-daemon log | grep GIT_          # All git operations
+```
 
 ### Communication Summary
 
