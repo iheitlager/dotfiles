@@ -364,13 +364,22 @@ def calculate_duration_seconds(start_iso: str, end_iso: str) -> Optional[int]:
 # LOGGING SETUP (XDG compliant with rotation)
 # =============================================================================
 
-def setup_logging(daemon_mode: bool = False):
-    """Configure logging to XDG_STATE_HOME with rotation"""
-    xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
-    log_dir = Path(xdg_state) / "swarm-daemon"
-    log_dir.mkdir(parents=True, exist_ok=True)
+def setup_logging(daemon_mode: bool = False, context: Optional['SwarmContext'] = None):
+    """Configure logging to context directory with rotation
 
-    log_file = log_dir / "swarm-daemon.log"
+    Logs go to: ~/.local/state/agent-context/<repo>/daemon/swarm-daemon.log
+    """
+    if context:
+        # Use context-specific log location
+        log_dir = context.state_dir / "daemon"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "swarm-daemon.log"
+    else:
+        # Fallback for early initialization (before context available)
+        xdg_state = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))
+        log_dir = Path(xdg_state) / "swarm-daemon"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "swarm-daemon.log"
 
     # Rotating file handler: 1MB max, keep 3 backups
     handler = logging.handlers.RotatingFileHandler(
@@ -2172,34 +2181,34 @@ def main():
 
     # Route to appropriate mode
     if command == "daemon":
-        log = setup_logging(daemon_mode=True)
+        log = setup_logging(daemon_mode=True, context=context)
         daemon = SwarmDaemon(context)
         daemon.run()
 
     elif command == "repl":
-        log = setup_logging(daemon_mode=False)
+        log = setup_logging(daemon_mode=False, context=context)
         repl = SwarmREPL(context)
         repl.run()
 
     elif command == "status":
-        log = setup_logging(daemon_mode=False)
+        log = setup_logging(daemon_mode=False, context=context)
         run_cli_status(context)
 
     elif command == "agents":
-        log = setup_logging(daemon_mode=False)
+        log = setup_logging(daemon_mode=False, context=context)
         run_cli_agents(context)
 
     elif command == "cleanup":
-        log = setup_logging(daemon_mode=False)
+        log = setup_logging(daemon_mode=False, context=context)
         run_cli_cleanup(context)
 
     elif command == "log":
-        log = setup_logging(daemon_mode=False)
+        log = setup_logging(daemon_mode=False, context=context)
         run_cli_log(context)
 
     elif command == "hook":
         # Hook mode - MUST BE FAST
-        log = setup_logging(daemon_mode=True)
+        log = setup_logging(daemon_mode=True, context=context)
         if len(sys.argv) < 3:
             print("Usage: swarm-daemon hook <EVENT_TYPE> [args...]", file=sys.stderr)
             sys.exit(1)
