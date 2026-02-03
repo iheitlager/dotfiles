@@ -32,12 +32,23 @@ if [ -d "/home/agent/.config/claude" ] && [ "$(ls -A /home/agent/.config/claude 
     echo "  → ~/.config/claude stays in sync with host"
 
     # Inject OAuth credentials from keychain if available
+    # Try multiple locations where Electron/Claude Code might look for credentials
     if [ -f "/tmp/host-claude-oauth.json" ]; then
-        mkdir -p /home/agent/.config/Claude\ Code
+        # Location 1: XDG config (most likely for Linux Electron apps)
+        mkdir -p /home/agent/.config/claude
+        cp /tmp/host-claude-oauth.json /home/agent/.config/claude/oauth-credentials.json
+        chmod 600 /home/agent/.config/claude/oauth-credentials.json
+
+        # Location 2: Claude Code specific directory (Electron app data)
+        mkdir -p "/home/agent/.config/Claude Code"
         cp /tmp/host-claude-oauth.json "/home/agent/.config/Claude Code/credentials.json"
-        chown -R agent:agent "/home/agent/.config/Claude Code" 2>/dev/null || true
         chmod 600 "/home/agent/.config/Claude Code/credentials.json"
+
+        # Fix ownership
+        chown -R agent:agent /home/agent/.config/claude "/home/agent/.config/Claude Code" 2>/dev/null || true
+
         echo "  → OAuth credentials injected from keychain"
+        echo "     (placed in multiple locations for compatibility)"
     else
         echo "  ⚠ No OAuth credentials - will need to authenticate"
     fi
