@@ -135,16 +135,16 @@ require('lazy').setup({
       require('tokyonight').setup({
         style = 'night',
         on_highlights = function(hl, c)
-          -- Enhanced YAML highlighting with distinct colors
-          hl['@field.yaml'] = { fg = c.cyan, bold = true }            -- Keys/tags (cyan, bold)
-          hl['@string.yaml'] = { fg = c.green }                       -- Values (green)
-          hl['@punctuation.delimiter.yaml'] = { fg = c.fg_dark }      -- Colons (subtle)
-          hl['@punctuation.special.yaml'] = { fg = c.blue }           -- Special chars (-, |, >)
-          hl['@number.yaml'] = { fg = c.orange }                      -- Numbers
-          hl['@boolean.yaml'] = { fg = c.magenta }                    -- true/false
-          hl['@constant.yaml'] = { fg = c.purple }                    -- Constants (purple)
-          hl['@comment.yaml'] = { fg = c.yellow, italic = true }      -- Comments (yellow, italic)
-          hl['@tag.yaml'] = { fg = c.red, bold = true }               -- YAML tags (!!str, etc.) (red)
+          -- Subdued YAML highlighting matching tmux theme
+          hl['@field.yaml'] = { fg = c.blue1 }                        -- Keys: muted blue/cyan
+          hl['@string.yaml'] = { fg = c.green2 }                      -- Values: dim green
+          hl['@punctuation.delimiter.yaml'] = { fg = c.dark5 }        -- Colons: very subtle
+          hl['@punctuation.special.yaml'] = { fg = c.blue5 }          -- Special chars: dim blue
+          hl['@number.yaml'] = { fg = c.orange }                      -- Numbers: orange
+          hl['@boolean.yaml'] = { fg = c.purple }                     -- Booleans: muted purple
+          hl['@constant.yaml'] = { fg = c.cyan }                      -- Constants: cyan
+          hl['@comment.yaml'] = { fg = c.comment, italic = true }     -- Comments: dimmed gray
+          hl['@tag.yaml'] = { fg = c.blue }                           -- YAML tags: standard blue
         end,
       })
       vim.cmd.colorscheme('tokyonight-night')
@@ -168,11 +168,13 @@ require('lazy').setup({
   -- Treesitter for better syntax highlighting
   {
     'nvim-treesitter/nvim-treesitter',
+    branch = 'master',  -- Use stable master branch with old API and YAML support
+    lazy = false,
     build = ':TSUpdate',
     config = function()
-      -- API changed: 'configs' -> 'config' in newer versions
-      require('nvim-treesitter.config').setup({
+      require('nvim-treesitter.configs').setup({
         ensure_installed = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown' },
+        sync_install = false,
         auto_install = true,
         highlight = {
           enable = true,

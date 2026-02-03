@@ -21,3 +21,11 @@ alias dclean=__docker_clean
 
 # ctop needs TERM fix for tmux-256color
 alias ctop='TERM=xterm-256color command ctop'
+
+# ctop for Podman - use Podman socket
+alias pm-ctop='TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect --format "{{.ConnectionInfo.PodmanSocket.Path}}" 2>/dev/null)" command ctop'
+
+# Podman machine management
+alias pm-init='podman machine init --cpus 4 --memory 4096 --disk-size 50'
+alias pm-start='podman machine start --rootful'
+alias pm-stop='podman machine stop'

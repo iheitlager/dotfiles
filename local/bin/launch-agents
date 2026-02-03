@@ -726,7 +726,7 @@ cmd_workspace() {
     tmux select-layout -t "$ws_session:monitors" even-horizontal
 
     # Start ctop (left) and htop (right) in monitors window
-    tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color ctop" C-m
+    tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect --format "{{.ConnectionInfo.PodmanSocket.Path}}" 2>/dev/null)" command ctop" C-m
     tmux send-keys -t "$ws_session:monitors.2" "htop" C-m
 
     # Select workspace window, left pane (claude)

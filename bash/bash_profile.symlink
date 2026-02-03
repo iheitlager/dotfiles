@@ -28,6 +28,25 @@ export LESS='-RFX --use-color'
 mkdir -p "$XDG_STATE_HOME/less" 2>/dev/null
 export LESSHISTFILE="$XDG_STATE_HOME/less/history"
 
+# Subdued eza colors - muted palette matching terminal theme
+export EZA_COLORS="\
+di=34:\
+ln=36:\
+ex=32:\
+fi=37:\
+*.md=36:\
+*.txt=37:\
+*.json=33:\
+*.yaml=36:\
+*.yml=36:\
+ga=32:\
+gm=33:\
+gd=31:\
+ur=33:\
+uw=31:\
+ux=32:\
+ue=32"
+
 # Bash history - XDG compliant
 mkdir -p "$XDG_STATE_HOME/bash" 2>/dev/null
 export HISTFILE="$XDG_STATE_HOME/bash/history"
