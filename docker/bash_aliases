@@ -27,5 +27,5 @@ alias pm-ctop='TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect 
 
 # Podman machine management
 alias pm-init='podman machine init --cpus 4 --memory 4096 --disk-size 50'
-alias pm-start='podman machine start --rootful'
+alias pm-start='podman machine set --rootful podman-machine-default && podman machine start'
 alias pm-stop='podman machine stop'
