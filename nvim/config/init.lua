@@ -63,14 +63,28 @@ keymap('v', 'K', ":m '<-2<CR>gv=gv", opts)
 -- Keep cursor centered when scrolling
 keymap('n', '<C-d>', '<C-d>zz', opts)
 keymap('n', '<C-u>', '<C-u>zz', opts)
-keymap('n', 'n', 'nzzzv', opts)
-keymap('n', 'N', 'Nzzzv', opts)
+
+-- Center screen on search (silent - no error if no search pattern)
+keymap('n', 'n', function()
+  if vim.fn.getreg('/') ~= '' then
+    vim.cmd('normal! nzzzv')
+  end
+end, { silent = true, desc = 'Next search result (centered)' })
+
+keymap('n', 'N', function()
+  if vim.fn.getreg('/') ~= '' then
+    vim.cmd('normal! Nzzzv')
+  end
+end, { silent = true, desc = 'Previous search result (centered)' })
 
 -- Quick save
 keymap('n', '<leader>w', '<cmd>w<CR>', opts)
 
 -- Quick quit
 keymap('n', '<leader>q', '<cmd>q<CR>', opts)
+
+-- Toggle line numbers
+keymap('n', '<leader>n', '<cmd>set number! relativenumber!<CR>', { desc = 'Toggle line numbers' })
 
 -- Buffer navigation
 keymap('n', '<S-h>', '<cmd>bprevious<CR>', opts)
@@ -107,9 +121,8 @@ vim.api.nvim_create_autocmd('FileType', {
     vim.opt_local.list = true
     vim.opt_local.listchars = { tab = '→ ', trail = '·', nbsp = '␣' }
 
-    -- Folding by indentation for YAML
-    vim.opt_local.foldmethod = 'indent'
-    vim.opt_local.foldlevelstart = 99  -- Start with all folds open
+    -- Keep all folds open by default (treesitter handles foldmethod)
+    vim.opt_local.foldlevel = 99
   end,
 })
 
@@ -182,6 +195,9 @@ require('lazy').setup({
         },
         indent = { enable = true },
       })
+      -- Enable treesitter-based folding
+      vim.opt.foldmethod = 'expr'
+      vim.opt.foldexpr = 'nvim_treesitter#foldexpr()'
     end,
   },
 

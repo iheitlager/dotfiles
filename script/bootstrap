@@ -72,6 +72,61 @@ setup_xdg_dirs () {
   success "setting up XDG directories"
 }
 
+# Purge stale symlinks from XDG directories
+purge_stale_symlinks () {
+  info 'purging stale symlinks'
+
+  if ! command -v dot &> /dev/null; then
+    fail "dot command not found, skipping symlink purge"
+    return
+  fi
+
+  # Run dot purge with --force to avoid interactive prompt
+  if "$DOTFILES/local/bin/dot" purge --force > /tmp/dotfiles-purge 2>&1; then
+    success "purged stale symlinks"
+  else
+    fail "error purging symlinks, check /tmp/dotfiles-purge"
+    cat /tmp/dotfiles-purge
+  fi
+}
+
+# Validate no conflicting directory structures
+# For example, both config/nvim and nvim/config should not exist
+validate_config_structure () {
+  info 'validating config directory structure'
+
+  local conflicts=()
+
+  # Check for topic-specific config directories
+  for topic_config in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config' ! -path "$DOTFILES/config"); do
+    local topic=$(basename $(dirname "$topic_config"))
+    local general_config="$DOTFILES/config/$topic"
+
+    if [ -d "$general_config" ]; then
+      conflicts+=("$topic")
+    fi
+  done
+
+  if [ ${#conflicts[@]} -gt 0 ]; then
+    echo ""
+    fail "Conflicting config directory structures detected!"
+    echo ""
+    echo "The following topics have BOTH config/<topic> and <topic>/config:"
+    echo ""
+    for topic in "${conflicts[@]}"; do
+      echo "  ❌ config/$topic  (should be removed)"
+      echo "  ✅ $topic/config  (has precedence)"
+      echo ""
+    done
+    echo "Resolution: Remove the config/<topic> directories listed above"
+    echo "  Example: rm -rf $DOTFILES/config/nvim"
+    echo ""
+    exit 1
+  fi
+
+  success "no conflicting config structures"
+}
+
 # git gitconfig generator - creates local config with user info and signing key
 setup_gitconfig () {
   local local_gitconfig="$HOME/.local/gitconfig"
@@ -296,6 +351,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 setup_xdg_dirs
+purge_stale_symlinks
+validate_config_structure
 setup_gitconfig $FORCE_GIT
 if [ "$SKIP_BREW" != "true" ]; then
   install_brew_packages
