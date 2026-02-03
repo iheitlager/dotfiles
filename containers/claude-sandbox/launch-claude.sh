@@ -22,11 +22,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Copy credentials from host mount (if exists) to agent home
-# This ensures credentials are isolated and not shared with host
-# XDG-compliant: Uses ~/.config/claude (primary) and ~/.claude.json (legacy)
-if [ -d "/tmp/host-claude-creds" ]; then
-    echo "Copying Claude credentials from host (XDG-compliant)..."
+# Handle Claude credentials (XDG-compliant)
+# Two approaches:
+#   1. Direct mount (preferred): ~/.config/claude mounted to /home/agent/.config/claude
+#   2. Copy-on-start (legacy): /tmp/host-claude-creds copied to /home/agent/.config/claude
+
+if [ -d "/home/agent/.config/claude" ] && [ "$(ls -A /home/agent/.config/claude 2>/dev/null)" ]; then
+    # Direct mount detected - credentials already at correct location
+    echo "✓ Claude credentials mounted directly (XDG-compliant)"
+    if [ -f "/home/agent/.claude.json" ]; then
+        echo "  ✓ ~/.claude.json mounted"
+    fi
+    echo "  → Credentials stay in sync with host"
+elif [ -d "/tmp/host-claude-creds" ]; then
+    # Legacy copy-on-start approach for backward compatibility
+    echo "Copying Claude credentials from host (legacy mode)..."
     mkdir -p /home/agent/.config/claude
 
     # Copy XDG config directory (contains actual config files)
@@ -47,7 +57,8 @@ if [ -d "/tmp/host-claude-creds" ]; then
 
     echo "✓ Credentials copied successfully (isolated from host)"
 else
-    echo "No host credentials found - you'll need to login"
+    echo "⚠ No credentials found - you'll need to login"
+    echo "  Run 'claude' on your host first to authenticate"
 fi
 
 # Set up PATH for agent user (includes ~/.local/bin for Claude)

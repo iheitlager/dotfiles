@@ -95,33 +95,59 @@ cs4                     # Four sessions
 
 ### Authentication Setup
 
-**Credentials are COPIED, not mounted** - Your host credentials remain isolated and protected!
-
 **First Run**: Authenticate once on your host system:
 
 1. Outside the container, run `claude` on your host to authenticate
 2. Credentials are saved to `~/.config/claude/` and `~/.claude.json` on your **host** (XDG-compliant)
 
-**Subsequent Runs**: Credentials are automatically copied into each container instance!
+**Subsequent Runs**: Credentials are automatically available in the container!
 
-### How It Works (Copy-on-Start, Default ✓)
+### How It Works
 
-**Recommended** - Credentials are copied from host into each container at startup:
+#### Option 1: Direct Mount (Default, Recommended ✓)
+
+**Simplest approach** - Credentials are mounted directly from host:
 
 ```bash
-make run          # Credentials copied from ~/.config/claude to container
+make run          # Credentials mounted to ~/.config/claude in container
 ```
 
 **Pros**:
-- Host credentials isolated and protected from container changes
-- No authentication needed in container
-- Safe for parallel instances
+- Simplest setup (single mount, no copy step)
+- Credentials always in sync with host
+- Changes persist automatically
+- Less overhead
 
 **Cons**:
-- Changes inside container don't persist (but this is usually what you want!)
-- Need to re-authenticate on host if credentials expire
+- Credentials not isolated from container (but mounted read-only)
+- Requires proper file permissions (usually not an issue)
 
-### Manual Copy (Advanced)
+**Technical Details**:
+```bash
+# Direct mount (XDG-compliant)
+podman run -v ~/.config/claude:/home/agent/.config/claude:ro \
+           -v ~/.claude.json:/home/agent/.claude.json:ro ...
+```
+
+#### Option 2: Copy-on-Start (Legacy)
+
+**More isolated** - Credentials are copied from host into container at startup:
+
+```bash
+make run-copy     # Credentials copied from ~/.config/claude to container
+```
+
+**Pros**:
+- Host credentials fully isolated from container changes
+- Works even with restrictive file permissions
+- Safe for untrusted workloads
+
+**Cons**:
+- More complex (mount + copy step)
+- Changes inside container don't persist
+- Slight overhead on startup
+
+#### Option 3: Manual Copy (Advanced)
 
 If you need to manually copy credentials to a running container:
 
@@ -161,13 +187,13 @@ make build
 
 ### Run Single Session
 
-XDG-compliant mounts:
+Direct mount (XDG-compliant, recommended):
 
 ```bash
 podman run -it --rm \
   -v $(pwd):/workspace/$(basename $(pwd)) \
-  -v ~/.config/claude:/tmp/host-claude-creds/config:ro \
-  -v ~/.claude.json:/tmp/host-claude-creds/claude.json:ro \
+  -v ~/.config/claude:/home/agent/.config/claude:ro \
+  -v ~/.claude.json:/home/agent/.claude.json:ro \
   -v ~/.cache/uv:/home/agent/.cache/uv \
   --network="host" \
   -w /workspace/$(basename $(pwd)) \
@@ -179,8 +205,8 @@ podman run -it --rm \
 ```bash
 podman run -it --rm \
   -v $(pwd):/workspace/$(basename $(pwd)) \
-  -v ~/.config/claude:/tmp/host-claude-creds/config:ro \
-  -v ~/.claude.json:/tmp/host-claude-creds/claude.json:ro \
+  -v ~/.config/claude:/home/agent/.config/claude:ro \
+  -v ~/.claude.json:/home/agent/.claude.json:ro \
   -v ~/.cache/uv:/home/agent/.cache/uv \
   --network="host" \
   -w /workspace/$(basename $(pwd)) \
@@ -297,13 +323,13 @@ All other domains are blocked.
 # Using Makefile (recommended)
 make run-firewall
 
-# Or manually (XDG-compliant)
+# Or manually (XDG-compliant with direct mount)
 podman run -it --rm \
   -e ENABLE_FIREWALL=1 \
   --privileged \
   -v $(pwd):/workspace/$(basename $(pwd)) \
-  -v ~/.config/claude:/tmp/host-claude-creds/config:ro \
-  -v ~/.claude.json:/tmp/host-claude-creds/claude.json:ro \
+  -v ~/.config/claude:/home/agent/.config/claude:ro \
+  -v ~/.claude.json:/home/agent/.claude.json:ro \
   -v ~/.cache/uv:/home/agent/.cache/uv \
   --network="host" \
   -w /workspace/$(basename $(pwd)) \
@@ -524,11 +550,13 @@ rm -rf ~/.claude
 
 1. **Use multi-session for parallel work**: `make run-multi N=3`
 2. **XDG-compliant by default**: All config in `~/.config`, cache in `~/.cache`
-3. **UV cache persists**: Shared across all container instances for speed
-4. **Firewall disabled by default**: Works with rootless Podman out of the box
-5. **Mount additional volumes**: Add `-v /path/to/dir:/workspace/dir` to podman run
-6. **Pass args to Claude**: `claude-sandbox --model opus`
-7. **Keep sessions running**: Detach with `Ctrl-b d`, reattach later with `tmux attach -t claude-swarm`
-8. **Use aliases**: `cs2` for quick 2-session launch
-9. **BuildKit required**: Ensures optimal build performance with cache mounts
-10. **Pre-cache packages**: Edit Containerfile to include commonly used Python packages
+3. **Credentials stay in sync**: Direct mount means no re-authentication needed
+4. **Use copy mode for isolation**: `make run-copy` if you want isolated credentials
+5. **UV cache persists**: Shared across all container instances for speed
+6. **Firewall disabled by default**: Works with rootless Podman out of the box
+7. **Mount additional volumes**: Add `-v /path/to/dir:/workspace/dir` to podman run
+8. **Pass args to Claude**: `claude-sandbox --model opus`
+9. **Keep sessions running**: Detach with `Ctrl-b d`, reattach later with `tmux attach -t claude-swarm`
+10. **Use aliases**: `cs2` for quick 2-session launch
+11. **BuildKit required**: Ensures optimal build performance with cache mounts
+12. **Pre-cache packages**: Edit Containerfile to include commonly used Python packages

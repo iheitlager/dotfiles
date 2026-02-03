@@ -4,6 +4,7 @@
       "Read",
       "Edit",
       "Bash(tmux:*)",
+      "Bash(podman:*)",
       "Bash(uv:*)",
       "Bash(gh:*)",
       "Bash(git:*)",
@@ -77,6 +78,7 @@
     ".",
     "~/.local/state/agent-context",
     "~/.dotfiles",
-    "~/wc/**"
+    "~/wc/**",
+    "/workspace/**"
   ]
 }

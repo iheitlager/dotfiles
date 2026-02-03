@@ -24,7 +24,7 @@ See **[~/.dotfiles/docs/claude-sandbox.md](../../docs/claude-sandbox.md)** for c
 ## Features
 
 - Python 3.12 with UV package manager
-- Node.js + Claude CLI
+- Claude CLI (native binary, no Node.js)
 - Multi-agent tmux sessions
 - Optional network firewall
-- Auto-mounted credentials
+- Direct credential mounting (XDG-compliant)
