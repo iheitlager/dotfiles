@@ -1,0 +1,152 @@
+# syntax=docker/dockerfile:1.4
+
+#
+# Stage 1: Builder - Download and prepare binaries
+#
+FROM python:3.12-slim AS builder
+
+ARG CLAUDE_CODE_VERSION=2.1.29
+ARG UV_VERSION=0.5.11
+ARG GIT_DELTA_VERSION=0.18.2
+
+WORKDIR /tmp/build
+
+# Install minimal build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download Claude CLI binary from GCS (official distribution)
+RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+        x86_64) CLAUDE_ARCH="x64" ;; \
+        aarch64) CLAUDE_ARCH="arm64" ;; \
+        arm64) CLAUDE_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+    esac && \
+    GCS_BASE="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
+    wget "${GCS_BASE}/${CLAUDE_CODE_VERSION}/linux-${CLAUDE_ARCH}/claude" \
+        -O /tmp/build/claude && \
+    chmod +x /tmp/build/claude
+
+# Download git-delta
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" \
+        -O /tmp/build/git-delta.deb
+
+# Download UV installer
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh -o /tmp/build/uv-install.sh
+
+#
+# Stage 2: Runtime - Final image
+#
+FROM python:3.12-slim
+
+ARG TZ=Europe/Amsterdam
+ENV TZ="$TZ"
+
+# XDG Base Directory Specification
+ENV XDG_CONFIG_HOME=/home/agent/.config
+ENV XDG_CACHE_HOME=/home/agent/.cache
+ENV XDG_DATA_HOME=/home/agent/.local/share
+ENV XDG_STATE_HOME=/home/agent/.local/state
+
+# Install runtime dependencies (no build-essential, no nodejs/npm)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    less \
+    git \
+    procps \
+    sudo \
+    fzf \
+    zsh \
+    man-db \
+    unzip \
+    gnupg2 \
+    gh \
+    iptables \
+    ipset \
+    iproute2 \
+    dnsutils \
+    aggregate \
+    jq \
+    nano \
+    vim \
+    curl \
+    wget \
+    ca-certificates \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create agent user with proper XDG directories
+RUN useradd -m -s /bin/zsh agent && \
+    mkdir -p \
+        /home/agent/.config \
+        /home/agent/.cache \
+        /home/agent/.local/share \
+        /home/agent/.local/state \
+        /home/agent/.local/bin \
+        /workspace \
+        /commandhistory && \
+    touch /commandhistory/.bash_history && \
+    chown -R agent:agent \
+        /home/agent \
+        /workspace \
+        /commandhistory
+
+# Copy binaries from builder
+COPY --from=builder /tmp/build/git-delta.deb /tmp/git-delta.deb
+COPY --from=builder /tmp/build/uv-install.sh /tmp/uv-install.sh
+# Claude will be installed to ~/.local/bin by the agent user below
+
+# Install git-delta
+RUN dpkg -i /tmp/git-delta.deb && rm /tmp/git-delta.deb
+
+# Environment variables
+ENV DEVCONTAINER=true
+ENV ANTHROPIC_DISABLE_AUTO_UPDATE=1
+ENV SHELL=/bin/zsh
+ENV EDITOR=nano
+ENV VISUAL=nano
+
+WORKDIR /workspace
+
+# Set up zsh as root (for installation)
+ARG ZSH_IN_DOCKER_VERSION=1.2.0
+USER root
+RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh)" -- \
+    -p git \
+    -p fzf \
+    -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
+    -a "source /usr/share/doc/fzf/examples/completion.zsh" \
+    -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
+    -x
+
+# Switch to agent user and install UV
+USER agent
+RUN sh /tmp/uv-install.sh
+ENV PATH="/home/agent/.cargo/bin:/home/agent/.local/bin:$PATH"
+
+# Install Claude to agent's ~/.local/bin (native installation location)
+COPY --from=builder --chown=agent:agent /tmp/build/claude /home/agent/.local/bin/claude
+RUN chmod +x /home/agent/.local/bin/claude
+
+# Clean up as root
+USER root
+RUN rm -f /tmp/uv-install.sh
+
+# Pre-cache common Python packages using BuildKit cache mount
+RUN --mount=type=cache,target=/home/agent/.cache/uv,uid=1000,gid=1000 \
+    uv pip install --system \
+    pip \
+    setuptools \
+    wheel
+
+# Copy and set up scripts
+USER root
+COPY init-firewall.sh /usr/local/bin/
+COPY launch-claude.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/launch-claude.sh
+
+# Container must run as root to set up firewall, then switches to agent
+ENTRYPOINT ["/usr/local/bin/launch-claude.sh"]

@@ -65,3 +65,11 @@ agent-no() {
 
 # ai command is now in local/bin/ai
 # Usage: ai "explain this", ai -f file.py "review", ai --cmd "find large files"
+
+
+# Claude sandbox container aliases
+# claude-sandbox command is in local/bin/claude-sandbox
+alias cs='claude-sandbox'
+alias cs2='claude-sandbox -n2'
+alias cs3='claude-sandbox -n3'
+alias cs4='claude-sandbox -n4'

@@ -1,0 +1,17 @@
+#!/bin/bash
+# Wrapper script to run claude-sandbox container
+# Usage: ./claude-sandbox [-n NUM] [args...]
+#
+# XDG-compliant: Uses ~/.config/claude and ~/.cache/uv
+
+# Ensure XDG directories exist
+mkdir -p ~/.config/claude ~/.cache/uv
+
+exec podman run -it --rm \
+  -v "$(pwd):/workspace/$(basename "$(pwd)")" \
+  -v ~/.config/claude:/tmp/host-claude-creds/config:ro \
+  -v ~/.claude.json:/tmp/host-claude-creds/claude.json:ro \
+  -v ~/.cache/uv:/home/agent/.cache/uv \
+  --network="host" \
+  -w "/workspace/$(basename "$(pwd)")" \
+  claude-sandbox "$@"

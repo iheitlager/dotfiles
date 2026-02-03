@@ -49,13 +49,6 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "model": "sonnet[1m]",
-  "additionalDirectories": [
-    ".",
-    "~/.local/state/agent-context",
-    "~/.dotfiles",
-    "~/wc/**"
-  ],
   "hooks": {
     "SessionStart": [
       {
@@ -79,5 +72,11 @@
         ]
       }
     ]
-  }
+  },
+  "additionalDirectories": [
+    ".",
+    "~/.local/state/agent-context",
+    "~/.dotfiles",
+    "~/wc/**"
+  ]
 }
