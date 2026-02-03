@@ -2,6 +2,15 @@
 
 Podman container for running Claude CLI in an isolated environment with Python 3.12 + UV support.
 
+## ⚠️ Security Notice
+
+**Firewall is disabled by default** for rootless Podman compatibility. This means the container has full network access to all domains.
+
+- ✅ **Trusted workloads**: Use `make run` (default, no firewall)
+- ⚠️ **Untrusted workloads**: Use `make run-firewall` (requires root Podman + `--privileged`)
+
+For maximum security with untrusted code, enable the firewall to restrict network access to only approved domains (GitHub, PyPI, Anthropic API, etc.).
+
 ## Quick Start
 
 ```bash

@@ -1,0 +1,49 @@
+{
+  "name": "Claude Sandbox",
+  "dockerFile": "../Containerfile",
+  "context": "..",
+
+  "mounts": [
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.config/claude,target=/home/agent/.config/claude,type=bind",
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.cache/uv,target=/home/agent/.cache/uv,type=bind"
+  ],
+
+  "containerEnv": {
+    "DEVCONTAINER": "true",
+    "ANTHROPIC_DISABLE_AUTO_UPDATE": "1",
+    "ENABLE_FIREWALL": "0"
+  },
+
+  "remoteUser": "agent",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.shell.linux": "/bin/zsh",
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.formatting.provider": "none",
+        "editor.formatOnSave": false
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ]
+    }
+  },
+
+  "postCreateCommand": "echo '✓ Claude Sandbox container ready. Run: claude'",
+
+  "features": {},
+
+  "forwardPorts": [],
+
+  "portsAttributes": {},
+
+  "onCreateCommand": {
+    "welcome": "echo 'Welcome to Claude Sandbox! Type \"claude\" to start.'"
+  }
+}

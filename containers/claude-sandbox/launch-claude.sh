@@ -1,6 +1,32 @@
 #!/bin/bash
 set -euo pipefail
 
+# Helper function: Run single Claude session
+run_single_session() {
+    exec claude "$@"
+}
+
+# Helper function: Setup tmux swarm with multiple Claude sessions
+setup_tmux_swarm() {
+    local num_sessions=$1
+    shift
+    local args="$*"
+
+    echo "Starting $num_sessions Claude sessions in tmux..."
+
+    # Create tmux session with first claude instance
+    tmux new-session -d -s claude-swarm -n "claude-1" "claude $args"
+
+    # Create additional windows for remaining sessions
+    for ((i=2; i<=num_sessions; i++)); do
+        tmux new-window -t claude-swarm -n "claude-$i" "claude $args"
+    done
+
+    # Select first window and attach
+    tmux select-window -t claude-swarm:1
+    exec tmux attach-session -t claude-swarm
+}
+
 # Parse arguments for session count
 NUM_SESSIONS=1
 START_COMMAND="claude"
@@ -92,22 +118,19 @@ if [ "${ENABLE_FIREWALL:-0}" = "1" ]; then
         # Now switch to agent user for running claude
         echo "Switching to agent user..."
 
-        # If only one session, run claude as agent
+        # Single or multi-session mode
         if [ "$NUM_SESSIONS" -eq 1 ]; then
             exec su - agent -c "export PATH='$AGENT_PATH' && cd '$(pwd)' && claude $*"
+        else
+            # Build tmux command and execute
+            TMUX_CMD="export PATH='$AGENT_PATH' && tmux new-session -d -s claude-swarm -n 'claude-1' 'claude $*'"
+            for ((i=2; i<=NUM_SESSIONS; i++)); do
+                TMUX_CMD="$TMUX_CMD && tmux new-window -t claude-swarm -n 'claude-$i' 'claude $*'"
+            done
+            TMUX_CMD="$TMUX_CMD && tmux select-window -t claude-swarm:1 && tmux attach-session -t claude-swarm"
+            echo "Starting $NUM_SESSIONS Claude sessions in tmux as agent..."
+            exec su - agent -c "cd '$(pwd)' && $TMUX_CMD"
         fi
-
-        # Multi-session mode: start tmux with multiple claude instances
-        echo "Starting $NUM_SESSIONS Claude sessions in tmux as agent..."
-
-        # Build tmux command
-        TMUX_CMD="export PATH='$AGENT_PATH' && tmux new-session -d -s claude-swarm -n 'claude-1' 'claude $*'"
-        for ((i=2; i<=NUM_SESSIONS; i++)); do
-            TMUX_CMD="$TMUX_CMD && tmux new-window -t claude-swarm -n 'claude-$i' 'claude $*'"
-        done
-        TMUX_CMD="$TMUX_CMD && tmux select-window -t claude-swarm:1 && tmux attach-session -t claude-swarm"
-
-        exec su - agent -c "cd '$(pwd)' && $TMUX_CMD"
     else
         echo "ERROR: Container must run as root to initialize firewall"
         echo "Remove --user flag or set ENABLE_FIREWALL=0"
@@ -119,43 +142,27 @@ else
         echo "Firewall disabled (set ENABLE_FIREWALL=1 to enable)"
         echo "Switching to agent user..."
 
-        # If only one session, run claude as agent
+        # Single or multi-session mode
         if [ "$NUM_SESSIONS" -eq 1 ]; then
             exec su - agent -c "export PATH='$AGENT_PATH' && cd '$(pwd)' && claude $*"
+        else
+            # Build tmux command and execute
+            TMUX_CMD="export PATH='$AGENT_PATH' && tmux new-session -d -s claude-swarm -n 'claude-1' 'claude $*'"
+            for ((i=2; i<=NUM_SESSIONS; i++)); do
+                TMUX_CMD="$TMUX_CMD && tmux new-window -t claude-swarm -n 'claude-$i' 'claude $*'"
+            done
+            TMUX_CMD="$TMUX_CMD && tmux select-window -t claude-swarm:1 && tmux attach-session -t claude-swarm"
+            echo "Starting $NUM_SESSIONS Claude sessions in tmux as agent..."
+            exec su - agent -c "cd '$(pwd)' && $TMUX_CMD"
         fi
-
-        # Multi-session mode
-        echo "Starting $NUM_SESSIONS Claude sessions in tmux as agent..."
-        TMUX_CMD="export PATH='$AGENT_PATH' && tmux new-session -d -s claude-swarm -n 'claude-1' 'claude $*'"
-        for ((i=2; i<=NUM_SESSIONS; i++)); do
-            TMUX_CMD="$TMUX_CMD && tmux new-window -t claude-swarm -n 'claude-$i' 'claude $*'"
-        done
-        TMUX_CMD="$TMUX_CMD && tmux select-window -t claude-swarm:1 && tmux attach-session -t claude-swarm"
-        exec su - agent -c "cd '$(pwd)' && $TMUX_CMD"
     fi
 fi
 
 # If we're agent (shouldn't happen with current setup), just run normally
 if [ "$(id -u)" -ne 0 ]; then
-    # If only one session, just run claude directly
     if [ "$NUM_SESSIONS" -eq 1 ]; then
-        exec claude "$@"
+        run_single_session "$@"
+    else
+        setup_tmux_swarm "$NUM_SESSIONS" "$@"
     fi
-
-    # Multi-session mode: start tmux with multiple claude instances
-    echo "Starting $NUM_SESSIONS Claude sessions in tmux..."
-
-    # Create tmux session with first claude instance
-    tmux new-session -d -s claude-swarm -n "claude-1" "claude $*"
-
-    # Create additional windows for remaining sessions
-    for ((i=2; i<=NUM_SESSIONS; i++)); do
-        tmux new-window -t claude-swarm -n "claude-$i" "claude $*"
-    done
-
-    # Select first window
-    tmux select-window -t claude-swarm:1
-
-    # Attach to the session
-    exec tmux attach-session -t claude-swarm
 fi
