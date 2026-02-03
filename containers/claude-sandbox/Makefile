@@ -45,26 +45,35 @@ build:
 
 run:
 	@mkdir -p ~/.config/claude ~/.cache/uv
-	@touch ~/.claude.json 2>/dev/null || true
-	podman run -it --rm \
-		--name $(CONTAINER_NAME) \
-		-v $(PWD):/workspace/$(shell basename $(PWD)) \
-		-v ~/.config/claude:/home/agent/.config/claude \
-		-v ~/.claude.json:/home/agent/.claude.json \
-		-v ~/.cache/uv:/home/agent/.cache/uv \
-		--network="host" \
-		-w /workspace/$(shell basename $(PWD)) \
-		$(IMAGE_NAME)
+	@./sync-credentials.sh || echo "⚠ Could not sync credentials - will need to auth in container"
+	@if [ -f .claude-oauth-creds.json ]; then \
+		podman run -it --rm \
+			--name $(CONTAINER_NAME) \
+			-v $(PWD):/workspace/$(shell basename $(PWD)) \
+			-v ~/.config/claude:/home/agent/.config/claude \
+			-v $(PWD)/.claude-oauth-creds.json:/tmp/host-claude-oauth.json:ro \
+			-v ~/.cache/uv:/home/agent/.cache/uv \
+			--network="host" \
+			-w /workspace/$(shell basename $(PWD)) \
+			$(IMAGE_NAME); \
+	else \
+		podman run -it --rm \
+			--name $(CONTAINER_NAME) \
+			-v $(PWD):/workspace/$(shell basename $(PWD)) \
+			-v ~/.config/claude:/home/agent/.config/claude \
+			-v ~/.cache/uv:/home/agent/.cache/uv \
+			--network="host" \
+			-w /workspace/$(shell basename $(PWD)) \
+			$(IMAGE_NAME); \
+	fi
 
 run-multi:
 	@mkdir -p ~/.config/claude ~/.cache/uv
-	@touch ~/.claude.json 2>/dev/null || true
 	$(eval N := $(or $(N),2))
 	podman run -it --rm \
 		--name $(CONTAINER_NAME) \
 		-v $(PWD):/workspace/$(shell basename $(PWD)) \
 		-v ~/.config/claude:/home/agent/.config/claude \
-		-v ~/.claude.json:/home/agent/.claude.json \
 		-v ~/.cache/uv:/home/agent/.cache/uv \
 		--network="host" \
 		-w /workspace/$(shell basename $(PWD)) \
@@ -72,12 +81,10 @@ run-multi:
 
 run-firewall:
 	@mkdir -p ~/.config/claude ~/.cache/uv
-	@touch ~/.claude.json 2>/dev/null || true
 	podman run -it --rm \
 		--name $(CONTAINER_NAME) \
 		-v $(PWD):/workspace/$(shell basename $(PWD)) \
 		-v ~/.config/claude:/home/agent/.config/claude \
-		-v ~/.claude.json:/home/agent/.claude.json \
 		-v ~/.cache/uv:/home/agent/.cache/uv \
 		--network="host" \
 		--privileged \

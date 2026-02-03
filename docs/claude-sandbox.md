@@ -104,29 +104,38 @@ cs4                     # Four sessions
 
 ### How It Works
 
-#### Option 1: Direct Mount (Default, Recommended ✓)
+#### Option 1: Hybrid Mount (Default, Recommended ✓)
 
-**Simplest approach** - Credentials are mounted directly from host:
+**Best of both worlds** - Directory mounted, legacy file copied:
 
 ```bash
-make run          # Credentials mounted to ~/.config/claude in container
+make run          # Directory mounted, .claude.json copied
 ```
 
+**How it works**:
+- `~/.config/claude/` directory is mounted (stays in sync)
+- `~/.claude.json` file is copied at startup (avoids corruption)
+
+**Why this approach?**
+- Directory mounts handle writes safely
+- Single file mounts can corrupt when app updates them
+- This gives us sync + safety
+
 **Pros**:
-- Simplest setup (single mount, no copy step)
-- Credentials always in sync with host
-- Changes persist automatically
-- Less overhead
+- Directory stays in sync with host
+- No file corruption issues
+- Changes to config persist
+- Safe for writes
 
 **Cons**:
-- Credentials not isolated from container (but mounted read-only)
-- Requires proper file permissions (usually not an issue)
+- Legacy `.claude.json` changes don't sync back (rarely needed)
 
 **Technical Details**:
 ```bash
-# Direct mount (XDG-compliant)
-podman run -v ~/.config/claude:/home/agent/.config/claude:ro \
-           -v ~/.claude.json:/home/agent/.claude.json:ro ...
+# Hybrid mount (XDG-compliant + safe legacy file)
+podman run -v ~/.config/claude:/home/agent/.config/claude \
+           -v ~/.claude.json:/tmp/host-claude.json:ro ...
+# Then copy /tmp/host-claude.json → /home/agent/.claude.json
 ```
 
 #### Option 2: Copy-on-Start (Legacy)
@@ -187,26 +196,28 @@ make build
 
 ### Run Single Session
 
-Direct mount (XDG-compliant, recommended):
+Hybrid mount (directory + copied file, recommended):
 
 ```bash
 podman run -it --rm \
   -v $(pwd):/workspace/$(basename $(pwd)) \
-  -v ~/.config/claude:/home/agent/.config/claude:ro \
-  -v ~/.claude.json:/home/agent/.claude.json:ro \
+  -v ~/.config/claude:/home/agent/.config/claude \
+  -v ~/.claude.json:/tmp/host-claude.json:ro \
   -v ~/.cache/uv:/home/agent/.cache/uv \
   --network="host" \
   -w /workspace/$(basename $(pwd)) \
   claude-sandbox
 ```
 
+**Note:** The legacy `.claude.json` is mounted to `/tmp/` and copied at startup to avoid file corruption.
+
 ### Run Multi-Agent Sessions
 
 ```bash
 podman run -it --rm \
   -v $(pwd):/workspace/$(basename $(pwd)) \
-  -v ~/.config/claude:/home/agent/.config/claude:ro \
-  -v ~/.claude.json:/home/agent/.claude.json:ro \
+  -v ~/.config/claude:/home/agent/.config/claude \
+  -v ~/.claude.json:/tmp/host-claude.json:ro \
   -v ~/.cache/uv:/home/agent/.cache/uv \
   --network="host" \
   -w /workspace/$(basename $(pwd)) \
@@ -323,13 +334,13 @@ All other domains are blocked.
 # Using Makefile (recommended)
 make run-firewall
 
-# Or manually (XDG-compliant with direct mount)
+# Or manually (XDG-compliant with hybrid mount)
 podman run -it --rm \
   -e ENABLE_FIREWALL=1 \
   --privileged \
   -v $(pwd):/workspace/$(basename $(pwd)) \
-  -v ~/.config/claude:/home/agent/.config/claude:ro \
-  -v ~/.claude.json:/home/agent/.claude.json:ro \
+  -v ~/.config/claude:/home/agent/.config/claude \
+  -v ~/.claude.json:/tmp/host-claude.json:ro \
   -v ~/.cache/uv:/home/agent/.cache/uv \
   --network="host" \
   -w /workspace/$(basename $(pwd)) \
@@ -371,6 +382,25 @@ Ensure XDG configuration directories and files exist:
 ```bash
 ls -la ~/.config/claude ~/.claude.json ~/.cache/uv
 ```
+
+### Corrupted .claude.json File
+
+**Error:** `JSON Parse error: Unexpected identifier "tru"`
+
+**Cause:** Direct file mounts can corrupt when apps write to them atomically
+
+**Solution:** Use the default `make run` which uses hybrid mount (directory mounted, file copied)
+
+**If it happens:**
+```bash
+# Container shows backup location, restore on host:
+cp ~/.claude.json.backup.* ~/.claude.json
+
+# Or re-authenticate:
+claude
+```
+
+**Prevention:** Never mount single JSON files directly - always copy them or mount the parent directory
 
 ### Network Issues
 

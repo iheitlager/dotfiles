@@ -22,18 +22,25 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Handle Claude credentials (XDG-compliant)
-# Two approaches:
-#   1. Direct mount (preferred): ~/.config/claude mounted to /home/agent/.config/claude
-#   2. Copy-on-start (legacy): /tmp/host-claude-creds copied to /home/agent/.config/claude
+# Handle Claude credentials (XDG-compliant + OAuth tokens)
+# Modern Claude Code uses ~/.config/claude for settings
+# OAuth tokens need to be injected from host's macOS Keychain
 
 if [ -d "/home/agent/.config/claude" ] && [ "$(ls -A /home/agent/.config/claude 2>/dev/null)" ]; then
-    # Direct mount detected - credentials already at correct location
-    echo "✓ Claude credentials mounted directly (XDG-compliant)"
-    if [ -f "/home/agent/.claude.json" ]; then
-        echo "  ✓ ~/.claude.json mounted"
+    # XDG config directory mounted - modern approach
+    echo "✓ Claude config mounted (XDG-compliant)"
+    echo "  → ~/.config/claude stays in sync with host"
+
+    # Inject OAuth credentials from keychain if available
+    if [ -f "/tmp/host-claude-oauth.json" ]; then
+        mkdir -p /home/agent/.config/Claude\ Code
+        cp /tmp/host-claude-oauth.json "/home/agent/.config/Claude Code/credentials.json"
+        chown -R agent:agent "/home/agent/.config/Claude Code" 2>/dev/null || true
+        chmod 600 "/home/agent/.config/Claude Code/credentials.json"
+        echo "  → OAuth credentials injected from keychain"
+    else
+        echo "  ⚠ No OAuth credentials - will need to authenticate"
     fi
-    echo "  → Credentials stay in sync with host"
 elif [ -d "/tmp/host-claude-creds" ]; then
     # Legacy copy-on-start approach for backward compatibility
     echo "Copying Claude credentials from host (legacy mode)..."
