@@ -5,7 +5,7 @@
 #
 FROM python:3.12-slim AS builder
 
-ARG CLAUDE_CODE_VERSION=2.1.29
+ARG CLAUDE_CODE_VERSION=2.1.31
 ARG UV_VERSION=0.5.11
 ARG GIT_DELTA_VERSION=0.18.2
 
@@ -60,7 +60,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     sudo \
     fzf \
-    zsh \
     man-db \
     unzip \
     gnupg2 \
@@ -79,7 +78,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create agent user with proper XDG directories
-RUN useradd -m -s /bin/zsh agent && \
+RUN useradd -m -s /bin/bash agent && \
     mkdir -p \
         /home/agent/.config \
         /home/agent/.cache \
@@ -105,22 +104,11 @@ RUN dpkg -i /tmp/git-delta.deb && rm /tmp/git-delta.deb
 # Environment variables
 ENV DEVCONTAINER=true
 ENV ANTHROPIC_DISABLE_AUTO_UPDATE=1
-ENV SHELL=/bin/zsh
+ENV SHELL=/bin/bash
 ENV EDITOR=nano
 ENV VISUAL=nano
 
 WORKDIR /workspace
-
-# Set up zsh as root (for installation)
-ARG ZSH_IN_DOCKER_VERSION=1.2.0
-USER root
-RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh)" -- \
-    -p git \
-    -p fzf \
-    -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
-    -a "source /usr/share/doc/fzf/examples/completion.zsh" \
-    -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
-    -x
 
 # Switch to agent user and install UV
 USER agent

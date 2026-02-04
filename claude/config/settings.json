@@ -50,10 +50,6 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "bash /Users/iheitlager/.claude/statusline-command.sh"
-  },
   "hooks": {
     "SessionStart": [
       {
