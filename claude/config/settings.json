@@ -72,16 +72,6 @@
           }
         ]
       }
-    ],
-    "ModelChange": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "swarm-hook model"
-          }
-        ]
-      }
     ]
   },
   "additionalDirectories": [
