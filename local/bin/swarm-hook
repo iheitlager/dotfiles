@@ -5,6 +5,7 @@ swarm-hook - Unified hook for swarm-daemon integration with Claude Code
 Usage:
     swarm-hook register    # SessionStart: Register agent
     swarm-hook hook        # PostToolUse: Track requests
+    swarm-hook model       # ModelChange: Track model switches
     swarm-hook -h          # Show this help
 
 Context = git repository (one daemon per repo)
@@ -87,6 +88,40 @@ def cmd_register():
 
     # Return empty response (approve and continue)
     # Note: Setting env vars via hooks is not supported by Claude Code's schema
+    print(json.dumps({}), flush=True)
+
+
+def cmd_model():
+    """Handle ModelChange: Track model switches."""
+    # Read JSON input from stdin
+    try:
+        hook_input = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, Exception):
+        print(json.dumps({}), flush=True)
+        return
+
+    # Get context and agent ID
+    context = get_git_repo_context()
+    if not context:
+        print(json.dumps({}), flush=True)
+        return
+
+    agent_id = get_agent_id(context)
+
+    # Extract model information
+    old_model = hook_input.get("old_model", "unknown")
+    new_model = hook_input.get("new_model", "unknown")
+
+    # Emit MODEL_CHANGE event
+    metadata = {
+        "old_model": old_model,
+        "new_model": new_model,
+        "pid": os.getpid(),
+        "context": context
+    }
+    emit_event(agent_id, context, "MODEL_CHANGE", metadata)
+
+    # Always allow the operation
     print(json.dumps({}), flush=True)
 
 
@@ -198,6 +233,10 @@ def print_help():
     print("              Emits: REQUEST events with tool, pid, context")
     print("              Always allows operation")
     print()
+    print("  model       Track model changes (ModelChange hook)")
+    print("              Emits: MODEL_CHANGE with old_model, new_model")
+    print("              Always allows operation")
+    print()
     print("Options:")
     print("  -h, --help  Show this help message")
     print()
@@ -214,7 +253,7 @@ def main():
     """Main entry point."""
     try:
         if len(sys.argv) < 2:
-            print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
+            print("Usage: swarm-hook {register|hook|model|-h}", file=sys.stderr)
             sys.exit(1)
 
         command = sys.argv[1]
@@ -226,9 +265,11 @@ def main():
             cmd_register()
         elif command == "hook":
             cmd_hook()
+        elif command == "model":
+            cmd_model()
         else:
             print(f"Unknown command: {command}", file=sys.stderr)
-            print("Usage: swarm-hook {register|hook|-h}", file=sys.stderr)
+            print("Usage: swarm-hook {register|hook|model|-h}", file=sys.stderr)
             sys.exit(1)
     except Exception:
         # Hooks should never fail - always allow the operation (empty response = continue)
