@@ -62,8 +62,9 @@ alias lr="ls -lAt | head"
 
 alias info="tldr"
 
-alias b='popd 2> /dev/null || cd -' # back to previous dir
-alias e.='pushd $DOTFILES' # go straight to dotfiles folder
+# Navigation - zoxide handles smart cd, these handle the rest
+alias b='popd 2> /dev/null || cd -' # back to previous dir (directory stack)
+alias cdi='cdi'                     # interactive directory picker (fzf)
 alias ..='cd ../'
 alias ...='cd ../..'
 alias ....='cd ../../..'

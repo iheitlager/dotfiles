@@ -9,5 +9,6 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install bash-completion@2 || brew upgrade bash-completion@2
+brew install zoxide || brew upgrade zoxide
 
 export PATH=$TMPPATH
