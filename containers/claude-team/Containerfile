@@ -55,6 +55,7 @@ ENV PATH="/home/claude/.local/bin:$PATH"
 FROM basics AS tools
 
 # --- Python + UV ---
+RUN dnf install -y python3 python3-pip && dnf clean all
 RUN curl -LsSf https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh
 ENV PATH="/usr/local/bin:$PATH"
 
@@ -81,7 +82,7 @@ FROM tools AS project
 RUN npm install -g @anthropic-ai/claude-code
 
 # Python dependencies for coordination scripts
-RUN pip install rich pyyaml watchdog
+RUN pip3 install rich pyyaml watchdog
 
 # Copy coordination library and scripts
 RUN mkdir -p /opt/claude-team
