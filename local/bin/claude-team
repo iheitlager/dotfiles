@@ -103,7 +103,7 @@ init_workspace() {
     local workspace="$1"
     local team_config="$2"
     local makefile="$workspace/Makefile"
-    local template="${DOTFILES:-$HOME/.dotfiles}/local/lib/claude-team-makefile-template"
+    local template="${DOTFILES:-$HOME/.dotfiles}/containers/claude-team/lib/makefile-template"
 
     # Check if Makefile already exists
     if [[ -f "$makefile" ]]; then
@@ -136,13 +136,12 @@ init_workspace() {
     log "✓ Created: $makefile"
     log ""
     log "Available commands:"
-    log "  make workstation    - Start team config workspace"
-    log "  make run PROJECT=X  - Start 2 agents on project X"
-    log "  make run4 PROJECT=X - Start 4 agents on project X"
+    log "  make run            - Start agent session (auto-detects projects)"
     log "  make shell          - Start shell container"
     log "  make validate       - Validate workspace"
     log "  make info           - Show workspace info"
     log ""
+    log "Team config: $team_config"
     log "Projects detected: ${projects:-none}"
 }
 
