@@ -80,6 +80,14 @@ FROM tools AS project
 # Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
+# Python dependencies for coordination scripts
+RUN pip install rich pyyaml watchdog
+
+# Copy coordination library and scripts
+RUN mkdir -p /opt/claude-team
+COPY lib/ /opt/claude-team/lib/
+RUN chmod +x /opt/claude-team/lib/*.py
+
 # Copy entrypoint and helper scripts
 COPY entrypoint.sh /usr/local/bin/
 COPY setup-claude-config.sh /usr/local/bin/
