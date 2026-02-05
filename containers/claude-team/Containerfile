@@ -1,0 +1,100 @@
+# Claude Team Container
+# Multi-layer build for team development workspace
+#
+# Layer 1: BUILDER  - Base OS, compilers
+# Layer 2: BASICS   - Core tools, user setup
+# Layer 3: TOOLS    - Language toolchains
+# Layer 4: PROJECT  - Claude CLI, entrypoint
+
+# ============================================================
+# LAYER 1: BUILDER - Base OS and build essentials
+# ============================================================
+FROM fedora:41 AS builder
+
+RUN dnf install -y \
+    gcc gcc-c++ make cmake \
+    openssl-devel zlib-devel \
+    && dnf clean all
+
+# ============================================================
+# LAYER 2: BASICS - Core tools and user setup
+# ============================================================
+FROM fedora:41 AS basics
+
+# Core development tools
+RUN dnf install -y \
+    git gh tmux neovim \
+    procps-ng which curl wget \
+    && dnf clean all
+
+# Modern CLI utilities
+RUN dnf install -y \
+    ripgrep fd-find bat jq fzf yq \
+    && dnf clean all
+
+# Create user with XDG structure
+RUN useradd -m -s /bin/bash claude && \
+    mkdir -p /home/claude/.config \
+             /home/claude/.local/bin \
+             /home/claude/.local/share \
+             /home/claude/.local/state \
+             /home/claude/.cache \
+             /home/claude/.claude && \
+    chown -R claude:claude /home/claude
+
+# XDG environment
+ENV XDG_CONFIG_HOME=/home/claude/.config
+ENV XDG_DATA_HOME=/home/claude/.local/share
+ENV XDG_STATE_HOME=/home/claude/.local/state
+ENV XDG_CACHE_HOME=/home/claude/.cache
+ENV PATH="/home/claude/.local/bin:$PATH"
+
+# ============================================================
+# LAYER 3: TOOLS - Language-specific toolchains
+# ============================================================
+FROM basics AS tools
+
+# --- Python + UV ---
+RUN curl -LsSf https://astral.sh/uv/install.sh | env CARGO_HOME=/opt/uv UV_INSTALL_DIR=/usr/local/bin sh
+ENV PATH="/usr/local/bin:$PATH"
+
+# --- Node.js via dnf (simpler than fnm in container) ---
+RUN dnf install -y nodejs npm && dnf clean all
+
+# --- Go ---
+RUN dnf install -y golang && dnf clean all
+ENV GOPATH=/home/claude/go
+ENV PATH="$GOPATH/bin:/usr/local/go/bin:$PATH"
+
+# --- Rust (install for claude user) ---
+USER claude
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+ENV PATH="/home/claude/.cargo/bin:$PATH"
+USER root
+
+# ============================================================
+# LAYER 4: PROJECT - Claude team container specifics
+# ============================================================
+FROM tools AS project
+
+# Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+
+# Copy entrypoint and helper scripts
+COPY entrypoint.sh /usr/local/bin/
+COPY setup-claude-config.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/*.sh
+
+# Create workspace mount point
+RUN mkdir -p /workspace && chown claude:claude /workspace
+
+# Switch to non-root user
+USER claude
+WORKDIR /home/claude
+
+# Ensure cargo is in path for claude user
+ENV PATH="/home/claude/.cargo/bin:/home/claude/.local/bin:$PATH"
+
+# Default command
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["workstation"]

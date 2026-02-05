@@ -1,0 +1,402 @@
+#!/usr/bin/env bash
+# Claude Team Container - Launch and manage team development containers
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+set -e
+
+CONTAINER_IMAGE="${CLAUDE_TEAM_IMAGE:-claudeteam:latest}"
+USER_NAME="$(whoami)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat <<EOF
+${BLUE}Claude Team Container${NC} - Multi-repo, multi-agent team workspace
+
+${YELLOW}Usage:${NC} claude-team [OPTIONS] MODE [PROJECT]
+
+${YELLOW}Modes:${NC}
+    workstation     Single workspace (team-config + shell)
+    agent           Multi-agent mode with worktrees (default: 2 agents)
+    shell           Just a shell in the container
+    build           Build the container image
+    validate        Validate workspace structure
+    init            Initialize workspace (generate Makefile)
+
+${YELLOW}Options:${NC}
+    -w, --workspace PATH    Workspace directory (default: current dir or \$CLAUDE_TEAM_WORKSPACE)
+    -n, --agents N          Number of agents: 2 or 4 (default: 2)
+    -p, --project NAME      Project to work on (required for agent mode)
+    -t, --team-config DIR   Team config directory name (default: auto-detect)
+    -f, --firewall          Enable firewall in container
+    --yolo                  Skip permission prompts in Claude
+    --build                 Rebuild container image before starting
+    --dry-run               Show what would be done without executing
+    -v, --verbose           Verbose output
+    -h, --help              Show this help
+
+${YELLOW}Environment Variables:${NC}
+    CLAUDE_TEAM_WORKSPACE   Default workspace path
+    CLAUDE_TEAM_IMAGE       Container image name (default: claudeteam:latest)
+
+${YELLOW}Quick Start:${NC}
+    1. mkdir ~/wc/myproject && cd ~/wc/myproject
+    2. git clone <team-settings-repo>    # Must have claude/config/CLAUDE.md
+    3. git clone <project-repo-1>
+    4. git clone <project-repo-2>
+    5. claude-team init                  # Generates Makefile
+    6. make workstation                  # Or: make run PROJECT=<name>
+
+${YELLOW}Examples:${NC}
+    claude-team init                       # Initialize workspace with Makefile
+    claude-team workstation                # Start workstation in current workspace
+    claude-team agent -p FRANK             # Start 2 agents on FRANK project
+    claude-team agent -p FRANK -n 4        # Start 4 agents on FRANK project
+    claude-team validate                   # Check workspace structure
+
+EOF
+}
+
+log() { echo -e "${GREEN}[claude-team]${NC} $*"; }
+warn() { echo -e "${YELLOW}[claude-team]${NC} $*" >&2; }
+error() { echo -e "${RED}[claude-team]${NC} $*" >&2; exit 1; }
+debug() { [[ -n "$VERBOSE" ]] && echo -e "${BLUE}[debug]${NC} $*" || true; }
+
+# Detect team config repo by looking for claude/config/CLAUDE.md
+detect_team_config() {
+    local workspace="$1"
+    for dir in "$workspace"/*/; do
+        if [[ -f "${dir}claude/config/CLAUDE.md" ]]; then
+            basename "$dir"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Validate a directory is a git repo
+is_git_repo() {
+    git -C "$1" rev-parse --git-dir >/dev/null 2>&1
+}
+
+# List project repos (all git repos except team config)
+list_projects() {
+    local workspace="$1"
+    local team_config="$2"
+    for dir in "$workspace"/*/; do
+        local name=$(basename "$dir")
+        if [[ "$name" != "$team_config" ]] && [[ "$name" != "worktrees" ]] && is_git_repo "$dir"; then
+            echo "$name"
+        fi
+    done
+}
+
+# Initialize workspace with Makefile
+init_workspace() {
+    local workspace="$1"
+    local team_config="$2"
+    local makefile="$workspace/Makefile"
+    local template="${DOTFILES:-$HOME/.dotfiles}/local/lib/claude-team-makefile-template"
+
+    # Check if Makefile already exists
+    if [[ -f "$makefile" ]]; then
+        warn "Makefile already exists: $makefile"
+        read -p "Overwrite? [y/N] " confirm
+        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+            log "Aborted"
+            return 1
+        fi
+    fi
+
+    # Check template exists
+    if [[ ! -f "$template" ]]; then
+        error "Makefile template not found: $template"
+    fi
+
+    # Gather info
+    local workspace_name=$(basename "$workspace")
+    local projects=$(list_projects "$workspace" "$team_config" | tr '\n' ' ' | sed 's/ $//')
+    local date=$(date '+%Y-%m-%d %H:%M:%S')
+
+    # Generate Makefile from template
+    log "Generating Makefile..."
+    sed -e "s|{{WORKSPACE_NAME}}|$workspace_name|g" \
+        -e "s|{{TEAM_CONFIG}}|$team_config|g" \
+        -e "s|{{PROJECTS}}|$projects|g" \
+        -e "s|{{DATE}}|$date|g" \
+        "$template" > "$makefile"
+
+    log "✓ Created: $makefile"
+    log ""
+    log "Available commands:"
+    log "  make workstation    - Start team config workspace"
+    log "  make run PROJECT=X  - Start 2 agents on project X"
+    log "  make run4 PROJECT=X - Start 4 agents on project X"
+    log "  make shell          - Start shell container"
+    log "  make validate       - Validate workspace"
+    log "  make info           - Show workspace info"
+    log ""
+    log "Projects detected: ${projects:-none}"
+}
+
+# Validate workspace structure
+validate_workspace() {
+    local workspace="$1"
+    local errors=0
+
+    log "Validating workspace: $workspace"
+
+    # Check workspace exists
+    if [[ ! -d "$workspace" ]]; then
+        error "Workspace directory not found: $workspace"
+    fi
+
+    # Detect team config
+    local team_config
+    if team_config=$(detect_team_config "$workspace"); then
+        log "✓ Team config repo: ${GREEN}$team_config${NC}"
+        
+        # Check required files
+        local config_path="$workspace/$team_config/claude/config"
+        for file in CLAUDE.md settings.json; do
+            if [[ -f "$config_path/$file" ]]; then
+                log "  ✓ $file"
+            else
+                warn "  ✗ Missing: $file"
+                ((errors++))
+            fi
+        done
+        
+        # Check for optional directories
+        for dir in commands skills templates agents; do
+            if [[ -d "$config_path/$dir" ]]; then
+                log "  ✓ $dir/"
+            else
+                debug "  - Optional missing: $dir/"
+            fi
+        done
+    else
+        warn "✗ No team config repo found (looking for claude/config/CLAUDE.md)"
+        ((errors++))
+    fi
+
+    # Check project repos
+    log "Project repos:"
+    local projects
+    projects=$(list_projects "$workspace" "$team_config")
+    if [[ -z "$projects" ]]; then
+        warn "  No project repos found"
+    else
+        while IFS= read -r project; do
+            if is_git_repo "$workspace/$project"; then
+                log "  ✓ $project (git repo)"
+            else
+                warn "  ✗ $project (not a git repo)"
+                ((errors++))
+            fi
+        done <<< "$projects"
+    fi
+
+    # Check host auth
+    log "Host authentication:"
+    if [[ -f "$HOME/.config/gh/hosts.yml" ]]; then
+        log "  ✓ GitHub CLI configured"
+    else
+        warn "  ✗ GitHub CLI not authenticated (run: gh auth login)"
+        ((errors++))
+    fi
+
+    # Check for Claude credentials
+    local cred_dir="$HOME/.claude-credentials/$USER_NAME"
+    if [[ -d "$cred_dir" ]] && [[ -n "$(ls -A "$cred_dir" 2>/dev/null)" ]]; then
+        log "  ✓ Claude credentials found"
+    else
+        warn "  - Claude credentials not found (will need to authenticate in container)"
+    fi
+
+    if [[ $errors -gt 0 ]]; then
+        warn "Validation completed with $errors error(s)"
+        return 1
+    else
+        log "✓ Workspace validation passed"
+        return 0
+    fi
+}
+
+# Build container image
+build_container() {
+    local containerfile_dir="${DOTFILES:-$HOME/.dotfiles}/containers/claude-team"
+    
+    if [[ ! -f "$containerfile_dir/Containerfile" ]]; then
+        error "Containerfile not found at $containerfile_dir/Containerfile"
+    fi
+
+    log "Building container image: $CONTAINER_IMAGE"
+    podman build -t "$CONTAINER_IMAGE" "$containerfile_dir"
+    log "✓ Build complete"
+}
+
+# Main run function
+run_container() {
+    local mode="$1"
+    local workspace="$2"
+    local project="$3"
+    local agents="$4"
+    local team_config="$5"
+    local firewall="$6"
+    local yolo="$7"
+
+    # Ensure credential directory exists
+    mkdir -p "$HOME/.claude-credentials/$USER_NAME"
+
+    # Build container name
+    local container_name="claude-${mode}-${project:-team}-${USER_NAME}"
+
+    # Check if container already running
+    if podman ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        warn "Container already running: $container_name"
+        log "Attaching to existing container..."
+        exec podman attach "$container_name"
+    fi
+
+    # Build podman command
+    local podman_args=(
+        run --rm -it
+        --name "$container_name"
+        -v "$workspace:/workspace:z"
+        -v "$HOME/.config/gh:/home/claude/.config/gh:ro"
+        -v "$HOME/.claude-credentials/$USER_NAME:/home/claude/.config/claude:z"
+        -e "CLAUDE_USER=$USER_NAME"
+        -e "CLAUDE_TEAM_CONFIG=$team_config"
+    )
+
+    # Optional: firewall capability
+    if [[ -n "$firewall" ]]; then
+        podman_args+=(--cap-add=NET_ADMIN)
+        podman_args+=(-e "ENABLE_FIREWALL=1")
+    fi
+
+    # Optional: yolo mode
+    if [[ -n "$yolo" ]]; then
+        podman_args+=(-e "CLAUDE_YOLO=1")
+    fi
+
+    # Add image and entrypoint args
+    podman_args+=("$CONTAINER_IMAGE" "$mode" "$project" "$agents")
+
+    if [[ -n "$DRY_RUN" ]]; then
+        log "Would run:"
+        echo "podman ${podman_args[*]}"
+        return 0
+    fi
+
+    debug "Running: podman ${podman_args[*]}"
+    exec podman "${podman_args[@]}"
+}
+
+# Parse arguments
+WORKSPACE="${CLAUDE_TEAM_WORKSPACE:-$(pwd)}"
+MODE=""
+PROJECT=""
+AGENTS=2
+TEAM_CONFIG=""
+FIREWALL=""
+YOLO=""
+BUILD_FIRST=""
+DRY_RUN=""
+VERBOSE=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -w|--workspace) WORKSPACE="$2"; shift 2 ;;
+        -n|--agents) AGENTS="$2"; shift 2 ;;
+        -p|--project) PROJECT="$2"; shift 2 ;;
+        -t|--team-config) TEAM_CONFIG="$2"; shift 2 ;;
+        -f|--firewall) FIREWALL=1; shift ;;
+        --yolo) YOLO=1; shift ;;
+        --build) BUILD_FIRST=1; shift ;;
+        --dry-run) DRY_RUN=1; shift ;;
+        -v|--verbose) VERBOSE=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        workstation|agent|shell|build|validate|init)
+            MODE="$1"; shift
+            # Next positional arg is project if not a flag
+            if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
+                PROJECT="$1"; shift
+            fi
+            ;;
+        *)
+            error "Unknown option: $1\nRun 'claude-team --help' for usage."
+            ;;
+    esac
+done
+
+# Default mode
+MODE="${MODE:-workstation}"
+
+# Resolve workspace to absolute path
+WORKSPACE="$(cd "$WORKSPACE" && pwd)"
+
+# Handle build command
+if [[ "$MODE" == "build" ]]; then
+    build_container
+    exit 0
+fi
+
+# Handle validate command
+if [[ "$MODE" == "validate" ]]; then
+    validate_workspace "$WORKSPACE"
+    exit $?
+fi
+
+# Handle init command
+if [[ "$MODE" == "init" ]]; then
+    # Auto-detect team config if not specified
+    if [[ -z "$TEAM_CONFIG" ]]; then
+        if ! TEAM_CONFIG=$(detect_team_config "$WORKSPACE"); then
+            error "Could not detect team config repo. Specify with -t or ensure a repo has claude/config/CLAUDE.md"
+        fi
+    fi
+    init_workspace "$WORKSPACE" "$TEAM_CONFIG"
+    exit $?
+fi
+
+# Auto-detect team config if not specified
+if [[ -z "$TEAM_CONFIG" ]]; then
+    if ! TEAM_CONFIG=$(detect_team_config "$WORKSPACE"); then
+        error "Could not detect team config repo. Specify with -t or ensure a repo has claude/config/CLAUDE.md"
+    fi
+    debug "Auto-detected team config: $TEAM_CONFIG"
+fi
+
+# Validate project for agent mode
+if [[ "$MODE" == "agent" ]]; then
+    if [[ -z "$PROJECT" ]]; then
+        error "Project required for agent mode. Use: claude-team agent -p PROJECT_NAME\n\nAvailable projects:\n$(list_projects "$WORKSPACE" "$TEAM_CONFIG")"
+    fi
+    if [[ ! -d "$WORKSPACE/$PROJECT" ]]; then
+        error "Project not found: $PROJECT\n\nAvailable projects:\n$(list_projects "$WORKSPACE" "$TEAM_CONFIG")"
+    fi
+fi
+
+# Build first if requested
+if [[ -n "$BUILD_FIRST" ]]; then
+    build_container
+fi
+
+# Check if image exists
+if ! podman image exists "$CONTAINER_IMAGE" 2>/dev/null; then
+    warn "Container image not found: $CONTAINER_IMAGE"
+    log "Building container image..."
+    build_container
+fi
+
+# Run the container
+run_container "$MODE" "$WORKSPACE" "$PROJECT" "$AGENTS" "$TEAM_CONFIG" "$FIREWALL" "$YOLO"
