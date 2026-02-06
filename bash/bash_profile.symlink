@@ -74,6 +74,22 @@ if [ -e "$XDG_CONFIG_HOME/secrets" ]; then
     source "$XDG_CONFIG_HOME/secrets"
 fi
 
+# Cache helper: cache dynamic command output (e.g. completion generators)
+# Regenerates only when the tool binary changes
+# Usage: _dotfiles_cached_eval "tool" "tool generate-completion bash"
+_dotfiles_cached_eval() {
+    local tool="$1"
+    shift
+    local cmd="$*"
+    local bin cache
+    bin="$(command -v "$tool" 2>/dev/null)" || return 0
+    cache="$XDG_CACHE_HOME/dotfiles/eval_${tool}.sh"
+    if [[ ! -f "$cache" ]] || [[ "$bin" -nt "$cache" ]]; then
+        eval "$cmd" >| "$cache" 2>/dev/null
+    fi
+    source "$cache"
+}
+
 # Cache helper: concatenate module files into single cached file
 # Rebuilds cache when dotfiles dir is modified
 # This is done for a combination of speed and maintainability
@@ -90,7 +106,9 @@ _dotfiles_cached_source() {
             if [[ -f "$f" ]]; then
                 printf '\n# >>> %s\n' "${f#$DOTFILES/}" >> "$cache"
                 cat "$f" >> "$cache"
-                printf '\n# <<< %s\n' "${f#$DOTFILES/}" >> "$cache"
+                # Ensure trailing newline (some files may lack one)
+                [[ -n "$(tail -c 1 "$f")" ]] && echo >> "$cache"
+                printf '# <<< %s\n' "${f#$DOTFILES/}" >> "$cache"
             fi
         done
     fi

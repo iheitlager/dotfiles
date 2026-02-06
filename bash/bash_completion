@@ -11,4 +11,4 @@ complete -c help
 # Replaces cd: use 'cd foo' to jump to best match
 # Use 'cdi' for interactive fzf selection
 # Must be after PROMPT_COMMAND is set (chains into it)
-eval "$(zoxide init bash --cmd cd)"
+_dotfiles_cached_eval zoxide zoxide init bash --cmd cd

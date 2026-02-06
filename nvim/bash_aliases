@@ -7,5 +7,6 @@ alias noswp="rm -f *.swp"
 
 # Neovim aliases
 alias vi="nvim"
+alias vim="nvim"
 alias nv="nvim"
 alias nvimup="nvim --headless '+Lazy! sync' +qa && echo '✓ Plugins updated successfully'"  # Update neovim plugins

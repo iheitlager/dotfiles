@@ -3,6 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-eval "$(uv generate-shell-completion bash)"
+_dotfiles_cached_eval uv uv generate-shell-completion bash
 complete -o "nospace" -W "python" killall;
-eval "$(pip3 completion --bash)"
+_dotfiles_cached_eval pip3 pip3 completion --bash
