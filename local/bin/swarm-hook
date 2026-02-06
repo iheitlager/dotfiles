@@ -50,11 +50,15 @@ def get_git_repo_context():
 
 
 def get_agent_id(context):
-    """Get agent ID from environment or generate from context."""
+    """Get agent ID from environment or generate from context with username."""
     agent_id = os.environ.get("AGENT_ID")
     if agent_id:
         return agent_id
-    return context if context else "unknown"
+    # Multi-user: include username for attribution
+    whoami = os.environ.get("CLAUDE_USER") or os.environ.get("USER", "unknown")
+    if context:
+        return f"{whoami}-{context}"
+    return whoami
 
 
 def emit_event(agent_id, context, event_type, metadata):

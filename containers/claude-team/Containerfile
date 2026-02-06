@@ -92,7 +92,12 @@ RUN chmod +x /opt/claude-team/lib/*.py
 # Copy entrypoint and helper scripts
 COPY entrypoint.sh /usr/local/bin/
 COPY setup-claude-config.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/*.sh
+COPY shutdown.sh /usr/local/bin/shutdown
+RUN chmod +x /usr/local/bin/*.sh /usr/local/bin/shutdown
+
+# Copy bash configuration
+COPY bashrc /etc/bashrc.d/claude-team.sh
+RUN mkdir -p /etc/bashrc.d && chmod 644 /etc/bashrc.d/claude-team.sh
 
 # Create workspace mount point
 RUN mkdir -p /workspace && chown claude:claude /workspace
@@ -100,6 +105,9 @@ RUN mkdir -p /workspace && chown claude:claude /workspace
 # Switch to non-root user
 USER claude
 WORKDIR /home/claude
+
+# Add bashrc sourcing to user's .bashrc
+RUN echo '[ -f /etc/bashrc.d/claude-team.sh ] && source /etc/bashrc.d/claude-team.sh' >> /home/claude/.bashrc
 
 # Ensure cargo is in path for claude user
 ENV PATH="/home/claude/.cargo/bin:/home/claude/.local/bin:$PATH"

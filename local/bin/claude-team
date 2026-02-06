@@ -25,6 +25,7 @@ ${YELLOW}Usage:${NC} claude-team [OPTIONS] MODE
 ${YELLOW}Modes:${NC}
     run             Start full agent session (2 main + 1 per project + coord)
     shell           Just a shell in the container
+    stop            Stop running container gracefully
     build           Build the container image
     validate        Validate workspace structure
     init            Initialize workspace (generate Makefile)
@@ -230,7 +231,7 @@ validate_workspace() {
 # Build container image
 build_container() {
     local containerfile_dir="${DOTFILES:-$HOME/.dotfiles}/containers/claude-team"
-    
+
     if [[ ! -f "$containerfile_dir/Containerfile" ]]; then
         error "Containerfile not found at $containerfile_dir/Containerfile"
     fi
@@ -238,6 +239,41 @@ build_container() {
     log "Building container image: $CONTAINER_IMAGE"
     podman build -t "$CONTAINER_IMAGE" "$containerfile_dir"
     log "✓ Build complete"
+}
+
+# Stop running container gracefully
+stop_container() {
+    local container_name="claude-team-${USER_NAME}"
+
+    log "Looking for container: $container_name"
+
+    # Check if container is running
+    if ! podman ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        warn "No running container found: $container_name"
+
+        # Check if there are any claude-team containers
+        local all_containers=$(podman ps -a --format '{{.Names}}' | grep "^claude-team-" || true)
+        if [[ -n "$all_containers" ]]; then
+            log "Found stopped containers:"
+            echo "$all_containers" | while read -r name; do
+                log "  - $name"
+            done
+            log ""
+            log "To remove stopped containers:"
+            log "  podman rm $all_containers"
+        fi
+        return 0
+    fi
+
+    log "Stopping container: $container_name"
+
+    # Send SIGTERM for graceful shutdown
+    log "  Sending SIGTERM (graceful shutdown)..."
+    podman stop --time 10 "$container_name"
+
+    log "✓ Container stopped successfully"
+    log ""
+    log "The container will be automatically removed (--rm flag)"
 }
 
 # Load environment from .env file
@@ -352,7 +388,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=1; shift ;;
         -v|--verbose) VERBOSE=1; shift ;;
         -h|--help) usage; exit 0 ;;
-        run|shell|build|validate|init)
+        run|shell|stop|build|validate|init)
             MODE="$1"; shift
             ;;
         *)
@@ -370,6 +406,12 @@ WORKSPACE="$(cd "$WORKSPACE" && pwd)"
 # Handle build command
 if [[ "$MODE" == "build" ]]; then
     build_container
+    exit 0
+fi
+
+# Handle stop command
+if [[ "$MODE" == "stop" ]]; then
+    stop_container
     exit 0
 fi
 

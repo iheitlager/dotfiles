@@ -19,6 +19,7 @@ from pathlib import Path
 
 
 # Coordination hooks for container
+# Format copied from working claude/config/settings.json
 COORDINATION_HOOKS = {
     "SessionStart": [
         {
@@ -38,17 +39,6 @@ COORDINATION_HOOKS = {
                 {
                     "type": "command",
                     "command": "python3 /opt/claude-team/lib/coordination.py hook"
-                }
-            ]
-        }
-    ],
-    "ModelChange": [
-        {
-            "matcher": ".*",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": "python3 /opt/claude-team/lib/coordination.py model"
                 }
             ]
         }

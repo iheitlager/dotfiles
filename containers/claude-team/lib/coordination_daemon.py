@@ -105,28 +105,56 @@ def truncate_text(text: str, max_len: int) -> str:
     return text[:max_len - 3] + "..."
 
 
+def safe_addstr(stdscr, y: int, x: int, text: str, attr=0, max_width: int = None):
+    """Safely add string to screen, catching curses errors."""
+    try:
+        if max_width:
+            text = text[:max_width - 1]
+        stdscr.addstr(y, x, text, attr)
+    except curses.error:
+        pass
+
+
 def draw_screen(stdscr, agents: List[Dict], pending: List[Dict], claimed: List[Dict], done: List[Dict], events: List[Dict]):
     """Draw the entire TUI screen."""
     stdscr.clear()
     height, width = stdscr.getmaxyx()
 
+    # Ensure minimum dimensions
+    if height < 10 or width < 40:
+        stdscr.addstr(0, 0, "Terminal too small")
+        stdscr.refresh()
+        return
+
     # Title
     title = "Claude Team Coordination Dashboard"
-    stdscr.addstr(0, (width - len(title)) // 2, title, curses.A_BOLD)
-    stdscr.addstr(1, 0, "─" * width)
+    try:
+        stdscr.addstr(0, (width - len(title)) // 2, title, curses.A_BOLD)
+        stdscr.addstr(1, 0, ("─" * (width - 1))[:width - 1])
+    except curses.error:
+        pass
 
     y = 2
 
     # Agents section
-    stdscr.addstr(y, 0, "╭─ Agents ", curses.A_BOLD)
-    stdscr.addstr(y, 10, "─" * (width - 10))
+    try:
+        stdscr.addstr(y, 0, "╭─ Agents ", curses.A_BOLD)
+        if width > 10:
+            stdscr.addstr(y, 10, ("─" * (width - 11))[:width - 11])
+    except curses.error:
+        pass
     y += 1
 
     if not agents:
-        stdscr.addstr(y, 2, "No agents registered", curses.A_DIM)
+        try:
+            stdscr.addstr(y, 2, "No agents registered", curses.A_DIM)
+        except curses.error:
+            pass
         y += 1
     else:
         for agent in agents:
+            if y >= height - 3:  # Leave room for footer
+                break
             agent_id = agent.get("id", "unknown")
             role = agent.get("role", "unknown")
             project = agent.get("project", "")
@@ -139,14 +167,21 @@ def draw_screen(stdscr, agents: List[Dict], pending: List[Dict], claimed: List[D
                 project_str = project or "unknown"
                 line = f"  {agent_id:<20} {role:<12} {project_str:<15} {model:<10}"
 
-            stdscr.addstr(y, 0, truncate_text(line, width - 1))
+            try:
+                stdscr.addstr(y, 0, truncate_text(line, width - 1))
+            except curses.error:
+                pass
             y += 1
 
     y += 1
 
     # Jobs section
-    stdscr.addstr(y, 0, "╭─ Jobs ", curses.A_BOLD)
-    stdscr.addstr(y, 7, "─" * (width - 7))
+    try:
+        stdscr.addstr(y, 0, "╭─ Jobs ", curses.A_BOLD)
+        if width > 7:
+            stdscr.addstr(y, 7, ("─" * (width - 8))[:width - 8])
+    except curses.error:
+        pass
     y += 1
 
     # Job counts
@@ -155,48 +190,59 @@ def draw_screen(stdscr, agents: List[Dict], pending: List[Dict], claimed: List[D
     y += 2
 
     # Show pending jobs
-    if pending:
+    if pending and y < height - 3:
         for job in pending[:5]:  # Show up to 5
+            if y >= height - 3:
+                break
             job_id = job.get("id", "unknown")
             desc = job.get("description", "").split('\n')[0]  # First line only
             project = job.get("project", "?")
             line = f"  [PENDING] {job_id} ({project}) - {desc}"
-            stdscr.addstr(y, 0, truncate_text(line, width - 1), curses.A_DIM)
+            safe_addstr(stdscr, y, 0, truncate_text(line, width - 1), curses.A_DIM)
             y += 1
-        if len(pending) > 5:
-            stdscr.addstr(y, 0, f"  ... and {len(pending) - 5} more", curses.A_DIM)
+        if len(pending) > 5 and y < height - 3:
+            safe_addstr(stdscr, y, 0, f"  ... and {len(pending) - 5} more", curses.A_DIM)
             y += 1
 
     # Show claimed jobs
-    if claimed:
+    if claimed and y < height - 3:
         for job in claimed[:5]:
+            if y >= height - 3:
+                break
             job_id = job.get("id", "unknown")
             desc = job.get("description", "").split('\n')[0]
             claimed_by = job.get("claimed_by", "?")
             project = job.get("project", "?")
             line = f"  [CLAIMED] {job_id} by {claimed_by} ({project}) - {desc}"
-            stdscr.addstr(y, 0, truncate_text(line, width - 1), curses.COLOR_YELLOW)
+            safe_addstr(stdscr, y, 0, truncate_text(line, width - 1), curses.A_DIM)
             y += 1
-        if len(claimed) > 5:
-            stdscr.addstr(y, 0, f"  ... and {len(claimed) - 5} more", curses.A_DIM)
+        if len(claimed) > 5 and y < height - 3:
+            safe_addstr(stdscr, y, 0, f"  ... and {len(claimed) - 5} more", curses.A_DIM)
             y += 1
 
-    if not pending and not claimed:
-        stdscr.addstr(y, 2, "No pending or claimed jobs", curses.A_DIM)
+    if not pending and not claimed and y < height - 3:
+        safe_addstr(stdscr, y, 2, "No pending or claimed jobs", curses.A_DIM)
         y += 1
 
     y += 1
 
     # Events section
-    stdscr.addstr(y, 0, "╭─ Events ", curses.A_BOLD)
-    stdscr.addstr(y, 9, "─" * (width - 9))
+    try:
+        stdscr.addstr(y, 0, "╭─ Events ", curses.A_BOLD)
+        if width > 9:
+            stdscr.addstr(y, 9, ("─" * (width - 10))[:width - 10])
+    except curses.error:
+        pass
     y += 1
 
     if not events:
-        stdscr.addstr(y, 2, "No events yet", curses.A_DIM)
-        y += 1
+        if y < height - 3:
+            safe_addstr(stdscr, y, 2, "No events yet", curses.A_DIM)
+            y += 1
     else:
         for event in reversed(events[-10:]):  # Show last 10 events, newest first
+            if y >= height - 2:
+                break
             timestamp = format_timestamp(event.get("timestamp", ""))
             event_type = event.get("event", "unknown")
             data = event.get("data", {})
@@ -226,15 +272,21 @@ def draw_screen(stdscr, agents: List[Dict], pending: List[Dict], claimed: List[D
             else:
                 line = f"  {timestamp} {event_type}"
 
-            if y < height - 2:
-                stdscr.addstr(y, 0, truncate_text(line, width - 1), curses.A_DIM)
-                y += 1
+            safe_addstr(stdscr, y, 0, truncate_text(line, width - 1), curses.A_DIM)
+            y += 1
 
     # Footer
     if y < height - 1:
-        footer = f"Press 'q' to quit | Refresh: 2s | {datetime.now().strftime('%H:%M:%S')}"
-        stdscr.addstr(height - 1, 0, "─" * width, curses.A_DIM)
-        stdscr.addstr(height - 1, width - len(footer) - 2, footer, curses.A_DIM)
+        try:
+            footer = f"Press 'q' to quit | Refresh: 2s | {datetime.now().strftime('%H:%M:%S')}"
+            # Draw horizontal line (leave last column empty)
+            stdscr.addstr(height - 1, 0, ("─" * (width - 1))[:width - 1], curses.A_DIM)
+            # Draw footer text if it fits
+            footer_x = max(0, width - len(footer) - 2)
+            if footer_x + len(footer) < width:
+                stdscr.addstr(height - 1, footer_x, footer[:width - footer_x - 1], curses.A_DIM)
+        except curses.error:
+            pass
 
     stdscr.refresh()
 

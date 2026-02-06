@@ -54,8 +54,9 @@ DONE_DIR="$SHARED_CONTEXT/jobs/done"
 LOCK_DIR="$SHARED_CONTEXT/jobs/.locks"
 EVENTS_LOG="$SHARED_CONTEXT/events.log"
 
-# Agent identity from environment
-AGENT_ID="${AGENT_ID:-unknown}"
+# Agent identity from environment (include whoami for multi-user)
+WHOAMI="${CLAUDE_USER:-$(whoami)}"
+AGENT_ID="${AGENT_ID:-${WHOAMI}}"
 AGENT_MODEL="${AGENT_MODEL:-sonnet}"
 
 # Ensure directories exist

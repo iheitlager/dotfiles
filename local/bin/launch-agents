@@ -69,9 +69,12 @@ else
     WORKTREE_ROOT="$REPO_PARENT/${REPO_NAME}-worktree"
 fi
 
+# Multi-user support: use CLAUDE_USER or whoami for isolation
+WHOAMI="${CLAUDE_USER:-$(whoami)}"
+
 # Paths derived from repo
-# Sanitize session name: tmux doesn't allow dots
-SESSION="claude-${REPO_NAME//[.]/_}"
+# Sanitize session name: tmux doesn't allow dots, include username for multi-user
+SESSION="claude-${REPO_NAME//[.]/_}-${WHOAMI}"
 SHARED_CONTEXT="$HOME/.local/state/agent-context/$REPO_NAME"
 
 # Defaults
@@ -243,7 +246,7 @@ create_agent() {
     local agent=$1
     local client=$2
     local model=$3
-    local worktree_path="$WORKTREE_ROOT/agent-$agent"
+    local worktree_path="$WORKTREE_ROOT/${WHOAMI}-agent-$agent"
 
     if [[ -d "$worktree_path" ]]; then
         echo -e "  ${GREEN}✓${NC} agent-$agent ($client/$model) worktree exists"
@@ -309,8 +312,8 @@ old_get_model() {
 
 setup_worktree() {
     local agent=$1
-    local worktree_path="$WORKTREE_ROOT/agent-$agent"
-    local branch="agent-$agent"
+    local worktree_path="$WORKTREE_ROOT/${WHOAMI}-agent-$agent"
+    local branch="${WHOAMI}-agent-$agent"
 
     if [[ -d "$worktree_path" ]]; then
         echo -e "  ${GREEN}✓${NC} agent-$agent worktree exists"

@@ -1,0 +1,23 @@
+# Claude Team Container - Bash Configuration
+# Sourced automatically for all shells in the container
+
+# Custom prompt - show only parent directory (basename)
+# Format: parent-dir $
+PS1='\[\033[01;34m\]\W\[\033[00m\] \$ '
+
+# Shutdown aliases
+alias shutdown='/usr/local/bin/shutdown'
+alias x='/usr/local/bin/shutdown'
+alias stop='/usr/local/bin/shutdown'
+
+# Helpful aliases
+alias ll='ls -lah'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# Show session info on login
+if [[ -n "$TMUX_SESSION" ]] && [[ "$SHLVL" -eq 1 ]]; then
+    echo "Claude Team Container - Session: $TMUX_SESSION"
+    echo "Type 'x' or 'stop' to shutdown gracefully"
+    echo ""
+fi

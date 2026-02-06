@@ -27,6 +27,19 @@ clear_coordination_state() {
     touch /tmp/claude-coordination/events.log
 }
 
+# Setup tmux configuration
+setup_tmux_config() {
+    log "Setting up tmux configuration..."
+    mkdir -p "$HOME/.config/tmux"
+
+    if [[ -f /opt/claude-team/lib/tmux.conf ]]; then
+        ln -sf /opt/claude-team/lib/tmux.conf "$HOME/.config/tmux/tmux.conf"
+        log "  ✓ tmux.conf"
+    else
+        warn "  ✗ tmux.conf not found at /opt/claude-team/lib/tmux.conf"
+    fi
+}
+
 # Setup ~/.claude symlinks from team config
 setup_claude_config() {
     if [[ -z "$TEAM_CONFIG" ]]; then
@@ -76,8 +89,12 @@ detect_projects() {
     for dir in /workspace/*/; do
         local name=$(basename "$dir")
         # Skip team config and .worktrees
-        if [[ "$name" != "$TEAM_CONFIG" && "$name" != ".worktrees" && -d "${dir}.git" ]]; then
-            projects+=("$name")
+        if [[ "$name" != "$TEAM_CONFIG" && "$name" != ".worktrees" ]]; then
+            # Check if it's a git repo (remove trailing slash for check)
+            local dir_clean="${dir%/}"
+            if [[ -d "$dir_clean/.git" ]]; then
+                projects+=("$name")
+            fi
         fi
     done
     echo "${projects[@]}"
@@ -129,19 +146,26 @@ run_multi_agent() {
 
     if [[ ${#projects[@]} -eq 0 ]]; then
         warn "No projects detected in /workspace"
+        warn "Expected to find git repos (excluding $TEAM_CONFIG)"
+        warn "Listing /workspace contents:"
+        ls -la /workspace | head -20
     else
-        log "  Projects: ${projects[*]}"
+        log "  Projects detected (${#projects[@]}): ${projects[*]}"
     fi
 
     # Create worktrees for each project
     local agent_num=1
     declare -A worktree_map
 
-    for project in "${projects[@]}"; do
-        local worktree=$(create_worktree "$project" "$agent_num")
-        worktree_map[$project]=$worktree
-        ((agent_num++))
-    done
+    if [[ ${#projects[@]} -gt 0 ]]; then
+        log "Creating worktrees..."
+        for project in "${projects[@]}"; do
+            local worktree=$(create_worktree "$project" "$agent_num")
+            worktree_map[$project]=$worktree
+            log "  ✓ $project → $worktree"
+            ((agent_num++))
+        done
+    fi
 
     # Build tmux session
     local session="claude-team-${USER_NAME}"
@@ -149,7 +173,7 @@ run_multi_agent() {
 
     log "Building tmux session: $session"
 
-    # Window 1: main (2 orchestrator agents + shell)
+    # Window 1: main (2 orchestrator agents + shell) - equal 1/3 splits
     log "  Window: main (2 orchestrators + shell)"
     tmux new-session -d -s "$session" -n "main" -c /workspace \
         "AGENT_ID=main-agent-1 AGENT_ROLE=main $(claude_cmd) --append-system-prompt \"\$(python3 /opt/claude-team/lib/generate_agents_md.py main-agent-1)\"; exec bash"
@@ -157,10 +181,10 @@ run_multi_agent() {
     tmux split-window -t "$session:main" -h -c /workspace \
         "AGENT_ID=main-agent-2 AGENT_ROLE=main $(claude_cmd) --append-system-prompt \"\$(python3 /opt/claude-team/lib/generate_agents_md.py main-agent-2)\"; exec bash"
 
-    tmux split-window -t "$session:main" -v -c /workspace \
+    tmux split-window -t "$session:main" -h -c /workspace \
         "exec bash"
 
-    tmux select-layout -t "$session:main" main-vertical
+    tmux select-layout -t "$session:main" even-horizontal
 
     # Windows 2-N: one per project (subagent in worktree)
     agent_num=1
@@ -208,6 +232,7 @@ run_shell() {
 main() {
     # Phase 1: Setup
     clear_coordination_state
+    setup_tmux_config
     setup_claude_config
 
     # Phase 2: Modify settings.json (replace hooks)
