@@ -6,3 +6,9 @@
 
 # Complete 'help' with commands from PATH
 complete -c help
+
+# Zoxide - smarter cd that learns your habits
+# Replaces cd: use 'cd foo' to jump to best match
+# Use 'cdi' for interactive fzf selection
+# Must be after PROMPT_COMMAND is set (chains into it)
+eval "$(zoxide init bash --cmd cd)"

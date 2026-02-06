@@ -164,10 +164,4 @@ update_prompt() {
     history -n  # Read new lines from history file
 }
 
-PROMPT_COMMAND=update_prompt
-
-# Zoxide - smarter cd that learns your habits
-# MUST be initialized at the very end to properly chain PROMPT_COMMAND
-# Replaces cd: use 'cd foo' to jump to ~/deeply/nested/foo
-# Use 'cdi' for interactive fzf selection
-eval "$(zoxide init bash --cmd cd)"
+PROMPT_COMMAND="update_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
