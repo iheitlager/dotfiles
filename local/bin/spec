@@ -877,6 +877,7 @@ USAGE:
     spec status       Show compact overview (count, version, status)
     spec validate     Validate all specs for compliance
     spec validate <spec>  Validate a specific spec by name
+    cat file.md | spec validate  Validate spec from stdin
     spec template     Show the OpenSpec template
     spec new <name>   Create new spec from template
     spec --raw        Use raw mode (bat syntax highlighting only)
@@ -969,6 +970,10 @@ EXAMPLES:
 
     # Validate a specific spec
     spec validate dotfiles-caching
+
+    # Validate spec from stdin
+    spec template | spec validate
+    cat myspec.md | spec validate
 
     # Show the template
     spec template
@@ -1084,6 +1089,18 @@ main() {
             ;;
 
         validate)
+            # Check if reading from stdin
+            if [ ! -t 0 ]; then
+                # Read from stdin to temp file
+                local temp_file
+                temp_file=$(mktemp)
+                cat > "$temp_file"
+                validate_spec_file "$temp_file"
+                local exit_code=$?
+                rm -f "$temp_file"
+                return $exit_code
+            fi
+
             local spec_dir
             if ! spec_dir="$(find_spec_dir)"; then
                 error "No spec directory found"
