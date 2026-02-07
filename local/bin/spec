@@ -349,6 +349,186 @@ fzf_browser() {
     fi
 }
 
+# Validate a single spec file
+validate_spec_file() {
+    local spec_file="$1"
+    local spec_name="$(basename "$(dirname "$spec_file")")"
+    local issues=0
+
+    echo -e "${BOLD}Validating: $spec_name${RESET}\n"
+
+    # Check title
+    local title
+    title="$(get_spec_title "$spec_file")"
+    if [ -n "$title" ]; then
+        echo -e "✅ Title: ${GREEN}$title${RESET}"
+    else
+        echo -e "❌ ${RED}Missing title (# Heading)${RESET}"
+        ((issues++))
+    fi
+
+    # Check frontmatter
+    local domain version status date
+    domain="$(parse_spec_metadata "$spec_file" "Domain")"
+    version="$(parse_spec_metadata "$spec_file" "Version")"
+    status="$(parse_spec_metadata "$spec_file" "Status")"
+    date="$(parse_spec_metadata "$spec_file" "Date")"
+
+    if [ -n "$domain" ] && [ -n "$version" ] && [ -n "$status" ] && [ -n "$date" ]; then
+        echo -e "✅ Frontmatter: ${GREEN}Complete${RESET}"
+        echo -e "   Domain: $domain"
+        echo -e "   Version: $version"
+        echo -e "   Status: $status"
+        echo -e "   Date: $date"
+    else
+        echo -e "❌ ${RED}Incomplete frontmatter${RESET}"
+        [ -z "$domain" ] && echo -e "   Missing: Domain"
+        [ -z "$version" ] && echo -e "   Missing: Version"
+        [ -z "$status" ] && echo -e "   Missing: Status"
+        [ -z "$date" ] && echo -e "   Missing: Date"
+        ((issues++))
+    fi
+
+    # Check Overview section
+    if grep -q "^## Overview" "$spec_file"; then
+        echo -e "✅ Overview: ${GREEN}Present${RESET}"
+
+        # Check for Philosophy subsection (recommended)
+        if grep -q "^### Philosophy" "$spec_file"; then
+            echo -e "   ✅ Philosophy subsection"
+        else
+            echo -e "   ⚠️  ${YELLOW}Philosophy subsection missing (recommended)${RESET}"
+        fi
+
+        # Check for Key Capabilities subsection (recommended)
+        if grep -q "^### Key Capabilities" "$spec_file"; then
+            echo -e "   ✅ Key Capabilities subsection"
+        else
+            echo -e "   ⚠️  ${YELLOW}Key Capabilities subsection missing (recommended)${RESET}"
+        fi
+    else
+        echo -e "❌ ${RED}Missing Overview section${RESET}"
+        ((issues++))
+    fi
+
+    # Check RFC 2119 Keywords section
+    if grep -q "^## RFC 2119 Keywords" "$spec_file"; then
+        echo -e "✅ RFC 2119 Keywords: ${GREEN}Present${RESET}"
+    else
+        echo -e "❌ ${RED}Missing RFC 2119 Keywords section${RESET}"
+        ((issues++))
+    fi
+
+    # Check ADDED Requirements section
+    if grep -q "^## ADDED Requirements" "$spec_file"; then
+        echo -e "✅ ADDED Requirements: ${GREEN}Present${RESET}"
+
+        # Count requirements
+        local req_count
+        req_count=$(grep -c "^### Requirement:" "$spec_file")
+
+        if [ "$req_count" -gt 0 ]; then
+            echo -e "   ${GREEN}$req_count requirements found${RESET}"
+
+            # Check for scenarios in requirements
+            local scenario_count
+            scenario_count=$(grep -c "^#### Scenario:" "$spec_file")
+            echo -e "   ${GREEN}$scenario_count scenarios found${RESET}"
+
+            # Check for Given-When-Then format
+            local given_count when_count then_count
+            given_count=$(grep -c "^- GIVEN" "$spec_file")
+            when_count=$(grep -c "^- WHEN" "$spec_file")
+            then_count=$(grep -c "^- THEN" "$spec_file")
+
+            if [ "$given_count" -gt 0 ] && [ "$when_count" -gt 0 ] && [ "$then_count" -gt 0 ]; then
+                echo -e "   ✅ Given-When-Then format used"
+            else
+                echo -e "   ⚠️  ${YELLOW}Some scenarios may lack proper Given-When-Then format${RESET}"
+            fi
+
+            # Check for RFC 2119 keywords in requirements
+            if grep -q "MUST\|SHALL\|SHOULD\|MAY" "$spec_file"; then
+                echo -e "   ✅ RFC 2119 keywords used (MUST/SHALL/SHOULD/MAY)"
+            else
+                echo -e "   ⚠️  ${YELLOW}RFC 2119 keywords not found in requirements${RESET}"
+            fi
+        else
+            echo -e "   ❌ ${RED}No requirements found${RESET}"
+            ((issues++))
+        fi
+    else
+        echo -e "❌ ${RED}Missing ADDED Requirements section${RESET}"
+        ((issues++))
+    fi
+
+    # Check References section (recommended)
+    if grep -q "^## References" "$spec_file"; then
+        echo -e "✅ References: ${GREEN}Present${RESET}"
+    else
+        echo -e "⚠️  ${YELLOW}References section missing (recommended)${RESET}"
+    fi
+
+    # Check for license/copyright
+    if grep -qi "license\|copyright" "$spec_file"; then
+        echo -e "✅ License/Copyright: ${GREEN}Present${RESET}"
+    else
+        echo -e "⚠️  ${YELLOW}License/Copyright missing (recommended)${RESET}"
+    fi
+
+    # Summary
+    echo ""
+    if [ "$issues" -eq 0 ]; then
+        echo -e "${BOLD}${GREEN}✅ VALID${RESET} - No critical issues found"
+        return 0
+    else
+        echo -e "${BOLD}${RED}❌ INVALID${RESET} - $issues critical issue(s) found"
+        return 1
+    fi
+}
+
+# Validate all specs in directory
+validate_all_specs() {
+    local spec_dir="$1"
+    local total=0
+    local passed=0
+    local failed=0
+    local spec_files
+
+    echo -e "${BOLD}Validating all OpenSpec files${RESET} ${GRAY}($spec_dir)${RESET}\n"
+
+    # Find all spec.md files and store in array
+    mapfile -t spec_files < <(find "$spec_dir" -name "spec.md" -type f | sort)
+    total=${#spec_files[@]}
+
+    # Validate each spec
+    for spec_file in "${spec_files[@]}"; do
+        if validate_spec_file "$spec_file"; then
+            ((passed++))
+        else
+            ((failed++))
+        fi
+
+        echo ""
+        echo "$(printf '─%.0s' {1..70})"
+        echo ""
+    done
+
+    # Overall summary
+    echo -e "${BOLD}Validation Summary${RESET}\n"
+    echo -e "Total specs: ${BOLD}$total${RESET}"
+    echo -e "Passed: ${GREEN}$passed${RESET}"
+    echo -e "Failed: ${RED}$failed${RESET}"
+
+    if [ "$failed" -eq 0 ]; then
+        echo -e "\n${BOLD}${GREEN}All specs are valid!${RESET} ✅"
+        return 0
+    else
+        echo -e "\n${BOLD}${RED}Some specs have issues${RESET} ❌"
+        return 1
+    fi
+}
+
 # Print help text
 print_help() {
     cat << 'EOF'
@@ -358,6 +538,8 @@ USAGE:
     spec              Interactive fzf browser (default)
     spec list         List all specs with metadata
     spec status       Show compact overview (count, version, status)
+    spec validate     Validate all specs for compliance
+    spec validate <spec>  Validate a specific spec by name
     spec --raw        Use raw mode (bat syntax highlighting only)
     spec --help       Show this help message
 
@@ -396,6 +578,17 @@ STATUS MODE:
     - For each spec: Name, Version, Status, Requirement count
     - Total requirement count across all specs
 
+VALIDATE MODE:
+    Checks specs for structural compliance and best practices:
+    - Required sections: Title, Frontmatter, Overview, RFC 2119, Requirements
+    - Recommended sections: Philosophy, Key Capabilities, References, License
+    - Requirement format: Proper scenarios with Given-When-Then
+    - RFC 2119 keyword usage: MUST, SHALL, SHOULD, MAY
+
+    Exit codes:
+    - 0: All specs valid
+    - 1: Some specs have issues
+
 REQUIREMENTS:
     - bash 4.0+
     - fzf (for interactive mode)
@@ -418,6 +611,12 @@ EXAMPLES:
     # List all specs with details
     spec list
 
+    # Validate all specs
+    spec validate
+
+    # Validate a specific spec
+    spec validate dotfiles-caching
+
     # From any subdirectory in a git repo (finds git root)
     cd ~/myproject/src/components
     spec
@@ -434,6 +633,7 @@ main() {
     # Parse flags
     RAW_MODE=false
     local command=""
+    local spec_name=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -452,6 +652,15 @@ main() {
             status)
                 command="status"
                 shift
+                ;;
+            validate)
+                command="validate"
+                shift
+                # Check if a specific spec name was provided
+                if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+                    spec_name="$1"
+                    shift
+                fi
                 ;;
             *)
                 if [ -z "$command" ]; then
@@ -490,6 +699,36 @@ main() {
             fi
 
             show_status "$spec_dir"
+            ;;
+
+        validate)
+            local spec_dir
+            if ! spec_dir="$(find_spec_dir)"; then
+                error "No .openspec/ or openspec/ directory found"
+                error "Searched from: $PWD"
+                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                return 1
+            fi
+
+            if [ -n "$spec_name" ]; then
+                # Validate specific spec
+                local spec_file
+                spec_file=$(find "$spec_dir" -type d -name "*$spec_name*" -exec test -f {}/spec.md \; -print -quit)
+
+                if [ -z "$spec_file" ]; then
+                    error "Spec not found: $spec_name"
+                    error "Available specs:"
+                    find "$spec_dir" -name "spec.md" -type f | while read -r f; do
+                        echo "  - $(basename "$(dirname "$f")")"
+                    done
+                    return 1
+                fi
+
+                validate_spec_file "$spec_file/spec.md"
+            else
+                # Validate all specs
+                validate_all_specs "$spec_dir"
+            fi
             ;;
 
         help)

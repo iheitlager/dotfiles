@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "show requirements", "spec to issues", "convert spec", mentions "openspec", or discusses system specifications and requirements documentation.
-version: 1.0.0
+description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", mentions "openspec", or discusses system specifications and requirements documentation.
+version: 1.1.0
 ---
 
 # OpenSpec Management Skill
@@ -17,6 +17,8 @@ Invoke this skill when the user wants to:
 - **List specs**: See available specifications and their status
 - **Create specs**: Generate new specification files
 - **Edit specs**: Modify existing specifications
+- **Validate specs**: Check if specs follow the proper structure
+- **Format specs**: Reformat specs to match expected template
 - **Convert specs**: Transform spec requirements into GitHub issues
 - **View requirements**: Examine specific requirements and scenarios
 
@@ -183,6 +185,146 @@ When the user wants to edit a spec:
 4. **Maintain structure**: Keep RFC 2119 keywords and scenario format
 5. **Update version**: If requirements change significantly, bump version
 
+## Validating Specs
+
+When the user asks to validate a spec, check for required sections and proper structure.
+
+### Required Sections
+
+Every OpenSpec MUST include:
+
+1. **Title** - `# [System Name] Specification`
+2. **Frontmatter** - Domain, Version, Status, Date
+3. **Overview** - Brief description
+4. **RFC 2119 Keywords** - Standard compliance statement
+5. **ADDED Requirements** - At least one requirement
+
+### Validation Checklist
+
+Run through this checklist and report findings:
+
+```markdown
+✅ Has proper title format
+✅ Has frontmatter (Domain, Version, Status, Date)
+✅ Has Overview section
+✅ Has Philosophy subsection (recommended)
+✅ Has Key Capabilities subsection (recommended)
+✅ Has RFC 2119 Keywords section
+✅ Has ADDED Requirements section
+✅ Has at least one Requirement
+✅ Each requirement has at least one Scenario
+✅ Scenarios use proper Given-When-Then format
+✅ Uses RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+✅ Has References section (recommended)
+✅ Has license/copyright info (recommended)
+```
+
+### Validation Example
+
+```
+User: "Validate the caching spec"
+
+Claude: I'll validate the dotfiles caching spec...
+
+✅ Title: "Dotfiles Caching System Specification"
+✅ Frontmatter: All fields present (Domain, Version, Status, Date)
+✅ Overview: Present with Philosophy and Key Capabilities
+✅ RFC 2119 Keywords: Present
+✅ ADDED Requirements: 4 requirements found
+✅ Scenarios: All requirements have scenarios
+✅ Given-When-Then: Proper format used
+✅ RFC 2119 Keywords: Used correctly (MUST, SHALL)
+✅ References: Present
+✅ License: Apache-2.0
+
+Summary: Spec is valid! No issues found.
+```
+
+### Common Issues
+
+Report these if found:
+
+❌ **Missing RFC 2119 section**: Required for standards compliance
+❌ **Vague scenarios**: Missing GIVEN/WHEN/THEN or too abstract
+❌ **No requirements**: Spec must have at least one requirement
+❌ **Missing frontmatter**: Need Domain, Version, Status, Date
+❌ **Weak keywords**: Using "should" instead of RFC 2119 SHOULD
+❌ **No scenarios**: Requirements must have concrete examples
+❌ **Implementation details**: Scenarios should describe behavior, not code
+
+## Formatting Specs
+
+When the user asks to format a spec, restructure it to match the template.
+
+### Formatting Process
+
+1. **Read the current spec**: Load the file completely
+2. **Identify sections**: Find existing content
+3. **Reorganize**: Match standard template order
+4. **Add missing sections**: Insert template sections with placeholders
+5. **Preserve content**: Keep all existing text, just reorganize
+6. **Fix formatting**: Ensure proper markdown structure
+
+### Standard Section Order
+
+```markdown
+1. Title (# System Name Specification)
+2. Frontmatter (Domain, Version, Status, Date)
+3. Overview
+   - Brief description
+   - Philosophy (subsection)
+   - Key Capabilities (subsection)
+4. RFC 2119 Keywords (standard boilerplate)
+5. ADDED Requirements
+   - Multiple requirements
+   - Each with scenarios
+6. Current Implementation (optional)
+7. Testing Requirements (optional)
+8. Dependencies (optional)
+9. Non-Functional Requirements (optional)
+10. References
+11. Internal Documentation
+12. License/Copyright
+```
+
+### Formatting Example
+
+```
+User: "Format the hotkey spec"
+
+Claude: I'll reformat the hotkey spec to match the standard template...
+
+Changes made:
+- Moved Overview before RFC 2119 section
+- Added missing Philosophy subsection
+- Added Key Capabilities subsection
+- Reorganized requirements into ADDED Requirements section
+- Added RFC 2119 Keywords section (was missing)
+- Added References section
+- Added license/copyright footer
+- Standardized requirement headers
+- Formatted scenarios with proper indentation
+
+The spec now follows the standard OpenSpec structure.
+```
+
+### Formatting Guidelines
+
+**Do**:
+- ✅ Preserve all existing content
+- ✅ Add section dividers (`---`)
+- ✅ Standardize heading levels (## for sections, ### for requirements)
+- ✅ Format scenarios with proper bullets and indentation
+- ✅ Add missing required sections with `[TODO]` placeholders
+- ✅ Keep line length reasonable (~80-100 chars for text)
+
+**Don't**:
+- ❌ Delete or modify existing requirements
+- ❌ Change the meaning of scenarios
+- ❌ Remove implementation details (move to proper section instead)
+- ❌ Alter RFC 2119 keywords
+- ❌ Remove references or links
+
 ## Converting Specs to Issues
 
 When the user wants to create GitHub issues from spec requirements:
@@ -322,14 +464,23 @@ spec list
 # Show compact overview
 spec status
 
-# Create new spec (use this skill)
-/spec
+# Create new spec (use /spec skill)
+/spec create [system-name]
+
+# Validate a spec (use /spec skill)
+/spec validate [spec-file]
+
+# Format a spec (use /spec skill)
+/spec format [spec-file]
 
 # Find spec directory
 cd ~/.dotfiles/.openspec/specs/
 
 # Count requirements across all specs
 grep -r "^### Requirement:" ~/.dotfiles/.openspec/specs/ | wc -l
+
+# Check if spec has RFC 2119 section
+grep -l "RFC 2119 Keywords" ~/.dotfiles/.openspec/specs/*/spec.md
 ```
 
 ## Example Workflow
@@ -349,6 +500,25 @@ grep -r "^### Requirement:" ~/.dotfiles/.openspec/specs/ | wc -l
 **Claude**:
 1. Run `spec` to open interactive browser
 2. Or read the file directly: `Read ~/.dotfiles/.openspec/specs/002-dotfiles-caching/spec.md`
+
+**User**: "Validate the shortcuts spec"
+
+**Claude**:
+1. Read the spec file
+2. Check for all required sections
+3. Verify RFC 2119 compliance
+4. Check requirement structure
+5. Report validation results with ✅/❌
+
+**User**: "Format the hotkey spec"
+
+**Claude**:
+1. Read the current spec
+2. Identify existing sections
+3. Reorganize to match standard template
+4. Add missing sections with placeholders
+5. Preserve all existing content
+6. Write the reformatted spec
 
 **User**: "Convert the caching spec requirements to issues"
 
