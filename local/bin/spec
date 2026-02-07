@@ -529,6 +529,80 @@ validate_all_specs() {
     fi
 }
 
+# Show template
+show_template() {
+    local template_file="$SCRIPT_DIR/../share/spec/template.md"
+
+    if [ ! -f "$template_file" ]; then
+        error "Template not found: $template_file"
+        return 1
+    fi
+
+    $(get_markdown_formatter) "$template_file"
+}
+
+# Create new spec from template
+create_new_spec() {
+    local spec_name="$1"
+    local spec_dir
+
+    if ! spec_dir="$(find_spec_dir)"; then
+        error "No .openspec/ directory found"
+        error "Run from a project with OpenSpec or set DOTFILES"
+        return 1
+    fi
+
+    if [ -z "$spec_name" ]; then
+        error "Usage: spec new <spec-name>"
+        return 1
+    fi
+
+    # Find next number
+    local max_num=0
+    while read -r dir; do
+        local num
+        num=$(basename "$dir" | grep -oE '^[0-9]+' || echo "0")
+        if [ "$num" -gt "$max_num" ]; then
+            max_num=$num
+        fi
+    done < <(find "$spec_dir/specs" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
+
+    local next_num
+    next_num=$(printf "%03d" $((max_num + 1)))
+
+    local new_dir="$spec_dir/specs/$next_num-$spec_name"
+    local new_file="$new_dir/spec.md"
+
+    if [ -d "$new_dir" ]; then
+        error "Spec directory already exists: $new_dir"
+        return 1
+    fi
+
+    # Create directory
+    mkdir -p "$new_dir"
+
+    # Copy template
+    local template_file="$SCRIPT_DIR/../share/spec/template.md"
+    if [ ! -f "$template_file" ]; then
+        error "Template not found: $template_file"
+        return 1
+    fi
+
+    cp "$template_file" "$new_file"
+
+    # Replace placeholders with today's date
+    local today
+    today=$(date +%Y-%m-%d)
+    sed -i '' "s/\[YYYY-MM-DD\]/$today/" "$new_file"
+
+    echo -e "${GREEN}Created new spec:${RESET} $new_file"
+    echo -e "${GRAY}Next steps:${RESET}"
+    echo "  1. Edit the spec file: \$EDITOR $new_file"
+    echo "  2. Replace [placeholders] with your content"
+    echo "  3. Add requirements and scenarios"
+    echo "  4. Run: spec validate $next_num-$spec_name"
+}
+
 # Print help text
 print_help() {
     cat << 'EOF'
@@ -540,6 +614,8 @@ USAGE:
     spec status       Show compact overview (count, version, status)
     spec validate     Validate all specs for compliance
     spec validate <spec>  Validate a specific spec by name
+    spec template     Show the OpenSpec template
+    spec new <name>   Create new spec from template
     spec --raw        Use raw mode (bat syntax highlighting only)
     spec --help       Show this help message
 
@@ -617,6 +693,12 @@ EXAMPLES:
     # Validate a specific spec
     spec validate dotfiles-caching
 
+    # Show the template
+    spec template
+
+    # Create new spec from template
+    spec new authentication-system
+
     # From any subdirectory in a git repo (finds git root)
     cd ~/myproject/src/components
     spec
@@ -658,6 +740,18 @@ main() {
                 shift
                 # Check if a specific spec name was provided
                 if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+                    spec_name="$1"
+                    shift
+                fi
+                ;;
+            template)
+                command="template"
+                shift
+                ;;
+            new)
+                command="new"
+                shift
+                if [[ $# -gt 0 ]]; then
                     spec_name="$1"
                     shift
                 fi
@@ -729,6 +823,14 @@ main() {
                 # Validate all specs
                 validate_all_specs "$spec_dir"
             fi
+            ;;
+
+        template)
+            show_template
+            ;;
+
+        new)
+            create_new_spec "$spec_name"
             ;;
 
         help)
