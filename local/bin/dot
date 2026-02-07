@@ -132,9 +132,10 @@ if [[ $# -gt 0 ]]; then
                 done
 
                 # Check shortcuts cache
-                shortcuts_cache="$cache_dir/shortcuts/topics.cache"
+                shortcuts_cache="$cache_dir/shortcuts.cache"
                 if [[ -f "$shortcuts_cache" ]]; then
                     topic_count=$(wc -l < "$shortcuts_cache" | tr -d ' ')
+                    size=$(wc -c < "$shortcuts_cache" | tr -d ' ')
                     age_sec=$(( $(date +%s) - $(stat -f %m "$shortcuts_cache" 2>/dev/null || stat -c %Y "$shortcuts_cache" 2>/dev/null) ))
                     if [[ $age_sec -lt 60 ]]; then
                         age="${age_sec}s"
@@ -145,7 +146,7 @@ if [[ $# -gt 0 ]]; then
                     else
                         age="$((age_sec / 86400))d"
                     fi
-                    printf "   %-18s %6s  %s ago  [%s]\n" "shortcuts/" "${topic_count}" "$age" "$topic_count topics"
+                    printf "   %-18s %6s  %s ago  [%s]\n" "shortcuts.cache" "${size}B" "$age" "$topic_count topics"
                 fi
 
                 echo ""
@@ -255,9 +256,9 @@ if [[ $# -gt 0 ]]; then
                 done
 
                 # Remove shortcuts cache
-                if [[ -d "$cache_dir/shortcuts" ]]; then
-                    rm -rf "$cache_dir/shortcuts"
-                    echo "   Removed: shortcuts/"
+                if [[ -f "$cache_dir/shortcuts.cache" ]]; then
+                    rm -f "$cache_dir/shortcuts.cache"
+                    echo "   Removed: shortcuts.cache"
                 fi
 
                 echo "✅ Cache invalidated. Restart your shell to regenerate."

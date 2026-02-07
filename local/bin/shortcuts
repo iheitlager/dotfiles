@@ -17,8 +17,8 @@ RESET='\033[0m'
 
 # Configuration
 DOTFILES="${HOME}/.dotfiles"
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/shortcuts"
-CACHE_FILE="${CACHE_DIR}/topics.cache"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+CACHE_FILE="${CACHE_DIR}/shortcuts.cache"
 
 # Associative arrays for topics
 declare -A TOPIC_PATHS

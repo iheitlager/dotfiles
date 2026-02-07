@@ -91,7 +91,7 @@ The system MUST integrate with the dotfiles cache management infrastructure.
 #### Scenario: Cache Invalidation via dot Command
 - GIVEN the shortcuts cache exists
 - WHEN a user runs `dot invalidate`
-- THEN the system SHALL remove the shortcuts cache directory
+- THEN the system SHALL remove the shortcuts cache file
 - AND SHALL display confirmation of removal
 
 #### Scenario: Manual Cache Refresh
@@ -162,7 +162,7 @@ All module `bash_shortcuts` files MUST follow a consistent structure and format.
 ```yaml
 components:
   cli: local/bin/shortcuts (224 lines)
-  cache: ${XDG_CACHE_HOME}/dotfiles/shortcuts/
+  cache: ${XDG_CACHE_HOME}/dotfiles/shortcuts.cache
   modules:
     - bash/bash_shortcuts (Bash + FZF)
     - config/ghostty/bash_shortcuts (Terminal)
@@ -192,13 +192,13 @@ components:
    - */bash_shortcuts → basename of parent directory
 4. Build associative array: topic → path
 5. Sort topics alphabetically
-6. Cache results to topics.cache
+6. Cache results to shortcuts.cache
 ```
 
 ### Cache Format
 
 ```
-# ${XDG_CACHE_HOME}/dotfiles/shortcuts/topics.cache
+# ${XDG_CACHE_HOME}/dotfiles/shortcuts.cache
 bash=bash/bash_shortcuts
 ghostty=config/ghostty/bash_shortcuts
 nvim=nvim/bash_shortcuts
@@ -333,7 +333,7 @@ help shortcuts bash
 ### Test: Performance
 ```bash
 # Cold start
-rm -rf ~/.cache/dotfiles/shortcuts
+rm -f ~/.cache/dotfiles/shortcuts.cache
 time shortcuts bash
 # Expected: <200ms
 
