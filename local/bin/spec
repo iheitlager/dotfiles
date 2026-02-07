@@ -292,17 +292,31 @@ show_status() {
         local dir_name
         dir_name="$(basename "$(dirname "$spec_file")")"
 
-        # Show directory name if unnumbered, or just title if numbered
-        local display_name
+        # Build display name WITHOUT color codes for proper length calculation
+        local display_name_plain
+        local display_name_colored
+
         if check_numbering "$dir_name"; then
-            display_name="$title"
+            display_name_plain="$title"
+            display_name_colored="$title"
         else
-            display_name="$title ${GRAY}[$dir_name]${RESET}"
+            display_name_plain="$title [$dir_name]"
+            display_name_colored="$title ${GRAY}[$dir_name]${RESET}"
         fi
 
-        # Truncate if too long
-        if [ ${#display_name} -gt 50 ]; then
-            display_name="${display_name:0:47}..."
+        # Truncate if too long (measure plain text only)
+        if [ ${#display_name_plain} -gt 50 ]; then
+            display_name_plain="${display_name_plain:0:47}..."
+            # For colored version, need to rebuild with truncated title
+            local title_len=$((47 - ${#dir_name} - 3))
+            if [ "$title_len" -lt 10 ]; then
+                title_len=10
+            fi
+            if check_numbering "$dir_name"; then
+                display_name_colored="${title:0:47}..."
+            else
+                display_name_colored="${title:0:$title_len}...${GRAY}[$dir_name]${RESET}"
+            fi
         fi
 
         local version
@@ -319,8 +333,13 @@ show_status() {
 
         total_reqs=$((total_reqs + req_count))
 
-        printf "%-50s  ${CYAN}%-8s${RESET}  ${GREEN}%-12s${RESET}  ${YELLOW}%s${RESET}\n" \
-            "$display_name" "$version" "$status" "$req_count"
+        # Use plain version for padding calculation
+        local padding=$((50 - ${#display_name_plain}))
+        local spaces=""
+        for ((i=0; i<padding; i++)); do spaces="$spaces "; done
+
+        # Print with colored name but proper spacing based on plain length
+        echo -e "${display_name_colored}${spaces}  ${CYAN}${version}${RESET}$(printf '%*s' $((8 - ${#version})) '')  ${GREEN}${status}${RESET}$(printf '%*s' $((12 - ${#status})) '')  ${YELLOW}${req_count}${RESET}"
     done <<< "$spec_files"
 
     echo ""
