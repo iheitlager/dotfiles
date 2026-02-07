@@ -5,4 +5,4 @@ claude/config/settings.local.json
 AGENTS.md
 
 # Neovim plugin lock file
-config/nvim/lazy-lock.json
+nvim/config/lazy-lock.json
