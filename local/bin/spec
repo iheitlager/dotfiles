@@ -63,35 +63,26 @@ find_spec_dir() {
     return 1
 }
 
-# Find all spec.md files within the spec directory
-# Looks in specs/, spec/, or directly in subdirectories
+# Find all spec files within the spec directory
+# Supports two patterns:
+#   1. Directory-based: specs/001-topic/spec.md
+#   2. Named files: category/topic.spec.md
 find_spec_files() {
     local spec_dir="$1"
     local spec_files=()
 
-    # Try specs/ subdirectory first (most common pattern)
-    if [ -d "$spec_dir/specs" ]; then
-        while IFS= read -r -d '' file; do
-            spec_files+=("$file")
-        done < <(find "$spec_dir/specs" -name "spec.md" -type f -print0 2>/dev/null)
-    fi
+    # Pattern 1: Find spec.md files (one per directory)
+    while IFS= read -r -d '' file; do
+        spec_files+=("$file")
+    done < <(find "$spec_dir" -name "spec.md" -type f -print0 2>/dev/null)
 
-    # Try spec/ subdirectory
-    if [ -d "$spec_dir/spec" ]; then
-        while IFS= read -r -d '' file; do
-            spec_files+=("$file")
-        done < <(find "$spec_dir/spec" -name "spec.md" -type f -print0 2>/dev/null)
-    fi
+    # Pattern 2: Find *.spec.md files (multiple specs per category)
+    while IFS= read -r -d '' file; do
+        spec_files+=("$file")
+    done < <(find "$spec_dir" -name "*.spec.md" -type f -print0 2>/dev/null)
 
-    # If no files found yet, look directly in subdirectories
-    if [ ${#spec_files[@]} -eq 0 ]; then
-        while IFS= read -r -d '' file; do
-            spec_files+=("$file")
-        done < <(find "$spec_dir" -mindepth 2 -maxdepth 2 -name "spec.md" -type f -print0 2>/dev/null)
-    fi
-
-    # Print sorted results
-    printf '%s\n' "${spec_files[@]}" | sort
+    # Remove duplicates and sort
+    printf '%s\n' "${spec_files[@]}" | sort -u
 }
 
 # Check if directory names follow numbered pattern (NNN-name)
@@ -150,10 +141,34 @@ parse_spec_metadata() {
         head -1
 }
 
-# Get the spec title (first # heading)
+# Get the spec title (first # heading, or derive from filename)
 get_spec_title() {
     local spec_file="$1"
-    grep "^# " "$spec_file" 2>/dev/null | head -1 | sed 's/^# //'
+    local title
+
+    # Try to get title from file content
+    title=$(grep "^# " "$spec_file" 2>/dev/null | head -1 | sed 's/^# //')
+
+    # Fallback: derive from filename for *.spec.md pattern
+    if [ -z "$title" ]; then
+        local basename_file
+        basename_file=$(basename "$spec_file")
+
+        if [[ "$basename_file" == *.spec.md ]]; then
+            # Convert auth.spec.md -> Auth Specification
+            title=$(echo "${basename_file%.spec.md}" | sed 's/-/ /g' | sed 's/\b\w/\u&/g')
+            title="$title Specification"
+        else
+            # For spec.md files, use directory name
+            local dirname_file
+            dirname_file=$(basename "$(dirname "$spec_file")")
+            # Remove leading numbers (001-dotfiles -> Dotfiles)
+            dirname_file=$(echo "$dirname_file" | sed 's/^[0-9]*-//' | sed 's/-/ /g' | sed 's/\b\w/\u&/g')
+            title="$dirname_file Specification"
+        fi
+    fi
+
+    echo "$title"
 }
 
 # Get relative path from spec directory
@@ -691,9 +706,38 @@ show_template() {
     $(get_markdown_formatter) "$template_file"
 }
 
+# Detect spec file pattern used in the directory
+# Returns: "directory" for spec.md pattern, "named" for *.spec.md pattern
+detect_spec_pattern() {
+    local spec_dir="$1"
+    local has_spec_md=false
+    local has_named_spec=false
+
+    # Check for spec.md files
+    if find "$spec_dir" -name "spec.md" -type f -print -quit 2>/dev/null | grep -q .; then
+        has_spec_md=true
+    fi
+
+    # Check for *.spec.md files
+    if find "$spec_dir" -name "*.spec.md" -type f -print -quit 2>/dev/null | grep -q .; then
+        has_named_spec=true
+    fi
+
+    if [ "$has_spec_md" = true ] && [ "$has_named_spec" = false ]; then
+        echo "directory"
+    elif [ "$has_named_spec" = true ] && [ "$has_spec_md" = false ]; then
+        echo "named"
+    elif [ "$has_spec_md" = true ] && [ "$has_named_spec" = true ]; then
+        echo "mixed"
+    else
+        echo "directory"  # Default
+    fi
+}
+
 # Create new spec from template
 create_new_spec() {
     local spec_name="$1"
+    local category="${2:-}"  # Optional category for named pattern
     local spec_dir
 
     if ! spec_dir="$(find_spec_dir)"; then
@@ -703,78 +747,102 @@ create_new_spec() {
     fi
 
     if [ -z "$spec_name" ]; then
-        error "Usage: spec new <spec-name>"
+        error "Usage: spec new <spec-name> [category]"
+        error ""
+        error "Examples:"
+        error "  spec new authentication           # Creates directory-based spec"
+        error "  spec new auth backend            # Creates backend/auth.spec.md"
         return 1
     fi
 
-    # Determine where to create specs
+    # Detect existing pattern
+    local pattern
+    pattern=$(detect_spec_pattern "$spec_dir")
+
+    # Determine target directory and file pattern
     local target_dir
-    if [ -d "$spec_dir/specs" ]; then
-        target_dir="$spec_dir/specs"
-    elif [ -d "$spec_dir/spec" ]; then
-        target_dir="$spec_dir/spec"
-    else
-        # Create specs/ directory if neither exists
-        target_dir="$spec_dir/specs"
+    local new_file
+
+    if [ -n "$category" ] || [ "$pattern" = "named" ]; then
+        # Named file pattern: category/name.spec.md
+        if [ -z "$category" ]; then
+            category="general"
+        fi
+        target_dir="$spec_dir/$category"
         mkdir -p "$target_dir"
-    fi
+        new_file="$target_dir/${spec_name}.spec.md"
 
-    # Check if existing specs use numbering
-    local has_numbered=false
-    local has_unnumbered=false
-    local max_num=0
+        if [ -f "$new_file" ]; then
+            error "Spec file already exists: $new_file"
+            return 1
+        fi
 
-    if [ -d "$target_dir" ]; then
-        while IFS= read -r -d '' dir; do
-            local basename_dir
-            basename_dir="$(basename "$dir")"
-
-            if check_numbering "$basename_dir"; then
-                has_numbered=true
-                local num
-                num=$(echo "$basename_dir" | grep -oE '^[0-9]+' || echo "0")
-                if [ "$num" -gt "$max_num" ]; then
-                    max_num=$num
-                fi
-            else
-                has_unnumbered=true
-            fi
-        done < <(find "$target_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
-    fi
-
-    # Decide whether to use numbering
-    local dir_name
-    local use_numbering=false
-
-    if [ "$has_numbered" = true ] && [ "$has_unnumbered" = false ]; then
-        # All existing specs are numbered, continue the pattern
-        use_numbering=true
-    elif [ "$has_numbered" = true ] && [ "$has_unnumbered" = true ]; then
-        # Mixed - warn and recommend numbering
-        echo -e "${YELLOW}⚠ Mixed numbering detected:${RESET} Existing specs have inconsistent naming"
-        echo -e "${GRAY}Recommendation: Use numbered prefix for consistency${RESET}"
-        use_numbering=true
-    fi
-    # else: no numbered specs found, don't use numbering
-
-    if [ "$use_numbering" = true ]; then
-        local next_num
-        next_num=$(printf "%03d" $((max_num + 1)))
-        dir_name="$next_num-$spec_name"
+        echo -e "${GRAY}Using named file pattern:${RESET} $category/${spec_name}.spec.md"
     else
-        dir_name="$spec_name"
+        # Directory pattern: specs/NNN-name/spec.md
+        if [ -d "$spec_dir/specs" ]; then
+            target_dir="$spec_dir/specs"
+        elif [ -d "$spec_dir/spec" ]; then
+            target_dir="$spec_dir/spec"
+        else
+            target_dir="$spec_dir/specs"
+            mkdir -p "$target_dir"
+        fi
+
+        # Check if existing specs use numbering
+        local has_numbered=false
+        local has_unnumbered=false
+        local max_num=0
+
+        if [ -d "$target_dir" ]; then
+            while IFS= read -r -d '' dir; do
+                local basename_dir
+                basename_dir="$(basename "$dir")"
+
+                if check_numbering "$basename_dir"; then
+                    has_numbered=true
+                    local num
+                    num=$(echo "$basename_dir" | grep -oE '^[0-9]+' || echo "0")
+                    if [ "$num" -gt "$max_num" ]; then
+                        max_num=$num
+                    fi
+                else
+                    has_unnumbered=true
+                fi
+            done < <(find "$target_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
+        fi
+
+        # Decide whether to use numbering
+        local dir_name
+        local use_numbering=false
+
+        if [ "$has_numbered" = true ] && [ "$has_unnumbered" = false ]; then
+            use_numbering=true
+        elif [ "$has_numbered" = true ] && [ "$has_unnumbered" = true ]; then
+            echo -e "${YELLOW}⚠ Mixed numbering detected:${RESET} Existing specs have inconsistent naming"
+            echo -e "${GRAY}Recommendation: Use numbered prefix for consistency${RESET}"
+            use_numbering=true
+        fi
+
+        if [ "$use_numbering" = true ]; then
+            local next_num
+            next_num=$(printf "%03d" $((max_num + 1)))
+            dir_name="$next_num-$spec_name"
+        else
+            dir_name="$spec_name"
+        fi
+
+        local new_dir="$target_dir/$dir_name"
+        new_file="$new_dir/spec.md"
+
+        if [ -d "$new_dir" ]; then
+            error "Spec directory already exists: $new_dir"
+            return 1
+        fi
+
+        mkdir -p "$new_dir"
+        echo -e "${GRAY}Using directory pattern:${RESET} $dir_name/spec.md"
     fi
-
-    local new_dir="$target_dir/$dir_name"
-    local new_file="$new_dir/spec.md"
-
-    if [ -d "$new_dir" ]; then
-        error "Spec directory already exists: $new_dir"
-        return 1
-    fi
-
-    # Create directory
-    mkdir -p "$new_dir"
 
     # Copy template
     local template_file="$SCRIPT_DIR/../share/spec/template.md"
@@ -795,7 +863,7 @@ create_new_spec() {
     echo "  1. Edit the spec file: \$EDITOR $new_file"
     echo "  2. Replace [placeholders] with your content"
     echo "  3. Add requirements and scenarios"
-    echo "  4. Run: spec validate $dir_name"
+    echo "  4. Run: spec validate ${spec_name}"
 }
 
 # Print help text
@@ -823,12 +891,15 @@ DESCRIPTION:
     - .openspec, openspec (standard)
     - .specs, specs, .spec, spec (alternatives)
 
-    Within these, looks for specs in:
-    - specs/ or spec/ subdirectories
-    - Direct subdirectories containing spec.md
+    Supported file patterns:
+    1. Directory-based: specs/001-dotfiles-core/spec.md
+       - One spec.md per topic directory
+       - Numbering (001-, 002-) is optional but recommended
+    2. Named files: backend/auth.spec.md, frontend/ui.spec.md
+       - Multiple *.spec.md files per category
+       - Category-based organization
 
-    Numbering is optional but recommended for explicit ordering.
-    Use numbered prefixes (001-name, 002-name) for consistency.
+    The command auto-detects which pattern is in use and adapts.
 
     Search Order:
     1. Git repository root (if inside a git repo)
@@ -902,8 +973,11 @@ EXAMPLES:
     # Show the template
     spec template
 
-    # Create new spec from template
+    # Create new spec from template (directory pattern)
     spec new authentication-system
+
+    # Create new spec with category (named file pattern)
+    spec new auth backend
 
     # From any subdirectory in a git repo (finds git root)
     cd ~/myproject/src/components
@@ -922,6 +996,7 @@ main() {
     RAW_MODE=false
     local command=""
     local spec_name=""
+    local spec_category=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -960,6 +1035,11 @@ main() {
                 if [[ $# -gt 0 ]]; then
                     spec_name="$1"
                     shift
+                    # Check for optional category argument
+                    if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+                        spec_category="$1"
+                        shift
+                    fi
                 fi
                 ;;
             *)
@@ -1040,7 +1120,7 @@ main() {
             ;;
 
         new)
-            create_new_spec "$spec_name"
+            create_new_spec "$spec_name" "$spec_category"
             ;;
 
         help)
