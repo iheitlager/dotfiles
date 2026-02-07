@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install fzf || brew upgrade fzf
+brew install fd || brew upgrade fd
+
+export PATH=$TMPPATH
