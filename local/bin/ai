@@ -35,6 +35,10 @@ COMMANDS:
     --diff            Explain current git diff
     --cmd "task"      Generate shell command
     --fix "error"     Help fix an error
+    --spec [task]     Work with OpenSpec specifications (/spec skill)
+    --validate [name] Validate spec(s) for compliance
+    --pr [action]     Create or manage pull requests (/pr skill)
+    --issue [action]  Create or list GitHub issues (/issue skill)
 
 EXAMPLES:
     ai "explain git rebase"
@@ -44,6 +48,10 @@ EXAMPLES:
     ai --commit
     ai --diff
     ai --cmd "find files over 100mb"
+    ai --spec "create spec for auth system"
+    ai --validate
+    ai --pr "create pull request"
+    ai --issue "list open bugs"
 
 EOF
     exit 0
@@ -84,6 +92,14 @@ while [[ $# -gt 0 ]]; do
                        [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
         --fix)         COMMAND="fix"; shift
                        [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        --spec)        COMMAND="spec"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        --validate)    COMMAND="validate"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        --pr)          COMMAND="pr"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
+        --issue)       COMMAND="issue"; shift
+                       [[ $# -gt 0 && ! "$1" =~ ^- ]] && { COMMAND_ARG="$1"; shift; } ;;
         -*)            die "Unknown option: $1" ;;
         *)             POSITIONAL+=("$1"); shift ;;
     esac
@@ -121,6 +137,28 @@ case "$COMMAND" in
     fix)
         [[ -z "$COMMAND_ARG" && -z "$PROMPT" ]] && die "Usage: ai --fix 'error message'"
         PROMPT="$(load_prompt fix)"$'\n\n'"${COMMAND_ARG:-$PROMPT}"
+        ;;
+    spec)
+        # Delegate to /spec skill via Claude
+        TASK="${COMMAND_ARG:-$PROMPT}"
+        [[ -z "$TASK" ]] && TASK="list available specs"
+        PROMPT="/spec $TASK"
+        ;;
+    validate)
+        # Run spec validate command directly
+        exec spec validate "${COMMAND_ARG:-}"
+        ;;
+    pr)
+        # Delegate to /pr skill via Claude
+        TASK="${COMMAND_ARG:-$PROMPT}"
+        [[ -z "$TASK" ]] && TASK="create pull request"
+        PROMPT="/pr $TASK"
+        ;;
+    issue)
+        # Delegate to /issue skill via Claude
+        TASK="${COMMAND_ARG:-$PROMPT}"
+        [[ -z "$TASK" ]] && TASK="list open issues"
+        PROMPT="/issue $TASK"
         ;;
 esac
 
