@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# Neovim keyboard shortcuts
+
+GREEN='\033[32m'
+CYAN='\033[36m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+
+shortcut() {
+    printf "  ${GREEN}%-25s${RESET} %s\n" "$1" "$2"
+}
+
+note() {
+    printf "  ${CYAN}Note: %s${RESET}\n" "$1"
+}
+
+section() {
+    printf "  ${YELLOW}%s${RESET}\n" "$1"
+}
+
+echo "Leader Key:"
+shortcut "<Space>" "Leader key"
+note "Most commands require <Space> prefix"
+
+echo ""
+echo "Window Navigation:"
+shortcut "Ctrl+H/J/K/L" "Move to left/down/up/right window"
+
+echo ""
+echo "Quick Actions:"
+shortcut "<Space>w" "Quick save (:w)"
+shortcut "<Space>q" "Quick quit (:q)"
+shortcut "<Space>n" "Toggle line numbers"
+shortcut "<Space>pv" "Open file explorer (netrw)"
+shortcut "<Esc>" "Clear search highlighting"
+
+echo ""
+echo "Buffer Navigation:"
+shortcut "Shift+H" "Previous buffer"
+shortcut "Shift+L" "Next buffer"
+
+echo ""
+echo "Copy & Paste:"
+shortcut "y" "Yank (copy) selection (visual mode)"
+shortcut "yy or Y" "Yank (copy) entire line"
+shortcut "yiw" "Yank inner word"
+shortcut "yap" "Yank a paragraph"
+shortcut "p" "Paste after cursor / below line"
+shortcut "P" "Paste before cursor / above line"
+note "Line yank: p=next line, P=previous line"
+note "Clipboard syncs with system (unnamedplus enabled)"
+
+echo ""
+echo "Visual Mode - Editing:"
+shortcut "v" "Enter visual mode (character)"
+shortcut "V" "Enter visual mode (line)"
+shortcut "Ctrl+V" "Enter visual block mode"
+shortcut "<" "Indent left (stay in visual)"
+shortcut ">" "Indent right (stay in visual)"
+shortcut "J" "Move selected lines down"
+shortcut "K" "Move selected lines up"
+shortcut "jj" "Exit insert mode (in insert mode)"
+
+echo ""
+echo "Scrolling:"
+shortcut "Ctrl+D" "Scroll down half page (centered)"
+shortcut "Ctrl+U" "Scroll up half page (centered)"
+shortcut "n" "Next search result (centered)"
+shortcut "N" "Previous search result (centered)"
+
+echo ""
+echo "Diagnostics (LSP):"
+shortcut "[d" "Go to previous diagnostic"
+shortcut "]d" "Go to next diagnostic"
+shortcut "<Space>e" "Show diagnostic error"
+
+echo ""
+echo "Classic Vim:"
+shortcut "F2" "Toggle paste mode"
+shortcut "F4" "Reload Chrome tab (macOS)"
+note "See :help for complete Vim documentation"
