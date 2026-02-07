@@ -19,49 +19,125 @@ source "${SCRIPT_DIR}/../lib/shell-common.sh"
 readonly GRAY='\033[90m'
 readonly RESET="$NC"  # Alias for consistency with existing code
 
-# Find the spec directory (.openspec or openspec)
+# Find the spec directory (tries multiple variants)
 find_spec_dir() {
+    local candidates=(".openspec" "openspec" ".specs" "specs" ".spec" "spec")
+
     # First, check if we're in a git repository
     if git rev-parse --is-inside-work-tree &>/dev/null; then
         local git_root
         git_root="$(git rev-parse --show-toplevel 2>/dev/null)"
 
         if [ -n "$git_root" ]; then
-            if [ -d "$git_root/.openspec" ]; then
-                echo "$git_root/.openspec"
-                return 0
-            elif [ -d "$git_root/openspec" ]; then
-                echo "$git_root/openspec"
-                return 0
-            fi
+            for dir in "${candidates[@]}"; do
+                if [ -d "$git_root/$dir" ]; then
+                    echo "$git_root/$dir"
+                    return 0
+                fi
+            done
         fi
     fi
 
     # If not in git or specs not found in git root, search up the directory tree
     local current_dir="$PWD"
     while [ "$current_dir" != "/" ]; do
-        if [ -d "$current_dir/.openspec" ]; then
-            echo "$current_dir/.openspec"
-            return 0
-        elif [ -d "$current_dir/openspec" ]; then
-            echo "$current_dir/openspec"
-            return 0
-        fi
+        for dir in "${candidates[@]}"; do
+            if [ -d "$current_dir/$dir" ]; then
+                echo "$current_dir/$dir"
+                return 0
+            fi
+        done
         current_dir="$(dirname "$current_dir")"
     done
 
     # Check DOTFILES as fallback
     if [ -n "${DOTFILES:-}" ]; then
-        if [ -d "$DOTFILES/.openspec" ]; then
-            echo "$DOTFILES/.openspec"
-            return 0
-        elif [ -d "$DOTFILES/openspec" ]; then
-            echo "$DOTFILES/openspec"
-            return 0
-        fi
+        for dir in "${candidates[@]}"; do
+            if [ -d "$DOTFILES/$dir" ]; then
+                echo "$DOTFILES/$dir"
+                return 0
+            fi
+        done
     fi
 
     return 1
+}
+
+# Find all spec.md files within the spec directory
+# Looks in specs/, spec/, or directly in subdirectories
+find_spec_files() {
+    local spec_dir="$1"
+    local spec_files=()
+
+    # Try specs/ subdirectory first (most common pattern)
+    if [ -d "$spec_dir/specs" ]; then
+        while IFS= read -r -d '' file; do
+            spec_files+=("$file")
+        done < <(find "$spec_dir/specs" -name "spec.md" -type f -print0 2>/dev/null)
+    fi
+
+    # Try spec/ subdirectory
+    if [ -d "$spec_dir/spec" ]; then
+        while IFS= read -r -d '' file; do
+            spec_files+=("$file")
+        done < <(find "$spec_dir/spec" -name "spec.md" -type f -print0 2>/dev/null)
+    fi
+
+    # If no files found yet, look directly in subdirectories
+    if [ ${#spec_files[@]} -eq 0 ]; then
+        while IFS= read -r -d '' file; do
+            spec_files+=("$file")
+        done < <(find "$spec_dir" -mindepth 2 -maxdepth 2 -name "spec.md" -type f -print0 2>/dev/null)
+    fi
+
+    # Print sorted results
+    printf '%s\n' "${spec_files[@]}" | sort
+}
+
+# Check if directory names follow numbered pattern (NNN-name)
+check_numbering() {
+    local dir_name="$1"
+    if [[ "$dir_name" =~ ^[0-9]{3,}- ]]; then
+        return 0  # Has numbering
+    else
+        return 1  # No numbering
+    fi
+}
+
+# Analyze numbering consistency across all specs
+analyze_numbering() {
+    local spec_dir="$1"
+    local spec_files
+    spec_files="$(find_spec_files "$spec_dir")"
+
+    local total=0
+    local numbered=0
+    local unnumbered=0
+
+    while read -r spec_file; do
+        [ -z "$spec_file" ] && continue
+        ((total++))
+
+        local dir_name
+        dir_name="$(basename "$(dirname "$spec_file")")"
+
+        if check_numbering "$dir_name"; then
+            ((numbered++))
+        else
+            ((unnumbered++))
+        fi
+    done <<< "$spec_files"
+
+    # Return status: 0=all numbered, 1=mixed, 2=none numbered
+    if [ "$total" -eq 0 ]; then
+        return 3  # No specs
+    elif [ "$unnumbered" -eq 0 ]; then
+        return 0  # All numbered
+    elif [ "$numbered" -eq 0 ]; then
+        return 2  # None numbered
+    else
+        return 1  # Mixed
+    fi
 }
 
 # Extract metadata from spec file header
@@ -150,30 +226,61 @@ render_markdown() {
 show_status() {
     local spec_dir="$1"
 
-    # Find all spec.md files
+    # Find all spec.md files using the flexible finder
     local spec_files
-    spec_files=$(find "$spec_dir" -name "spec.md" -type f | sort)
+    spec_files=$(find_spec_files "$spec_dir")
 
     local file_count
-    file_count=$(echo "$spec_files" | wc -l | tr -d ' ')
+    file_count=$(echo "$spec_files" | grep -c "spec.md" || echo "0")
 
     local total_reqs=0
 
     echo -e "${BOLD}OpenSpec Status${RESET} ${GRAY}($spec_dir)${RESET}\n"
     echo -e "Files: ${GREEN}$file_count${RESET}\n"
 
+    # Check numbering and provide feedback
+    local numbering_status=0
+    analyze_numbering "$spec_dir" || numbering_status=$?
+
+    case $numbering_status in
+        0)
+            echo -e "${GREEN}✓${RESET} All specs use numbered directories (NNN-name)\n"
+            ;;
+        1)
+            echo -e "${YELLOW}⚠${RESET} ${YELLOW}Mixed numbering:${RESET} Some specs use numbered directories (NNN-name), others don't"
+            echo -e "  ${GRAY}Consider adding numbers to all for explicit ordering${RESET}\n"
+            ;;
+        2)
+            echo -e "${YELLOW}ℹ${RESET} ${GRAY}No numbered directories found${RESET}"
+            echo -e "  ${GRAY}Tip: Use numbered prefixes (001-name, 002-name) for explicit ordering${RESET}\n"
+            ;;
+    esac
+
     # Table header
-    printf "${BOLD}%-40s  %-8s  %-12s  %s${RESET}\n" "Specification" "Version" "Status" "Reqs"
-    printf "%s\n" "$(printf '─%.0s' {1..70})"
+    printf "${BOLD}%-50s  %-8s  %-12s  %s${RESET}\n" "Specification" "Version" "Status" "Reqs"
+    printf "%s\n" "$(printf '─%.0s' {1..80})"
 
     # Process each spec file (using process substitution to avoid subshell)
     while read -r spec_file; do
+        [ -z "$spec_file" ] && continue
+
         local title
         title="$(get_spec_title "$spec_file")"
 
-        # Truncate title if too long
-        if [ ${#title} -gt 40 ]; then
-            title="${title:0:37}..."
+        local dir_name
+        dir_name="$(basename "$(dirname "$spec_file")")"
+
+        # Show directory name if unnumbered, or just title if numbered
+        local display_name
+        if check_numbering "$dir_name"; then
+            display_name="$title"
+        else
+            display_name="$title ${GRAY}[$dir_name]${RESET}"
+        fi
+
+        # Truncate if too long
+        if [ ${#display_name} -gt 50 ]; then
+            display_name="${display_name:0:47}..."
         fi
 
         local version
@@ -190,9 +297,9 @@ show_status() {
 
         total_reqs=$((total_reqs + req_count))
 
-        printf "%-40s  ${CYAN}%-8s${RESET}  ${GREEN}%-12s${RESET}  ${YELLOW}%s${RESET}\n" \
-            "$title" "$version" "$status" "$req_count"
-    done < <(echo "$spec_files")
+        printf "%-50s  ${CYAN}%-8s${RESET}  ${GREEN}%-12s${RESET}  ${YELLOW}%s${RESET}\n" \
+            "$display_name" "$version" "$status" "$req_count"
+    done <<< "$spec_files"
 
     echo ""
     echo -e "Total Requirements: ${BOLD}${YELLOW}$total_reqs${RESET}"
@@ -202,8 +309,24 @@ show_status() {
 list_specs() {
     local spec_dir="$1"
 
-    # Find all spec.md files
-    find "$spec_dir" -name "spec.md" -type f | sort | while read -r spec_file; do
+    # Check numbering and provide feedback
+    local numbering_status=0
+    analyze_numbering "$spec_dir" || numbering_status=$?
+
+    case $numbering_status in
+        1)
+            echo -e "${YELLOW}⚠ Mixed numbering detected:${RESET} Some specs use numbered directories, others don't"
+            echo -e "${GRAY}Consider adding numbered prefixes (001-, 002-, 003-) to all specs for explicit ordering${RESET}\n"
+            ;;
+        2)
+            echo -e "${GRAY}Tip: Use numbered directory prefixes (001-name, 002-name) for explicit ordering${RESET}\n"
+            ;;
+    esac
+
+    # Find all spec.md files using the flexible finder
+    find_spec_files "$spec_dir" | while read -r spec_file; do
+        [ -z "$spec_file" ] && continue
+
         local rel_path
         rel_path="$(get_relative_path "$spec_dir" "$spec_file")"
 
@@ -219,8 +342,16 @@ list_specs() {
         local status
         status="$(parse_spec_metadata "$spec_file" "Status")"
 
+        # Check if directory is numbered
+        local dir_name
+        dir_name="$(basename "$(dirname "$spec_file")")"
+        local numbering_indicator=""
+        if ! check_numbering "$dir_name"; then
+            numbering_indicator=" ${YELLOW}[unnumbered]${RESET}"
+        fi
+
         # Print spec header
-        echo -e "${BOLD}${GREEN}${title}${RESET}"
+        echo -e "${BOLD}${GREEN}${title}${RESET}${numbering_indicator}"
         echo -e "  ${GRAY}Path:${RESET}    $rel_path"
         [ -n "$domain" ] && echo -e "  ${GRAY}Domain:${RESET}  $domain"
         [ -n "$version" ] && echo -e "  ${GRAY}Version:${RESET} $version"
@@ -245,7 +376,9 @@ list_specs() {
 build_fzf_list() {
     local spec_dir="$1"
 
-    find "$spec_dir" -name "spec.md" -type f | sort | while read -r spec_file; do
+    find_spec_files "$spec_dir" | while read -r spec_file; do
+        [ -z "$spec_file" ] && continue
+
         local rel_path
         rel_path="$(get_relative_path "$spec_dir" "$spec_file")"
 
@@ -497,12 +630,29 @@ validate_all_specs() {
 
     echo -e "${BOLD}Validating all OpenSpec files${RESET} ${GRAY}($spec_dir)${RESET}\n"
 
+    # Check numbering and provide feedback
+    local numbering_status=0
+    analyze_numbering "$spec_dir" || numbering_status=$?
+
+    case $numbering_status in
+        1)
+            echo -e "${YELLOW}⚠ Numbering:${RESET} Mixed - some specs use numbered directories, others don't"
+            echo -e "${GRAY}Recommendation: Add numbered prefixes (001-, 002-, 003-) to all specs for explicit ordering${RESET}\n"
+            ;;
+        2)
+            echo -e "${GRAY}ℹ Numbering:${RESET} No numbered directories found"
+            echo -e "${GRAY}Tip: Use numbered prefixes (001-name, 002-name) for explicit ordering${RESET}\n"
+            ;;
+    esac
+
     # Find all spec.md files and store in array
-    mapfile -t spec_files < <(find "$spec_dir" -name "spec.md" -type f | sort)
+    mapfile -t spec_files < <(find_spec_files "$spec_dir")
     total=${#spec_files[@]}
 
     # Validate each spec
     for spec_file in "${spec_files[@]}"; do
+        [ -z "$spec_file" ] && continue
+
         if validate_spec_file "$spec_file"; then
             ((passed++))
         else
@@ -547,7 +697,7 @@ create_new_spec() {
     local spec_dir
 
     if ! spec_dir="$(find_spec_dir)"; then
-        error "No .openspec/ directory found"
+        error "No spec directory found (.openspec, openspec, .spec, spec, .specs, specs)"
         error "Run from a project with OpenSpec or set DOTFILES"
         return 1
     fi
@@ -557,20 +707,65 @@ create_new_spec() {
         return 1
     fi
 
-    # Find next number
+    # Determine where to create specs
+    local target_dir
+    if [ -d "$spec_dir/specs" ]; then
+        target_dir="$spec_dir/specs"
+    elif [ -d "$spec_dir/spec" ]; then
+        target_dir="$spec_dir/spec"
+    else
+        # Create specs/ directory if neither exists
+        target_dir="$spec_dir/specs"
+        mkdir -p "$target_dir"
+    fi
+
+    # Check if existing specs use numbering
+    local has_numbered=false
+    local has_unnumbered=false
     local max_num=0
-    while read -r dir; do
-        local num
-        num=$(basename "$dir" | grep -oE '^[0-9]+' || echo "0")
-        if [ "$num" -gt "$max_num" ]; then
-            max_num=$num
-        fi
-    done < <(find "$spec_dir/specs" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
 
-    local next_num
-    next_num=$(printf "%03d" $((max_num + 1)))
+    if [ -d "$target_dir" ]; then
+        while IFS= read -r -d '' dir; do
+            local basename_dir
+            basename_dir="$(basename "$dir")"
 
-    local new_dir="$spec_dir/specs/$next_num-$spec_name"
+            if check_numbering "$basename_dir"; then
+                has_numbered=true
+                local num
+                num=$(echo "$basename_dir" | grep -oE '^[0-9]+' || echo "0")
+                if [ "$num" -gt "$max_num" ]; then
+                    max_num=$num
+                fi
+            else
+                has_unnumbered=true
+            fi
+        done < <(find "$target_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null || true)
+    fi
+
+    # Decide whether to use numbering
+    local dir_name
+    local use_numbering=false
+
+    if [ "$has_numbered" = true ] && [ "$has_unnumbered" = false ]; then
+        # All existing specs are numbered, continue the pattern
+        use_numbering=true
+    elif [ "$has_numbered" = true ] && [ "$has_unnumbered" = true ]; then
+        # Mixed - warn and recommend numbering
+        echo -e "${YELLOW}⚠ Mixed numbering detected:${RESET} Existing specs have inconsistent naming"
+        echo -e "${GRAY}Recommendation: Use numbered prefix for consistency${RESET}"
+        use_numbering=true
+    fi
+    # else: no numbered specs found, don't use numbering
+
+    if [ "$use_numbering" = true ]; then
+        local next_num
+        next_num=$(printf "%03d" $((max_num + 1)))
+        dir_name="$next_num-$spec_name"
+    else
+        dir_name="$spec_name"
+    fi
+
+    local new_dir="$target_dir/$dir_name"
     local new_file="$new_dir/spec.md"
 
     if [ -d "$new_dir" ]; then
@@ -600,7 +795,7 @@ create_new_spec() {
     echo "  1. Edit the spec file: \$EDITOR $new_file"
     echo "  2. Replace [placeholders] with your content"
     echo "  3. Add requirements and scenarios"
-    echo "  4. Run: spec validate $next_num-$spec_name"
+    echo "  4. Run: spec validate $dir_name"
 }
 
 # Print help text
@@ -621,8 +816,19 @@ USAGE:
 
 DESCRIPTION:
     The spec command helps you explore OpenSpec specification files
-    in your project. It automatically finds .openspec/ or openspec/
-    directories and provides both list and interactive modes.
+    in your project. It automatically finds spec directories using
+    flexible matching and provides both list and interactive modes.
+
+    Supported directory names:
+    - .openspec, openspec (standard)
+    - .specs, specs, .spec, spec (alternatives)
+
+    Within these, looks for specs in:
+    - specs/ or spec/ subdirectories
+    - Direct subdirectories containing spec.md
+
+    Numbering is optional but recommended for explicit ordering.
+    Use numbered prefixes (001-name, 002-name) for consistency.
 
     Search Order:
     1. Git repository root (if inside a git repo)
@@ -773,8 +979,9 @@ main() {
         list)
             local spec_dir
             if ! spec_dir="$(find_spec_dir)"; then
-                error "No .openspec/ or openspec/ directory found"
-                error "Searched from: $PWD"
+                error "No spec directory found"
+                error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
+                error "From: $PWD"
                 [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
                 return 1
             fi
@@ -786,8 +993,9 @@ main() {
         status)
             local spec_dir
             if ! spec_dir="$(find_spec_dir)"; then
-                error "No .openspec/ or openspec/ directory found"
-                error "Searched from: $PWD"
+                error "No spec directory found"
+                error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
+                error "From: $PWD"
                 [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
                 return 1
             fi
@@ -798,8 +1006,9 @@ main() {
         validate)
             local spec_dir
             if ! spec_dir="$(find_spec_dir)"; then
-                error "No .openspec/ or openspec/ directory found"
-                error "Searched from: $PWD"
+                error "No spec directory found"
+                error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
+                error "From: $PWD"
                 [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
                 return 1
             fi
@@ -807,18 +1016,19 @@ main() {
             if [ -n "$spec_name" ]; then
                 # Validate specific spec
                 local spec_file
-                spec_file=$(find "$spec_dir" -type d -name "*$spec_name*" -exec test -f {}/spec.md \; -print -quit)
+                spec_file=$(find_spec_files "$spec_dir" | grep -i "$spec_name" | head -1)
 
                 if [ -z "$spec_file" ]; then
                     error "Spec not found: $spec_name"
                     error "Available specs:"
-                    find "$spec_dir" -name "spec.md" -type f | while read -r f; do
+                    find_spec_files "$spec_dir" | while read -r f; do
+                        [ -z "$f" ] && continue
                         echo "  - $(basename "$(dirname "$f")")"
                     done
                     return 1
                 fi
 
-                validate_spec_file "$spec_file/spec.md"
+                validate_spec_file "$spec_file"
             else
                 # Validate all specs
                 validate_all_specs "$spec_dir"
@@ -846,8 +1056,9 @@ main() {
 
             local spec_dir
             if ! spec_dir="$(find_spec_dir)"; then
-                error "No .openspec/ or openspec/ directory found"
-                error "Searched from: $PWD"
+                error "No spec directory found"
+                error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
+                error "From: $PWD"
                 [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
                 return 1
             fi
