@@ -38,12 +38,6 @@ dot                             # Install/upgrade packages
 - **tmux** - Terminal multiplexer with status bar, git info, session persistence
 - **bash** - Configured with modern completions and prompt
 
-### Hotkey Daemon
-Custom Python hotkey daemon for system-wide shortcuts:
-- **Alt+Enter** - Launch Ghostty
-- Runs as LaunchAgent, logs to `~/.local/state/hotkey/`
-- Requires Accessibility permissions
-
 ### Editor Support
 - **Neovim** - Configured with lazy.nvim, telescope, treesitter
 - **VS Code** - Global keybindings (Ctrl+Alt+T for terminal)
@@ -92,7 +86,7 @@ Use `xdg-info` to inspect XDG paths and app compliance.
 ├── config/         # XDG configs (ghostty, bat, ripgrep, tmux)
 ├── docker/         # Docker/Colima setup
 ├── git/            # Git config and aliases
-├── local/bin/      # Custom scripts (dot, hotkey, launch-agents)
+├── local/bin/      # Custom scripts (dot, launch-agents)
 ├── osx/            # macOS-specific settings
 ├── python/         # Python/uv configuration
 ├── tmux/           # tmux config with TPM plugins

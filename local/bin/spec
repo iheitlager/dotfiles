@@ -306,16 +306,19 @@ show_status() {
 
         # Truncate if too long (measure plain text only)
         if [ ${#display_name_plain} -gt 50 ]; then
-            display_name_plain="${display_name_plain:0:47}..."
-            # For colored version, need to rebuild with truncated title
-            local title_len=$((47 - ${#dir_name} - 3))
-            if [ "$title_len" -lt 10 ]; then
-                title_len=10
-            fi
             if check_numbering "$dir_name"; then
+                # No category tag, just truncate at 47
+                display_name_plain="${title:0:47}..."
                 display_name_colored="${title:0:47}..."
             else
-                display_name_colored="${title:0:$title_len}...${GRAY}[$dir_name]${RESET}"
+                # With category tag: title + "..." + " [category]" = 50
+                # So: title_len = 50 - 3 (for ...) - 3 (space + brackets) - len(dir_name)
+                local title_len=$((44 - ${#dir_name}))
+                if [ "$title_len" -lt 10 ]; then
+                    title_len=10
+                fi
+                display_name_plain="${title:0:$title_len}... [$dir_name]"
+                display_name_colored="${title:0:$title_len}... ${GRAY}[$dir_name]${RESET}"
             fi
         fi
 

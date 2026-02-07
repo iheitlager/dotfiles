@@ -459,7 +459,7 @@ The system MUST provide comprehensive status information about the dotfiles inst
 ├── latex/                  # LaTeX tools
 │   └── bash_aliases
 ├── local/                  # User-local files
-│   ├── bin/                # Executables (dot, hotkey, etc.)
+│   ├── bin/                # Executables (dot, etc.)
 │   ├── lib/                # Shared libraries
 │   └── share/              # Static data
 ├── node/                   # Node.js configuration
