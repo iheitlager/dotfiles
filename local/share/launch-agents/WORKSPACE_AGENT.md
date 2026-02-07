@@ -68,3 +68,13 @@ Keep your conversation in the left pane for thinking and responses.
 - Your pane: 1 (left)
 - Shell pane: 2 (right)
 - Working directory: Same as where workspace was started
+
+---
+
+## Architecture References
+
+For understanding the dotfiles system architecture:
+- **Core system spec**: `~/.dotfiles/.openspec/specs/dotfiles-core/spec.md` - Complete specification of the dotfiles architecture
+- **Shortcuts system**: `~/.dotfiles/.openspec/specs/shortcuts-system/spec.md` - Keyboard shortcuts documentation system
+- **XDG integration**: `~/.dotfiles/docs/xdg_setup.md` - XDG Base Directory implementation details
+- **Modern CLI tools**: `~/.dotfiles/docs/coloring.md` - Terminal colors and modern command-line tools
