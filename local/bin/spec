@@ -694,7 +694,7 @@ validate_all_specs() {
     fi
 }
 
-# Show template
+# Show template (plain output, no formatting)
 show_template() {
     local template_file="$SCRIPT_DIR/../share/spec/template.md"
 
@@ -703,7 +703,7 @@ show_template() {
         return 1
     fi
 
-    $(get_markdown_formatter) "$template_file"
+    cat "$template_file"
 }
 
 # Detect spec file pattern used in the directory
