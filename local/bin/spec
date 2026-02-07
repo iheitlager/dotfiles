@@ -182,12 +182,16 @@ get_relative_path() {
 }
 
 # Extract all requirements from a spec file
+# Supports both formats:
+#   ### Requirement: Name
+#   ### Requirement 8: Name
 parse_spec_requirements() {
     local spec_file="$1"
 
-    # Find all "### Requirement:" lines with line numbers
-    grep -n "^### Requirement:" "$spec_file" 2>/dev/null | \
-        sed 's/^\([0-9]*\):### Requirement: /\1:/'
+    # Find all "### Requirement" lines with line numbers
+    # Match both "### Requirement:" and "### Requirement N:"
+    grep -n "^### Requirement" "$spec_file" 2>/dev/null | \
+        sed 's/^\([0-9]*\):### Requirement[^:]*: /\1:/'
 }
 
 # Get line number for a requirement
@@ -582,9 +586,9 @@ validate_spec_file() {
     if grep -q "^## ADDED Requirements" "$spec_file"; then
         echo -e "✅ ADDED Requirements: ${GREEN}Present${RESET}"
 
-        # Count requirements
+        # Count requirements (both formats: "Requirement:" and "Requirement N:")
         local req_count
-        req_count=$(grep -c "^### Requirement:" "$spec_file")
+        req_count=$(grep -c "^### Requirement" "$spec_file")
 
         if [ "$req_count" -gt 0 ]; then
             echo -e "   ${GREEN}$req_count requirements found${RESET}"
