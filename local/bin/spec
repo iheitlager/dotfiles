@@ -905,7 +905,6 @@ DESCRIPTION:
     Search Order:
     1. Git repository root (if inside a git repo)
     2. Current directory and parents (walking up)
-    3. $DOTFILES directory (fallback)
 
 INTERACTIVE MODE:
     The default fzf mode shows all spec files and their requirements.
