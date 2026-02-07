@@ -406,8 +406,8 @@ rm -rf ~/.dotfiles/testcache
 
 ## Internal Documentation
 
-- [Dotfiles Core Specification](../dotfiles-core/spec.md) - Main dotfiles system
-- [Shortcuts System Specification](../shortcuts-system/spec.md) - Keyboard shortcuts (uses caching)
+- [Dotfiles System Core Specification](../001-dotfiles-core/spec.md) - Main dotfiles system
+- [Shortcuts System Specification](../003-shortcuts-system/spec.md) - Keyboard shortcuts (uses caching)
 
 ---
 

@@ -413,8 +413,8 @@ time shortcuts bash
 
 ## Internal Documentation
 
-- [Dotfiles Core Specification](../dotfiles-core/spec.md) - Main dotfiles system
-- [Dotfiles Caching Specification](../dotfiles-caching/spec.md) - Caching system (shortcuts uses this)
+- [Dotfiles System Core Specification](../001-dotfiles-core/spec.md) - Main dotfiles system
+- [Dotfiles Caching Specification](../002-dotfiles-caching/spec.md) - Caching system (shortcuts uses this)
 
 ---
 

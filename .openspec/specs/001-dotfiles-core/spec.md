@@ -187,7 +187,7 @@ The system MUST automatically discover and install Homebrew packages from all to
 
 The system MUST aggregate and load shell configurations from all topics with proper ordering.
 
-**Note**: Performance optimization through caching is detailed in the [Dotfiles Caching System Specification](../dotfiles-caching/spec.md).
+**Note**: Performance optimization through caching is detailed in the [Dotfiles Caching System Specification](../002-dotfiles-caching/spec.md).
 
 #### Scenario: bash_env Sourced First
 
@@ -286,7 +286,7 @@ The system MUST execute topic-specific install.sh scripts with error handling.
 
 The system MUST integrate with the dotfiles caching system for optimal performance.
 
-**Note**: Detailed caching requirements are specified in the [Dotfiles Caching System Specification](../dotfiles-caching/spec.md).
+**Note**: Detailed caching requirements are specified in the [Dotfiles Caching System Specification](../002-dotfiles-caching/spec.md).
 
 #### Scenario: Cached Shell Integration
 
@@ -1646,8 +1646,8 @@ dot
 - [README.md](../../README.md) - Quick start and overview
 - [docs/xdg_setup.md](../../docs/xdg_setup.md) - XDG implementation details
 - [docs/coloring.md](../../docs/coloring.md) - Modern CLI tools and colors
-- [.openspec/specs/dotfiles-caching/spec.md](../dotfiles-caching/spec.md) - Shell integration caching system
-- [.openspec/specs/shortcuts-system/spec.md](../shortcuts-system/spec.md) - Keyboard shortcuts system
+- [.openspec/specs/dotfiles-caching/spec.md](../002-dotfiles-caching/spec.md) - Shell integration caching system
+- [.openspec/specs/shortcuts-system/spec.md](../003-shortcuts-system/spec.md) - Keyboard shortcuts system
 
 ---
 
