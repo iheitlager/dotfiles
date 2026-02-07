@@ -503,7 +503,15 @@ fzf_browser() {
 # Validate a single spec file
 validate_spec_file() {
     local spec_file="$1"
-    local spec_name="$(basename "$(dirname "$spec_file")")"
+    local spec_name
+
+    # If it's a temp file (stdin), use a cleaner name
+    if [[ "$spec_file" == /tmp/* ]] || [[ "$spec_file" == /var/* ]]; then
+        spec_name="stdin"
+    else
+        spec_name="$(basename "$(dirname "$spec_file")")"
+    fi
+
     local issues=0
 
     echo -e "${BOLD}Validating: $spec_name${RESET}\n"
