@@ -311,8 +311,8 @@ fzf_browser() {
         --prompt="OpenSpec > " \
         --header="Enter: view spec | Ctrl-C: exit" \
         --preview="
-            line=\$(sed -n '\$(({n}+1))p' /tmp/spec-fzf-data-$$ | cut -d'|' -f3)
-            file=\$(sed -n '\$(({n}+1))p' /tmp/spec-fzf-data-$$ | cut -d'|' -f2)
+            line=\$(sed -n \"\$(({n}+1))p\" /tmp/spec-fzf-data-$$ | cut -d'|' -f3)
+            file=\$(sed -n \"\$(({n}+1))p\" /tmp/spec-fzf-data-$$ | cut -d'|' -f2)
             $(get_markdown_formatter) --highlight-line=\"\$line\" \"\$file\" 2>/dev/null || cat \"\$file\"
         " \
         --preview-window=right:60%:wrap
