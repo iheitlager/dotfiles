@@ -266,16 +266,18 @@ build_fzf_list() {
 }
 
 # Format entry for fzf display
+# Includes hidden line number field for preview scrolling
 format_fzf_entry() {
     local type="$1"
     local rel_path="$2"
     local name="$3"
     local meta="$4"
+    local line="$5"
 
     if [ "$type" = "FILE" ]; then
-        printf "%-50s  %s\n" "📄 $name" "$meta"
+        printf "%s|%-50s  %s\n" "$line" "📄 $name" "$meta"
     else
-        printf "   %-47s  %s\n" "└─ $name" "$meta"
+        printf "%s|   %-47s  %s\n" "$line" "└─ $name" "$meta"
     fi
 }
 
@@ -301,21 +303,26 @@ fzf_browser() {
     # Format for display and pass through fzf
     local selected
     selected="$(echo "$fzf_input" | while IFS='|' read -r type file line rel_path name meta; do
-        format_fzf_entry "$type" "$rel_path" "$name" "$meta"
+        format_fzf_entry "$type" "$rel_path" "$name" "$meta" "$line"
         echo "$type|$file|$line" >> /tmp/spec-fzf-data-$$
     done | fzf \
         --ansi \
         --height=100% \
         --layout=reverse \
         --border \
+        --delimiter='|' \
+        --with-nth=2.. \
         --prompt="OpenSpec > " \
-        --header="Enter: view spec | Ctrl-C: exit" \
+        --header="Enter: view | Ctrl-/: zoom | Ctrl-D: scroll down | Ctrl-U: scroll up" \
         --preview="
             line=\$(sed -n \"\$(({n}+1))p\" /tmp/spec-fzf-data-$$ | cut -d'|' -f3)
             file=\$(sed -n \"\$(({n}+1))p\" /tmp/spec-fzf-data-$$ | cut -d'|' -f2)
             $(get_markdown_formatter) --highlight-line=\"\$line\" \"\$file\" 2>/dev/null || cat \"\$file\"
         " \
-        --preview-window=right:60%:wrap
+        --preview-window='right:60%:wrap:+{1}-5' \
+        --bind='ctrl-/:change-preview-window(80%|60%:wrap:+{1}-5)' \
+        --bind='ctrl-d:preview-half-page-down' \
+        --bind='ctrl-u:preview-half-page-up'
     )"
 
     # Get the selected file and line
