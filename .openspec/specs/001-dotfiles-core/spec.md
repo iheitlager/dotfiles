@@ -374,36 +374,36 @@ The system MUST provide comprehensive status information about the dotfiles inst
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     DOTFILES ARCHITECTURE                    │
+│                    DOTFILES ARCHITECTURE                    │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  SOURCE: ~/.dotfiles/                                        │
-│  ├── <topic>/                    (19 topics)                 │
+│                                                             │
+│  SOURCE: ~/.dotfiles/                                       │
+│  ├── <topic>/                    (19 topics)                │
 │  │   ├── bash_aliases            → cached to ~/.cache       │
 │  │   ├── bash_env                → cached to ~/.cache       │
 │  │   ├── bash_completion         → cached to ~/.cache       │
 │  │   ├── brew_packages           → aggregated to Brewfile   │
 │  │   ├── install.sh              → run by bootstrap         │
-│  │   ├── *.symlink               → linked to ~             │
-│  │   └── config/                 → linked to ~/.config     │
-│  ├── config/<app>/               → linked to ~/.config     │
-│  ├── local/                                                  │
+│  │   ├── *.symlink               → linked to ~              │
+│  │   └── config/                 → linked to ~/.configi     │
+│  ├── config/<app>/               → linked to ~/.config      │
+│  ├── local/                                                 │
 │  │   ├── bin/                    (executables)              │
 │  │   ├── lib/                    (shared libraries)         │
 │  │   └── share/                  (static data)              │
-│  └── script/                                                 │
+│  └── script/                                                │
 │      └── bootstrap               (one-time setup)           │
-│                                                              │
-│  COMMANDS:                                                   │
+│                                                             │
+│  COMMANDS:                                                  │
 │  ├── script/bootstrap            Setup new machine          │
 │  └── local/bin/dot               Package & cache mgmt       │
-│                                                              │
-│  XDG TARGET: (linked from dotfiles)                          │
+│                                                             │
+│  XDG TARGET: (linked from dotfiles)                         │
 │  ├── ~/.config/<topic>/          User configuration         │
 │  ├── ~/.local/share/             User data, Brewfile        │
 │  ├── ~/.local/state/             Logs, history              │
 │  └── ~/.cache/dotfiles/          Shell caches               │
-│                                                              │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
