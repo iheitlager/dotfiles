@@ -28,6 +28,12 @@ A modular, XDG-compliant dotfiles management system for macOS that provides topi
 
 ---
 
+## RFC 2119 Keywords
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
+
+---
+
 ## ADDED Requirements
 
 ### Requirement: Topic-Based Organization
@@ -179,41 +185,30 @@ The system MUST automatically discover and install Homebrew packages from all to
 
 ### Requirement: Shell Integration
 
-The system MUST aggregate and load shell configurations from all topics with performance optimization.
+The system MUST aggregate and load shell configurations from all topics with proper ordering.
 
-#### Scenario: bash_env Cached and Sourced
+**Note**: Performance optimization through caching is detailed in the [Dotfiles Caching System Specification](../dotfiles-caching/spec.md).
+
+#### Scenario: bash_env Sourced First
 
 - GIVEN topics have bash_env files
 - WHEN the shell starts and sources .bash_profile
-- THEN it SHALL check for ${XDG_CACHE_HOME}/dotfiles/bash_env.sh
-- IF cache is fresh, SHALL source cache directly
-- IF cache is stale or missing, SHALL regenerate from all bash_env files
+- THEN it SHALL load all bash_env files (or cached equivalent)
 - AND SHALL export environment variables before aliases load
 
-#### Scenario: bash_aliases Cached and Sourced
+#### Scenario: bash_aliases Sourced Second
 
 - GIVEN topics have bash_aliases files
 - WHEN .bashrc is sourced
-- THEN it SHALL check for ${XDG_CACHE_HOME}/dotfiles/bash_aliases.sh
-- IF cache is fresh, SHALL source cache directly
-- IF cache is stale or missing, SHALL regenerate from all bash_aliases files
+- THEN it SHALL load all bash_aliases files (or cached equivalent)
+- AND SHALL load after bash_env so aliases can reference environment variables
 
-#### Scenario: bash_completion Cached and Sourced
+#### Scenario: bash_completion Sourced Last
 
 - GIVEN topics have bash_completion files
 - WHEN .bashrc is sourced
-- THEN it SHALL check for ${XDG_CACHE_HOME}/dotfiles/bash_completion.sh
-- IF cache is fresh, SHALL source cache directly
-- IF cache is stale or missing, SHALL regenerate from all bash_completion files
+- THEN it SHALL load all bash_completion files (or cached equivalent)
 - AND SHALL load after aliases for proper tab completion
-
-#### Scenario: Cache Freshness Check
-
-- GIVEN a cache file exists at ${XDG_CACHE_HOME}/dotfiles/bash_aliases.sh
-- WHEN the shell checks freshness
-- THEN it SHALL compare cache mtime against all source bash_aliases files
-- IF any source is newer than cache, cache is stale
-- IF cache is stale, SHALL regenerate automatically
 
 ### Requirement: Configuration Symlinks
 
@@ -287,52 +282,27 @@ The system MUST execute topic-specific install.sh scripts with error handling.
 - THEN it SHALL display all topics with install.sh scripts
 - AND SHALL show them in a readable list format
 
-### Requirement: Cache Management
+### Requirement: Cache Integration
 
-The system MUST cache shell integrations for fast startup with automatic and manual invalidation.
+The system MUST integrate with the dotfiles caching system for optimal performance.
 
-#### Scenario: Cache Generation on First Run
+**Note**: Detailed caching requirements are specified in the [Dotfiles Caching System Specification](../dotfiles-caching/spec.md).
 
-- GIVEN no cache exists at ${XDG_CACHE_HOME}/dotfiles/
-- WHEN the shell starts
-- THEN it SHALL create cache directory
-- AND SHALL scan for all bash_env, bash_aliases, bash_completion files
-- AND SHALL concatenate them into respective .sh cache files
-- AND SHALL source the cache
+#### Scenario: Cached Shell Integration
 
-#### Scenario: Cache Hit on Subsequent Runs
+- GIVEN the shell starts
+- WHEN bash_profile and bashrc are sourced
+- THEN they SHALL check for cached shell integrations
+- AND SHALL use cached versions when available and fresh
+- AND SHALL regenerate caches automatically when stale
 
-- GIVEN valid cache exists
-- WHEN the shell starts
-- THEN it SHALL check cache mtime against source files
-- IF cache is fresh (newer than all sources)
-- THEN it SHALL source cache directly without scanning filesystem
-- AND startup SHALL be <100ms faster than uncached
+#### Scenario: Cache Control via dot Command
 
-#### Scenario: Automatic Cache Invalidation
-
-- GIVEN a cache exists
-- WHEN a topic's bash_aliases file is modified
-- THEN on next shell start, cache freshness check SHALL detect stale cache
-- AND SHALL regenerate bash_aliases.sh automatically
-- AND SHALL source the updated cache
-
-#### Scenario: Manual Cache Invalidation
-
-- GIVEN caches exist at ${XDG_CACHE_HOME}/dotfiles/
+- GIVEN the dot command manages caches
 - WHEN user runs `dot invalidate`
-- THEN it SHALL remove all .sh cache files
-- AND SHALL remove shortcuts/ cache directory
-- AND SHALL display confirmation of removed files
-- AND SHALL instruct user to restart shell
-
-#### Scenario: Cache Status Display
-
-- GIVEN caches exist
+- THEN all shell integration caches SHALL be removed
 - WHEN user runs `dot status`
-- THEN it SHALL display cache directory location
-- AND SHALL show each cache file with size and age
-- AND SHALL show source counts (e.g., "5 sources, bashrc")
+- THEN cache status SHALL be displayed
 
 ### Requirement: Symlink Hygiene
 
@@ -1676,6 +1646,7 @@ dot
 - [README.md](../../README.md) - Quick start and overview
 - [docs/xdg_setup.md](../../docs/xdg_setup.md) - XDG implementation details
 - [docs/coloring.md](../../docs/coloring.md) - Modern CLI tools and colors
+- [.openspec/specs/dotfiles-caching/spec.md](../dotfiles-caching/spec.md) - Shell integration caching system
 - [.openspec/specs/shortcuts-system/spec.md](../shortcuts-system/spec.md) - Keyboard shortcuts system
 
 ---

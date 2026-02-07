@@ -1,0 +1,512 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+#
+# spec - Interactive OpenSpec browser with fzf and markdown rendering
+#
+# Usage:
+#   spec          Interactive fzf browser
+#   spec list     List all specs with metadata and requirements
+#   spec --help   Show help message
+
+set -e
+
+# Source shared utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../lib/shell-common.sh"
+
+# Additional colors not in shell-common
+readonly GRAY='\033[90m'
+readonly RESET="$NC"  # Alias for consistency with existing code
+
+# Find the spec directory (.openspec or openspec)
+find_spec_dir() {
+    # First, check if we're in a git repository
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        local git_root
+        git_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+        if [ -n "$git_root" ]; then
+            if [ -d "$git_root/.openspec" ]; then
+                echo "$git_root/.openspec"
+                return 0
+            elif [ -d "$git_root/openspec" ]; then
+                echo "$git_root/openspec"
+                return 0
+            fi
+        fi
+    fi
+
+    # If not in git or specs not found in git root, search up the directory tree
+    local current_dir="$PWD"
+    while [ "$current_dir" != "/" ]; do
+        if [ -d "$current_dir/.openspec" ]; then
+            echo "$current_dir/.openspec"
+            return 0
+        elif [ -d "$current_dir/openspec" ]; then
+            echo "$current_dir/openspec"
+            return 0
+        fi
+        current_dir="$(dirname "$current_dir")"
+    done
+
+    # Check DOTFILES as fallback
+    if [ -n "${DOTFILES:-}" ]; then
+        if [ -d "$DOTFILES/.openspec" ]; then
+            echo "$DOTFILES/.openspec"
+            return 0
+        elif [ -d "$DOTFILES/openspec" ]; then
+            echo "$DOTFILES/openspec"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# Extract metadata from spec file header
+parse_spec_metadata() {
+    local spec_file="$1"
+    local field="$2"
+
+    grep "^\*\*${field}:\*\*" "$spec_file" 2>/dev/null | \
+        sed "s/^\*\*${field}:\*\* //" | \
+        head -1
+}
+
+# Get the spec title (first # heading)
+get_spec_title() {
+    local spec_file="$1"
+    grep "^# " "$spec_file" 2>/dev/null | head -1 | sed 's/^# //'
+}
+
+# Get relative path from spec directory
+get_relative_path() {
+    local spec_dir="$1"
+    local spec_file="$2"
+    echo "${spec_file#$spec_dir/}"
+}
+
+# Extract all requirements from a spec file
+parse_spec_requirements() {
+    local spec_file="$1"
+
+    # Find all "### Requirement:" lines with line numbers
+    grep -n "^### Requirement:" "$spec_file" 2>/dev/null | \
+        sed 's/^\([0-9]*\):### Requirement: /\1:/'
+}
+
+# Get line number for a requirement
+get_requirement_line() {
+    local spec_file="$1"
+    local requirement="$2"
+
+    grep -n "^### Requirement: ${requirement}$" "$spec_file" 2>/dev/null | \
+        cut -d: -f1 | head -1
+}
+
+# Determine markdown formatter
+# If RAW_MODE=true, use bat for syntax highlighting only
+get_markdown_formatter() {
+    if [ "${RAW_MODE:-false}" = "true" ]; then
+        # Raw mode: use bat for syntax highlighting
+        if has_cmd bat; then
+            echo "bat --style=plain --color=always --language=markdown"
+        else
+            echo "cat"
+        fi
+    else
+        # Default: use glow for beautiful markdown rendering
+        if has_cmd glow; then
+            echo "glow -s dark --tui"
+        elif has_cmd bat; then
+            echo "bat --style=plain --color=always --language=markdown"
+        else
+            echo "cat"
+        fi
+    fi
+}
+
+# Render markdown with highlighting at specific line
+render_markdown() {
+    local file="$1"
+    local line="${2:-1}"
+    local formatter
+    formatter="$(get_markdown_formatter)"
+
+    if [[ "$formatter" == glow* ]]; then
+        # glow renders beautifully but doesn't support line highlighting
+        $formatter "$file"
+    elif [[ "$formatter" == bat* ]]; then
+        # bat can highlight specific lines
+        $formatter --highlight-line="$line" "$file"
+    else
+        # cat fallback
+        $formatter "$file"
+    fi
+}
+
+# Show compact status overview
+show_status() {
+    local spec_dir="$1"
+
+    # Find all spec.md files
+    local spec_files
+    spec_files=$(find "$spec_dir" -name "spec.md" -type f | sort)
+
+    local file_count
+    file_count=$(echo "$spec_files" | wc -l | tr -d ' ')
+
+    local total_reqs=0
+
+    echo -e "${BOLD}OpenSpec Status${RESET} ${GRAY}($spec_dir)${RESET}\n"
+    echo -e "Files: ${GREEN}$file_count${RESET}\n"
+
+    # Table header
+    printf "${BOLD}%-40s  %-8s  %-12s  %s${RESET}\n" "Specification" "Version" "Status" "Reqs"
+    printf "%s\n" "$(printf '─%.0s' {1..70})"
+
+    # Process each spec file (using process substitution to avoid subshell)
+    while read -r spec_file; do
+        local title
+        title="$(get_spec_title "$spec_file")"
+
+        # Truncate title if too long
+        if [ ${#title} -gt 40 ]; then
+            title="${title:0:37}..."
+        fi
+
+        local version
+        version="$(parse_spec_metadata "$spec_file" "Version")"
+        [ -z "$version" ] && version="-"
+
+        local status
+        status="$(parse_spec_metadata "$spec_file" "Status")"
+        [ -z "$status" ] && status="-"
+
+        local req_count
+        req_count=$(parse_spec_requirements "$spec_file" | wc -l | tr -d ' ')
+        [ -z "$req_count" ] && req_count=0
+
+        total_reqs=$((total_reqs + req_count))
+
+        printf "%-40s  ${CYAN}%-8s${RESET}  ${GREEN}%-12s${RESET}  ${YELLOW}%s${RESET}\n" \
+            "$title" "$version" "$status" "$req_count"
+    done < <(echo "$spec_files")
+
+    echo ""
+    echo -e "Total Requirements: ${BOLD}${YELLOW}$total_reqs${RESET}"
+}
+
+# List all specs in plain text format
+list_specs() {
+    local spec_dir="$1"
+
+    # Find all spec.md files
+    find "$spec_dir" -name "spec.md" -type f | sort | while read -r spec_file; do
+        local rel_path
+        rel_path="$(get_relative_path "$spec_dir" "$spec_file")"
+
+        local title
+        title="$(get_spec_title "$spec_file")"
+
+        local domain
+        domain="$(parse_spec_metadata "$spec_file" "Domain")"
+
+        local version
+        version="$(parse_spec_metadata "$spec_file" "Version")"
+
+        local status
+        status="$(parse_spec_metadata "$spec_file" "Status")"
+
+        # Print spec header
+        echo -e "${BOLD}${GREEN}${title}${RESET}"
+        echo -e "  ${GRAY}Path:${RESET}    $rel_path"
+        [ -n "$domain" ] && echo -e "  ${GRAY}Domain:${RESET}  $domain"
+        [ -n "$version" ] && echo -e "  ${GRAY}Version:${RESET} $version"
+        [ -n "$status" ] && echo -e "  ${GRAY}Status:${RESET}  $status"
+
+        # Parse and list requirements
+        local requirements
+        requirements="$(parse_spec_requirements "$spec_file")"
+
+        if [ -n "$requirements" ]; then
+            echo -e "\n  ${CYAN}Requirements:${RESET}"
+            echo "$requirements" | while IFS=: read -r line_num req_name; do
+                echo -e "    ${YELLOW}•${RESET} $req_name ${GRAY}(line $line_num)${RESET}"
+            done
+        fi
+
+        echo ""
+    done
+}
+
+# Build fzf selection list with file and requirements
+build_fzf_list() {
+    local spec_dir="$1"
+
+    find "$spec_dir" -name "spec.md" -type f | sort | while read -r spec_file; do
+        local rel_path
+        rel_path="$(get_relative_path "$spec_dir" "$spec_file")"
+
+        local title
+        title="$(get_spec_title "$spec_file")"
+
+        local domain
+        domain="$(parse_spec_metadata "$spec_file" "Domain")"
+
+        # Print file entry
+        echo "FILE|$spec_file|1|$rel_path|$title|$domain"
+
+        # Print requirement entries
+        parse_spec_requirements "$spec_file" | while IFS=: read -r line_num req_name; do
+            echo "REQ|$spec_file|$line_num|$rel_path|$req_name|$title"
+        done
+    done
+}
+
+# Format entry for fzf display
+format_fzf_entry() {
+    local type="$1"
+    local rel_path="$2"
+    local name="$3"
+    local meta="$4"
+
+    if [ "$type" = "FILE" ]; then
+        printf "%-50s  %s\n" "📄 $name" "$meta"
+    else
+        printf "   %-47s  %s\n" "└─ $name" "$meta"
+    fi
+}
+
+# Interactive fzf browser
+fzf_browser() {
+    local spec_dir="$1"
+
+    # Check if fzf is available
+    if ! has_cmd fzf; then
+        error "fzf is not installed. Install it with: brew install fzf"
+        return 1
+    fi
+
+    # Build selection list
+    local fzf_input
+    fzf_input="$(build_fzf_list "$spec_dir")"
+
+    if [ -z "$fzf_input" ]; then
+        error "No spec files found in $spec_dir"
+        return 1
+    fi
+
+    # Format for display and pass through fzf
+    local selected
+    selected="$(echo "$fzf_input" | while IFS='|' read -r type file line rel_path name meta; do
+        format_fzf_entry "$type" "$rel_path" "$name" "$meta"
+        echo "$type|$file|$line" >> /tmp/spec-fzf-data-$$
+    done | fzf \
+        --ansi \
+        --height=100% \
+        --layout=reverse \
+        --border \
+        --prompt="OpenSpec > " \
+        --header="Enter: view spec | Ctrl-C: exit" \
+        --preview="
+            line=\$(sed -n '\$(({n}+1))p' /tmp/spec-fzf-data-$$ | cut -d'|' -f3)
+            file=\$(sed -n '\$(({n}+1))p' /tmp/spec-fzf-data-$$ | cut -d'|' -f2)
+            $(get_markdown_formatter) --highlight-line=\"\$line\" \"\$file\" 2>/dev/null || cat \"\$file\"
+        " \
+        --preview-window=right:60%:wrap
+    )"
+
+    # Get the selected file and line
+    local selected_index
+    selected_index="$(echo "$selected" | grep -n "^" /dev/stdin | cut -d: -f1)"
+
+    if [ -n "$selected_index" ]; then
+        local selected_data
+        selected_data="$(sed -n "${selected_index}p" /tmp/spec-fzf-data-$$)"
+
+        local file line
+        file="$(echo "$selected_data" | cut -d'|' -f2)"
+        line="$(echo "$selected_data" | cut -d'|' -f3)"
+
+        # Cleanup temp file
+        rm -f /tmp/spec-fzf-data-$$
+
+        # Render the selected spec
+        clear
+        render_markdown "$file" "$line"
+    else
+        # Cleanup temp file
+        rm -f /tmp/spec-fzf-data-$$
+    fi
+}
+
+# Print help text
+print_help() {
+    cat << 'EOF'
+spec - Interactive OpenSpec browser
+
+USAGE:
+    spec              Interactive fzf browser (default)
+    spec list         List all specs with metadata
+    spec status       Show compact overview (count, version, status)
+    spec --raw        Use raw mode (bat syntax highlighting only)
+    spec --help       Show this help message
+
+DESCRIPTION:
+    The spec command helps you explore OpenSpec specification files
+    in your project. It automatically finds .openspec/ or openspec/
+    directories and provides both list and interactive modes.
+
+    Search Order:
+    1. Git repository root (if inside a git repo)
+    2. Current directory and parents (walking up)
+    3. $DOTFILES directory (fallback)
+
+INTERACTIVE MODE:
+    The default fzf mode shows all spec files and their requirements.
+    Use arrow keys to navigate, Enter to view, Ctrl-C to exit.
+
+    The preview pane shows the full spec with beautiful markdown
+    rendering (via glow) or raw syntax highlighting (via bat --raw).
+
+RENDERING MODES:
+    Default: Uses glow for beautiful markdown rendering
+    --raw:   Uses bat for raw syntax highlighting only
+
+    Fallback: If neither glow nor bat is available, uses cat
+
+LIST MODE:
+    Lists all spec files with:
+    - File path
+    - Domain, Version, Status
+    - All requirements with line numbers
+
+STATUS MODE:
+    Shows a compact overview table with:
+    - Total number of spec files
+    - For each spec: Name, Version, Status, Requirement count
+    - Total requirement count across all specs
+
+REQUIREMENTS:
+    - bash 4.0+
+    - fzf (for interactive mode)
+    - glow (recommended, for beautiful markdown rendering)
+    - bat (optional, for raw syntax highlighting with --raw)
+
+ENVIRONMENT:
+    DOTFILES    Fallback directory to search for specs
+
+EXAMPLES:
+    # Interactive browser (beautiful rendering with glow)
+    spec
+
+    # Interactive browser (raw syntax highlighting with bat)
+    spec --raw
+
+    # Compact overview
+    spec status
+
+    # List all specs with details
+    spec list
+
+    # From any subdirectory in a git repo (finds git root)
+    cd ~/myproject/src/components
+    spec
+
+    # Works even deep in the directory tree
+    cd ~/.dotfiles/bash
+    spec  # Finds .openspec in git root
+
+EOF
+}
+
+# Main function
+main() {
+    # Parse flags
+    RAW_MODE=false
+    local command=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --raw)
+                RAW_MODE=true
+                shift
+                ;;
+            --help|-h|help)
+                command="help"
+                shift
+                ;;
+            list)
+                command="list"
+                shift
+                ;;
+            status)
+                command="status"
+                shift
+                ;;
+            *)
+                if [ -z "$command" ]; then
+                    command="${1:-browse}"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Default to browse if no command specified
+    command="${command:-browse}"
+    export RAW_MODE
+
+    case "$command" in
+        list)
+            local spec_dir
+            if ! spec_dir="$(find_spec_dir)"; then
+                error "No .openspec/ or openspec/ directory found"
+                error "Searched from: $PWD"
+                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                return 1
+            fi
+
+            echo -e "${BOLD}OpenSpec Files${RESET} ${GRAY}($spec_dir)${RESET}\n"
+            list_specs "$spec_dir"
+            ;;
+
+        status)
+            local spec_dir
+            if ! spec_dir="$(find_spec_dir)"; then
+                error "No .openspec/ or openspec/ directory found"
+                error "Searched from: $PWD"
+                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                return 1
+            fi
+
+            show_status "$spec_dir"
+            ;;
+
+        help)
+            print_help | show_help
+            ;;
+
+        browse|*)
+            if [ "$command" != "browse" ]; then
+                error "Unknown command: $command"
+                error "Try: spec --help"
+                return 1
+            fi
+
+            local spec_dir
+            if ! spec_dir="$(find_spec_dir)"; then
+                error "No .openspec/ or openspec/ directory found"
+                error "Searched from: $PWD"
+                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                return 1
+            fi
+
+            fzf_browser "$spec_dir"
+            ;;
+    esac
+}
+
+main "$@"

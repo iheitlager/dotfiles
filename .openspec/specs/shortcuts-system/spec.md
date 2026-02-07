@@ -11,6 +11,12 @@ A dynamic, modular keyboard shortcuts documentation system that automatically di
 
 ---
 
+## RFC 2119 Keywords
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119).
+
+---
+
 ## ADDED Requirements
 
 ### Requirement: Dynamic Discovery
@@ -401,8 +407,14 @@ time shortcuts bash
 
 ## References
 
-- XDG Base Directory Specification: https://specifications.freedesktop.org/basedir-spec/
-- Bash Scripting Best Practices: https://google.github.io/styleguide/shellguide.html
+- **RFC 2119 - Key words for use in RFCs**: https://datatracker.ietf.org/doc/html/rfc2119
+- **XDG Base Directory Specification**: https://specifications.freedesktop.org/basedir-spec/
+- **Bash Scripting Best Practices**: https://google.github.io/styleguide/shellguide.html
+
+## Internal Documentation
+
+- [Dotfiles Core Specification](../dotfiles-core/spec.md) - Main dotfiles system
+- [Dotfiles Caching Specification](../dotfiles-caching/spec.md) - Caching system (shortcuts uses this)
 
 ---
 
