@@ -20,8 +20,21 @@ readonly GRAY='\033[90m'
 readonly RESET="$NC"  # Alias for consistency with existing code
 
 # Find the spec directory (tries multiple variants)
+# Args: $1 = optional explicit root directory
 find_spec_dir() {
+    local explicit_root="${1:-}"
     local candidates=(".openspec" "openspec" ".specs" "specs" ".spec" "spec")
+
+    # If explicit root provided, only check there
+    if [ -n "$explicit_root" ]; then
+        for dir in "${candidates[@]}"; do
+            if [ -d "$explicit_root/$dir" ]; then
+                echo "$explicit_root/$dir"
+                return 0
+            fi
+        done
+        return 1
+    fi
 
     # First, check if we're in a git repository
     if git rev-parse --is-inside-work-tree &>/dev/null; then
@@ -49,16 +62,6 @@ find_spec_dir() {
         done
         current_dir="$(dirname "$current_dir")"
     done
-
-    # Check DOTFILES as fallback
-    if [ -n "${DOTFILES:-}" ]; then
-        for dir in "${candidates[@]}"; do
-            if [ -d "$DOTFILES/$dir" ]; then
-                echo "$DOTFILES/$dir"
-                return 0
-            fi
-        done
-    fi
 
     return 1
 }
@@ -880,6 +883,7 @@ USAGE:
     cat file.md | spec validate  Validate spec from stdin
     spec template     Show the OpenSpec template
     spec new <name>   Create new spec from template
+    spec -r <dir>     Use explicit root directory
     spec --raw        Use raw mode (bat syntax highlighting only)
     spec --help       Show this help message
 
@@ -902,9 +906,11 @@ DESCRIPTION:
 
     The command auto-detects which pattern is in use and adapts.
 
-    Search Order:
+    Search Order (unless -r/--root specified):
     1. Git repository root (if inside a git repo)
     2. Current directory and parents (walking up)
+
+    Use -r/--root <dir> to specify an explicit root directory.
 
 INTERACTIVE MODE:
     The default fzf mode shows all spec files and their requirements.
@@ -948,9 +954,6 @@ REQUIREMENTS:
     - glow (recommended, for beautiful markdown rendering)
     - bat (optional, for raw syntax highlighting with --raw)
 
-ENVIRONMENT:
-    DOTFILES    Fallback directory to search for specs
-
 EXAMPLES:
     # Interactive browser (beautiful rendering with glow)
     spec
@@ -991,6 +994,10 @@ EXAMPLES:
     cd ~/.dotfiles/bash
     spec  # Finds .openspec in git root
 
+    # Use explicit root directory
+    spec -r /path/to/project status
+    spec --root ~/my-project list
+
 EOF
 }
 
@@ -998,6 +1005,7 @@ EOF
 main() {
     # Parse flags
     RAW_MODE=false
+    EXPLICIT_ROOT=""
     local command=""
     local spec_name=""
     local spec_category=""
@@ -1007,6 +1015,16 @@ main() {
             --raw)
                 RAW_MODE=true
                 shift
+                ;;
+            -r|--root)
+                shift
+                if [[ $# -gt 0 ]]; then
+                    EXPLICIT_ROOT="$1"
+                    shift
+                else
+                    error "Option -r/--root requires a directory argument"
+                    return 1
+                fi
                 ;;
             --help|-h|help)
                 command="help"
@@ -1062,11 +1080,14 @@ main() {
     case "$command" in
         list)
             local spec_dir
-            if ! spec_dir="$(find_spec_dir)"; then
+            if ! spec_dir="$(find_spec_dir "$EXPLICIT_ROOT")"; then
                 error "No spec directory found"
                 error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
-                error "From: $PWD"
-                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                if [ -n "$EXPLICIT_ROOT" ]; then
+                    error "In: $EXPLICIT_ROOT"
+                else
+                    error "From: $PWD (git root or walking up)"
+                fi
                 return 1
             fi
 
@@ -1076,11 +1097,14 @@ main() {
 
         status)
             local spec_dir
-            if ! spec_dir="$(find_spec_dir)"; then
+            if ! spec_dir="$(find_spec_dir "$EXPLICIT_ROOT")"; then
                 error "No spec directory found"
                 error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
-                error "From: $PWD"
-                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                if [ -n "$EXPLICIT_ROOT" ]; then
+                    error "In: $EXPLICIT_ROOT"
+                else
+                    error "From: $PWD (git root or walking up)"
+                fi
                 return 1
             fi
 
@@ -1101,11 +1125,14 @@ main() {
             fi
 
             local spec_dir
-            if ! spec_dir="$(find_spec_dir)"; then
+            if ! spec_dir="$(find_spec_dir "$EXPLICIT_ROOT")"; then
                 error "No spec directory found"
                 error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
-                error "From: $PWD"
-                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                if [ -n "$EXPLICIT_ROOT" ]; then
+                    error "In: $EXPLICIT_ROOT"
+                else
+                    error "From: $PWD (git root or walking up)"
+                fi
                 return 1
             fi
 
@@ -1151,11 +1178,14 @@ main() {
             fi
 
             local spec_dir
-            if ! spec_dir="$(find_spec_dir)"; then
+            if ! spec_dir="$(find_spec_dir "$EXPLICIT_ROOT")"; then
                 error "No spec directory found"
                 error "Searched for: .openspec, openspec, .specs, specs, .spec, spec"
-                error "From: $PWD"
-                [ -n "${DOTFILES:-}" ] && error "Also checked: $DOTFILES"
+                if [ -n "$EXPLICIT_ROOT" ]; then
+                    error "In: $EXPLICIT_ROOT"
+                else
+                    error "From: $PWD (git root or walking up)"
+                fi
                 return 1
             fi
 
