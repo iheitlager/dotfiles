@@ -13,6 +13,15 @@ help() {
     if [ $# -eq 0 ]; then
         # Show shell built-in help
         builtin help | bat --plain --language=help
+    elif [ "$1" = "shortcuts" ]; then
+        # Handle "help shortcuts" specially
+        shift
+        # If no args, show help; otherwise pass through
+        if [ $# -eq 0 ]; then
+            shortcuts --help
+        else
+            shortcuts "$@"
+        fi
     else
         # Format command help
         "$@" --help 2>&1 | bat --plain --language=help
@@ -43,6 +52,7 @@ alias c='clear'
 alias e='env | sort | bat --plain --language=bash' # make sure env is always sorted
 alias reload='source ~/.bashrc && echo "Reloaded ~/.bashrc"'
 alias r='reload'
+alias sc='shortcuts'
 
 alias ls='eza --color=always --group-directories-first'
 alias ll='eza -la --color=always --group-directories-first --git --header'

@@ -212,12 +212,21 @@ if [[ $# -gt 0 ]]; then
             cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
             if [[ -d "$cache_dir" ]]; then
                 echo "🗑️  Invalidating dotfiles caches..."
+
+                # Remove .sh cache files
                 for cache_file in "$cache_dir"/*.sh; do
                     if [[ -f "$cache_file" ]]; then
                         rm -f "$cache_file"
                         echo "   Removed: $(basename "$cache_file")"
                     fi
                 done
+
+                # Remove shortcuts cache
+                if [[ -d "$cache_dir/shortcuts" ]]; then
+                    rm -rf "$cache_dir/shortcuts"
+                    echo "   Removed: shortcuts/"
+                fi
+
                 echo "✅ Cache invalidated. Restart your shell to regenerate."
             else
                 echo "ℹ️  No cache directory found at: $cache_dir"

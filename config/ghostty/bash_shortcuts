@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# Ghostty shortcuts parser - reads from config file
+
+DOTFILES="${1:-$HOME/.dotfiles}"
+CONFIG_FILE="${DOTFILES}/config/ghostty/config"
+
+# Color codes
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+
+shortcut() {
+    printf "  ${GREEN}%-25s${RESET} %s\n" "$1" "$2"
+}
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "${YELLOW}Ghostty config not found: ${CONFIG_FILE}${RESET}" >&2
+    exit 1
+fi
+
+echo "Global:"
+shortcut "Alt+Enter" "Toggle quick terminal (global hotkey)"
+
+echo ""
+echo "Window Management:"
+shortcut "Cmd+Shift+Enter" "New window"
+shortcut "Cmd+K" "Clear screen"
+
+echo ""
+echo "Font Size:"
+shortcut "Cmd++" "Increase font size"
+shortcut "Cmd+-" "Decrease font size"
+shortcut "Cmd+0" "Reset font size"
+
+echo ""
+echo "Tab Navigation:"
+shortcut "Cmd+1...5" "Go to tab 1-5"
+
+echo ""
+echo "Tmux Integration:"
+shortcut "Alt+Arrows" "Passed to tmux for pane switching"

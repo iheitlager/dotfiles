@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# shortcuts - Display keyboard shortcuts for various tools
+# Usage: shortcuts [topic]
+# Dynamically discovers all bash_shortcuts files in dotfiles
+
+set -euo pipefail
+
+# Color codes
+BOLD='\033[1m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+
+# Configuration
+DOTFILES="${HOME}/.dotfiles"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/shortcuts"
+CACHE_FILE="${CACHE_DIR}/topics.cache"
+
+# Associative arrays for topics
+declare -A TOPIC_PATHS
+declare -a TOPICS
+
+discover_topics() {
+    # Discover all bash_shortcuts files in dotfiles directory
+    local shortcuts_files
+
+    # Use find to locate all bash_shortcuts files
+    while IFS= read -r filepath; do
+        # Extract relative path from dotfiles root
+        local relpath="${filepath#$DOTFILES/}"
+        # Extract directory name as topic (first component of path)
+        local topic
+        if [[ "$relpath" == */* ]]; then
+            # For paths like "bash/bash_shortcuts" or "config/ghostty/bash_shortcuts"
+            # Use the parent directory name
+            local dir=$(dirname "$relpath")
+            # Use basename of directory for topic name, unless it's 'config'
+            if [[ "$dir" == config/* ]]; then
+                # For config/ghostty/bash_shortcuts -> ghostty
+                topic=$(basename "$dir")
+            else
+                # For bash/bash_shortcuts -> bash
+                topic=$(basename "$dir")
+            fi
+        else
+            # For bash_shortcuts in root (shouldn't happen, but handle it)
+            topic="general"
+        fi
+
+        TOPIC_PATHS["$topic"]="$relpath"
+    done < <(find "$DOTFILES" -type f -name "bash_shortcuts" 2>/dev/null | sort)
+
+    # Build sorted topics array
+    TOPICS=($(printf '%s\n' "${!TOPIC_PATHS[@]}" | sort))
+}
+
+load_topics_from_cache() {
+    # Load topics from cache if valid
+    if [[ ! -f "$CACHE_FILE" ]]; then
+        return 1
+    fi
+
+    # Check if cache is stale (older than any bash_shortcuts file)
+    local cache_mtime=$(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+    local newest_file_mtime=0
+
+    while IFS= read -r file; do
+        local file_mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+        if (( file_mtime > newest_file_mtime )); then
+            newest_file_mtime=$file_mtime
+        fi
+    done < <(find "$DOTFILES" -type f -name "bash_shortcuts" 2>/dev/null)
+
+    if (( cache_mtime < newest_file_mtime )); then
+        return 1
+    fi
+
+    # Load from cache
+    while IFS='=' read -r topic path; do
+        TOPIC_PATHS["$topic"]="$path"
+    done < "$CACHE_FILE"
+
+    TOPICS=($(printf '%s\n' "${!TOPIC_PATHS[@]}" | sort))
+    return 0
+}
+
+save_topics_to_cache() {
+    # Save discovered topics to cache
+    mkdir -p "$CACHE_DIR"
+    : > "$CACHE_FILE"
+
+    for topic in "${!TOPIC_PATHS[@]}"; do
+        echo "${topic}=${TOPIC_PATHS[$topic]}" >> "$CACHE_FILE"
+    done
+}
+
+init_topics() {
+    # Try to load from cache first, fall back to discovery
+    if ! load_topics_from_cache; then
+        discover_topics
+        save_topics_to_cache
+    fi
+}
+
+show_header() {
+    local topic=$1
+    echo -e "\n${BOLD}${CYAN}═══════════════════════════════════════════════════════════${RESET}"
+    echo -e "${BOLD}${CYAN}  $(echo "$topic" | tr '[:lower:]' '[:upper:]') SHORTCUTS${RESET}"
+    echo -e "${BOLD}${CYAN}═══════════════════════════════════════════════════════════${RESET}\n"
+}
+
+show_shortcuts() {
+    local topic=$1
+
+    if [[ -z "${TOPIC_PATHS[$topic]:-}" ]]; then
+        echo -e "${YELLOW}Error: Unknown topic '${topic}'${RESET}" >&2
+        return 1
+    fi
+
+    local parser="${DOTFILES}/${TOPIC_PATHS[$topic]}"
+
+    if [[ -f "$parser" ]]; then
+        show_header "$topic"
+        bash "$parser" "$DOTFILES"
+    else
+        echo -e "${YELLOW}Warning: No shortcuts found for topic '${topic}' at ${parser}${RESET}" >&2
+    fi
+}
+
+print_usage() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+
+    $HELP << EOF
+Usage: shortcuts [TOPIC] [OPTIONS]
+
+Display keyboard shortcuts for various tools. Automatically discovers
+bash_shortcuts files in ~/.dotfiles modules.
+
+TOPICS:$(
+    if [[ ${#TOPICS[@]} -gt 0 ]]; then
+        for topic in "${TOPICS[@]}"; do
+            local path="${TOPIC_PATHS[$topic]}"
+            printf "\n    %-12s %s" "$topic" "($path)"
+        done
+    else
+        echo "
+    (none found - create bash_shortcuts files in module directories)"
+    fi
+)
+
+OPTIONS:
+    --refresh         Force refresh cache and rescan dotfiles
+    -h, --help        Show this help message
+
+EXAMPLES:
+    shortcuts                 # Show all shortcuts
+    shortcuts bash            # Show bash shortcuts only
+    shortcuts --refresh       # Rescan dotfiles for new shortcuts
+    help shortcuts            # Show this help (via help function)
+    sc                        # Short alias for shortcuts
+
+ADDING NEW SHORTCUTS:
+    Create a bash_shortcuts file in any module directory:
+
+        echo '#!/usr/bin/env bash' > ~/.dotfiles/mymodule/bash_shortcuts
+        echo 'printf "%-20s %s\n" "Ctrl+X" "My shortcut"' >> ~/.dotfiles/mymodule/bash_shortcuts
+        chmod +x ~/.dotfiles/mymodule/bash_shortcuts
+        shortcuts --refresh
+
+EOF
+}
+
+main() {
+    # Initialize topics (from cache or discovery)
+    init_topics
+
+    # Check if we have any topics
+    if [[ ${#TOPICS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}No shortcuts found in ${DOTFILES}${RESET}" >&2
+        echo "Create a 'bash_shortcuts' file in any module directory." >&2
+        exit 1
+    fi
+
+    local topic="${1:-all}"
+
+    case "$topic" in
+        -h|--help|help)
+            print_usage
+            exit 0
+            ;;
+        --refresh)
+            # Force refresh cache
+            discover_topics
+            save_topics_to_cache
+            echo -e "${GREEN}Cache refreshed. Found ${#TOPICS[@]} topics.${RESET}"
+            exit 0
+            ;;
+        all)
+            for t in "${TOPICS[@]}"; do
+                show_shortcuts "$t"
+            done
+            ;;
+        *)
+            # Check if topic exists
+            if [[ -n "${TOPIC_PATHS[$topic]:-}" ]]; then
+                show_shortcuts "$topic"
+            else
+                echo -e "${YELLOW}Unknown topic: ${topic}${RESET}" >&2
+                echo ""
+                print_usage
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+main "$@"

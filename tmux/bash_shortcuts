@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# Tmux shortcuts parser - reads from tmux.conf
+
+DOTFILES="${1:-$HOME/.dotfiles}"
+CONFIG_FILE="${DOTFILES}/tmux/config/tmux.conf"
+
+# Color codes
+GREEN='\033[32m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+RESET='\033[0m'
+
+shortcut() {
+    printf "  ${GREEN}%-25s${RESET} %s\n" "$1" "$2"
+}
+
+note() {
+    printf "  ${CYAN}Note: %s${RESET}\n" "$1"
+}
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "${YELLOW}Tmux config not found: ${CONFIG_FILE}${RESET}" >&2
+    exit 1
+fi
+
+echo "Prefix Key:"
+shortcut "Ctrl+B" "Tmux command prefix"
+note "Most tmux commands require prefix first"
+
+echo ""
+echo "Session Management:"
+shortcut "Prefix+D" "Detach from session"
+shortcut "Prefix+$" "Rename session"
+shortcut "Prefix+(" "Switch to previous session"
+shortcut "Prefix+)" "Switch to next session"
+
+echo ""
+echo "Window Management:"
+shortcut "Prefix+C" "Create new window"
+shortcut "Prefix+," "Rename window"
+shortcut "Prefix+&" "Kill window"
+shortcut "Shift+Left/Right" "Previous/next window (no prefix)"
+
+echo ""
+echo "Pane Management:"
+shortcut "Prefix+|" "Split vertically"
+shortcut "Prefix+-" "Split horizontally"
+shortcut "Alt+Arrows" "Switch panes (no prefix)"
+shortcut "Ctrl+Shift+Arrows" "Resize pane (no prefix)"
+shortcut "Prefix+X" "Kill pane"
+shortcut "Prefix+Z" "Toggle pane zoom"
+
+echo ""
+echo "Copy Mode:"
+shortcut "Prefix+[" "Enter copy mode"
+shortcut "V" "Begin selection (in copy mode)"
+shortcut "Y" "Copy selection (in copy mode)"
+shortcut "Prefix+P" "Paste buffer"
+shortcut "/" "Search forward (in copy mode)"
+shortcut "?" "Search backward (in copy mode)"
+
+echo ""
+echo "Other:"
+shortcut "Prefix+R" "Reload tmux config"
+shortcut "Prefix+?" "Show all keybindings"

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# Bash + FZF shortcuts
+
+# Color codes
+GREEN='\033[32m'
+CYAN='\033[36m'
+RESET='\033[0m'
+
+shortcut() {
+    printf "  ${GREEN}%-20s${RESET} %s\n" "$1" "$2"
+}
+
+note() {
+    printf "  ${CYAN}Note: %s${RESET}\n" "$1"
+}
+
+echo "Navigation:"
+shortcut "Ctrl+A" "Move to beginning of line"
+shortcut "Ctrl+E" "Move to end of line"
+shortcut "Alt+F" "Move forward one word"
+shortcut "Alt+B" "Move backward one word"
+
+echo ""
+echo "Editing:"
+shortcut "Ctrl+U" "Delete from cursor to start of line"
+shortcut "Ctrl+K" "Delete from cursor to end of line"
+shortcut "Ctrl+W" "Delete word before cursor"
+shortcut "Alt+D" "Delete word after cursor"
+shortcut "Ctrl+Y" "Paste (yank) last deleted text"
+shortcut "Ctrl+_" "Undo last edit"
+
+echo ""
+echo "History:"
+shortcut "Ctrl+R" "Search command history (fzf)"
+shortcut "Ctrl+P" "Previous command"
+shortcut "Ctrl+N" "Next command"
+shortcut "!!" "Repeat last command"
+shortcut "!$" "Last argument of previous command"
+
+echo ""
+echo "Control:"
+shortcut "Ctrl+C" "Cancel current command"
+shortcut "Ctrl+D" "Exit shell (EOF)"
+shortcut "Ctrl+Z" "Suspend current process (fg to resume)"
+shortcut "Ctrl+L" "Clear screen"
+
+echo ""
+echo "FZF - File & Directory Navigation:"
+shortcut "Ctrl+T" "Paste selected file path"
+shortcut "Alt+C" "Change directory (cd)"
+shortcut "**+Tab" "Fuzzy completion trigger"
+note "Examples: cd **<Tab>, vim **<Tab>"
+
+echo ""
+echo "FZF - Inside Interface:"
+shortcut "Ctrl+J/K" "Move down/up"
+shortcut "Ctrl+N/P" "Move down/up (alternative)"
+shortcut "Enter" "Select item"
+shortcut "Tab" "Toggle selection (multi-select)"
+shortcut "Shift+Tab" "Toggle selection upward"
+shortcut "Ctrl+A" "Select all"
+shortcut "Ctrl+D" "Deselect all"
+shortcut "Ctrl+/" "Toggle preview window"
+shortcut "Esc/Ctrl+C" "Cancel and exit"
