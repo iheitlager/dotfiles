@@ -362,6 +362,40 @@ gh issue create \
 
 ## Writing Effective Requirements
 
+### Requirement Format
+
+Requirements support both numbered and unnumbered formats:
+
+**Unnumbered (standard):**
+```markdown
+### Requirement: Topic-Based Organization
+```
+
+**Numbered (optional):**
+```markdown
+### Requirement 8: Serialization Methods
+### Requirement 10: Validation Rules
+```
+
+Use numbered requirements when:
+- You need explicit ordering
+- Requirements will be referenced by number
+- Multiple specs need aligned numbering
+
+### Formatting Rules
+
+**❌ PROHIBITED:**
+- **NO color codes** - No ANSI escape sequences, no `\033[`, no terminal colors
+- **NO HTML** - No `<span>`, `<div>`, or any HTML tags
+- **NO emoji in requirements** - Keep formal and searchable
+- **NO special characters** - Stick to markdown syntax
+
+**✅ ALLOWED:**
+- Plain markdown formatting (`**bold**`, `*italic*`, `` `code` ``)
+- Standard markdown lists, headings, links
+- Code blocks with language specifiers
+- Numbered requirement format (`### Requirement 8:`)
+
 ### RFC 2119 Keywords
 
 - **MUST/SHALL**: Absolute requirement (mandatory)
@@ -422,7 +456,7 @@ The system MUST automatically discover [items] without manual registration.
 ### Pattern: Caching
 
 ```markdown
-### Requirement: Smart Caching
+### Requirement 5: Smart Caching
 
 The system MUST cache [data] with automatic invalidation.
 
@@ -435,6 +469,21 @@ The system MUST cache [data] with automatic invalidation.
 - GIVEN cached data exists
 - WHEN source data changes
 - THEN system SHALL regenerate cache
+```
+
+### Pattern: Numbered Requirements
+
+Use numbered requirements for explicit ordering:
+
+```markdown
+### Requirement 1: Data Input
+The system MUST accept input from multiple sources.
+
+### Requirement 2: Data Validation
+The system MUST validate input before processing (depends on Req 1).
+
+### Requirement 3: Data Storage
+The system MUST persist validated data (depends on Req 2).
 ```
 
 ## Integration with Workflow
@@ -476,8 +525,8 @@ spec status
 # Find spec directory
 cd ~/.dotfiles/.openspec/specs/
 
-# Count requirements across all specs
-grep -r "^### Requirement:" ~/.dotfiles/.openspec/specs/ | wc -l
+# Count requirements across all specs (both formats)
+grep -r "^### Requirement" ~/.dotfiles/.openspec/specs/ | wc -l
 
 # Check if spec has RFC 2119 section
 grep -l "RFC 2119 Keywords" ~/.dotfiles/.openspec/specs/*/spec.md
@@ -524,9 +573,33 @@ grep -l "RFC 2119 Keywords" ~/.dotfiles/.openspec/specs/*/spec.md
 
 **Claude**:
 1. Read the spec file
-2. Extract all requirements (grep for `### Requirement:`)
+2. Extract all requirements (grep for `### Requirement`)
 3. For each requirement, create issue with `gh issue create`
 4. Include scenarios in issue body
+
+## Important Guidelines
+
+When creating or editing specs, **ALWAYS follow these rules**:
+
+### ✅ DO:
+- Use plain markdown formatting only
+- Use numbered requirements when ordering matters (`### Requirement 8:`)
+- Keep text clean and searchable
+- Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+- Write specific, testable scenarios with Given-When-Then
+
+### ❌ DON'T:
+- **NO color codes** - No `\033[31m`, no ANSI escape sequences
+- **NO HTML** - No `<span style="color:red">`, no HTML tags
+- **NO emoji in requirements** - Keep professional and greppable
+- **NO special terminal formatting** - Plain markdown only
+- **NO implementation details** - Focus on behavior, not code
+
+These rules ensure specs remain:
+- **Searchable** with grep/ripgrep
+- **Portable** across editors and viewers
+- **Version-control friendly** with clean diffs
+- **Professional** and formal in tone
 
 ---
 
