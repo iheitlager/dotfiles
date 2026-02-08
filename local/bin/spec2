@@ -279,6 +279,54 @@ def deep_merge(base: Dict, override: Dict) -> Dict:
 # SPEC FILE DISCOVERY
 # =============================================================================
 
+def find_spec_dir(start_dir: Path = None, explicit_name: str = None) -> Optional[Path]:
+    """Find spec directory searching multiple locations and names"""
+    # Directory name candidates (in order of preference)
+    candidates = [".openspec", "openspec", ".specs", "specs", ".spec", "spec"]
+
+    # If explicit name provided, only check that
+    if explicit_name:
+        candidates = [explicit_name]
+
+    # Start from current directory if not specified
+    if start_dir is None:
+        start_dir = Path.cwd()
+
+    # First, check if we're in a git repository
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=start_dir,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode == 0:
+            git_root = Path(result.stdout.strip())
+            # Check candidates in git root
+            for candidate in candidates:
+                spec_dir = git_root / candidate
+                if spec_dir.is_dir():
+                    return spec_dir
+    except FileNotFoundError:
+        pass  # git not available
+
+    # Check current directory and parents
+    current = start_dir.resolve()
+    for _ in range(10):  # Limit upward search to 10 levels
+        for candidate in candidates:
+            spec_dir = current / candidate
+            if spec_dir.is_dir():
+                return spec_dir
+
+        # Move up one directory
+        parent = current.parent
+        if parent == current:  # Reached root
+            break
+        current = parent
+
+    return None
+
 def find_spec_files(spec_dir: Path) -> List[Path]:
     """Find all spec files, excluding templates"""
     spec_files = []
@@ -958,13 +1006,24 @@ def cmd_init(args):
 
 def cmd_validate(args):
     """Validate specs"""
-    spec_dir = Path(args.dir).resolve()
-    project_root = Path(args.project_folder).resolve()
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        # Default case - search for any spec directory
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print(f"[red]Error:[/red] No spec directory found")
+            console.print(f"Searched for: .openspec, openspec, .spec, spec, .specs, specs")
+            console.print(f"Run 'spec2 init' to initialize OpenSpec")
+            sys.exit(1)
+    else:
+        # Explicit directory provided
+        spec_dir = Path(args.dir).resolve()
+        if not spec_dir.exists():
+            console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
+            console.print(f"Run 'spec2 init' to initialize OpenSpec")
+            sys.exit(1)
 
-    if not spec_dir.exists():
-        console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
-        console.print(f"Run 'spec2 init' to initialize OpenSpec")
-        sys.exit(1)
+    project_root = Path(args.project_folder).resolve()
 
     # Load rules
     profile = "strict" if args.strict else None
@@ -1011,7 +1070,15 @@ def cmd_validate(args):
 
 def cmd_stats(args):
     """Show statistics across specs"""
-    spec_dir = Path(args.dir).resolve()
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print(f"[red]Error:[/red] No spec directory found")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+
     project_root = Path(args.project_folder).resolve()
 
     spec_files = find_spec_files(spec_dir)
@@ -1052,7 +1119,15 @@ def cmd_stats(args):
 
 def cmd_rules_show(args):
     """Show active rules"""
-    spec_dir = Path(args.dir).resolve()
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print(f"[red]Error:[/red] No spec directory found")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+
     rules = load_rules(spec_dir)
 
     console.print("\n[bold]Active Validation Rules[/bold]\n")
