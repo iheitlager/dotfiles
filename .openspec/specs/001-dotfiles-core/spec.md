@@ -1587,6 +1587,55 @@ dot
 
 ---
 
+## Metadata
+
+This section provides project-specific links for tracking and traceability.
+
+### Implementation Files
+
+**Bootstrap Process:**
+- [script/bootstrap](script/bootstrap) - Main bootstrap script with 8-step installation process
+
+**Package Management:**
+- [local/bin/dot](local/bin/dot) - Homebrew package manager, topic installer, status reporter
+- [homebrew/brew_install.sh](homebrew/brew_install.sh) - Homebrew installation script
+
+**Shell Integration:**
+- [bash/bash_profile.symlink](bash/bash_profile.symlink) - Login shell initialization, sources bash_env from all topics
+- [bash/bashrc.symlink](bash/bashrc.symlink) - Interactive shell initialization, sources bash_aliases and bash_completion
+
+**Topic Files** (discovered automatically):
+- bash_env - Environment variables
+- bash_aliases - Shell aliases and functions
+- bash_completion - Tab completions
+- brew_packages - Homebrew dependencies
+- install.sh - Topic-specific installers
+- config/ - XDG configuration directories
+- *.symlink - Home directory symlinks
+
+### Test Coverage
+
+**Manual Testing:**
+- Bootstrap idempotency: Run `script/bootstrap` twice, verify no errors
+- Topic discovery: Add new topic, verify auto-discovery
+- Cache invalidation: Modify topic file, verify cache regeneration
+- Symlink validation: Create stale symlink, run `dot purge`, verify removal
+- Package installation: Run `dot --export`, verify Brewfile generation
+
+**Integration Testing:**
+- Fresh macOS installation validation (manual)
+- XDG directory structure verification
+- Topic installer execution validation
+
+**Test Procedures:** Documented in "Testing Requirements" section of this spec
+
+### Related Specifications
+
+- [002-dotfiles-caching](../002-dotfiles-caching/spec.md) - Shell integration caching system
+- [003-shortcuts-system](../003-shortcuts-system/spec.md) - Keyboard shortcuts documentation
+
+---
+
 ## References
 
 - **XDG Base Directory Specification**: https://specifications.freedesktop.org/basedir-spec/latest/
