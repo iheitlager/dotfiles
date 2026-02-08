@@ -27,7 +27,7 @@ Usage:
     openspec validate                  Validate all specs
     openspec validate <name>           Validate specific spec
     openspec template                  Show OpenSpec template
-    openspec new <name> [category]     Create new spec from template
+    openspec new <name>                Create new spec in changes/
     openspec check-links               Validate all references
     openspec coverage                  Show reference coverage report
     openspec stats                     Statistics across specs
@@ -2136,57 +2136,33 @@ def cmd_new(args):
 
     if not args.spec_name:
         console.print("[red]Error:[/red] Spec name required")
-        console.print("Usage: openspec new <spec-name> [category]")
+        console.print("Usage: openspec new <spec-name>")
         console.print("\nExamples:")
-        console.print("  openspec new authentication           # Creates directory-based spec")
-        console.print("  openspec new auth backend             # Creates backend/auth.spec.md")
+        console.print("  openspec new authentication           # Creates changes/<timestamp>/specs/authentication/spec.md")
+        console.print("  openspec new user-profile             # Creates changes/<timestamp>/specs/user-profile/spec.md")
+        console.print("\n[dim]Note: New specs are created in changes/ as delta specs (proposals)[/dim]")
         sys.exit(1)
 
     spec_name = args.spec_name
-    category = args.category
 
-    # Detect existing pattern
-    spec_files = find_spec_files(spec_dir)
-    has_named = any(f.name.endswith('.spec.md') and f.name != 'spec.md' for f in spec_files)
-    has_directory = any(f.name == 'spec.md' for f in spec_files)
+    # New specs are created in changes/ as delta specs (proposals)
+    changes_dir = spec_dir / "changes"
+    changes_dir.mkdir(exist_ok=True)
 
-    # Determine target file
-    if category or has_named:
-        # Named file pattern
-        if not category:
-            category = "general"
-        target_dir = spec_dir / category
-        target_dir.mkdir(exist_ok=True)
-        new_file = target_dir / f"{spec_name}.spec.md"
-        console.print(f"[dim]Using named file pattern:[/dim] {category}/{spec_name}.spec.md")
-    else:
-        # Directory pattern
-        specs_dir = spec_dir / "specs"
-        specs_dir.mkdir(exist_ok=True)
+    # Generate change ID (use timestamp for uniqueness)
+    from datetime import datetime
+    change_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-        # Check for numbered directories
-        existing_dirs = [d for d in specs_dir.iterdir() if d.is_dir()]
-        max_num = 0
-        has_numbered = False
+    # Create change directory structure: changes/<change-id>/specs/<spec-name>/
+    change_path = changes_dir / change_id
+    change_specs_dir = change_path / "specs"
+    target_dir = change_specs_dir / spec_name
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-        for d in existing_dirs:
-            match = re.match(r'^(\d{3})-', d.name)
-            if match:
-                has_numbered = True
-                num = int(match.group(1))
-                if num > max_num:
-                    max_num = num
+    new_file = target_dir / "spec.md"
+    proposal_file = change_path / "proposal.md"
 
-        if has_numbered:
-            next_num = f"{max_num + 1:03d}"
-            dir_name = f"{next_num}-{spec_name}"
-        else:
-            dir_name = spec_name
-
-        target_dir = specs_dir / dir_name
-        target_dir.mkdir(exist_ok=True)
-        new_file = target_dir / "spec.md"
-        console.print(f"[dim]Using directory pattern:[/dim] {dir_name}/spec.md")
+    console.print(f"[dim]Creating delta spec in changes:[/dim] {change_id}/specs/{spec_name}/spec.md")
 
     if new_file.exists():
         console.print(f"[red]Error:[/red] Spec file already exists: {new_file}")
@@ -2206,12 +2182,51 @@ def cmd_new(args):
         content = content.replace("[YYYY-MM-DD]", date.today().isoformat())
         new_file.write_text(content)
 
+    # Create proposal.md file
+    if not proposal_file.exists():
+        proposal_content = f"""# Proposal: {spec_name}
+
+**Change ID:** {change_id}
+**Status:** Draft
+**Date:** {datetime.now().strftime('%Y-%m-%d')}
+
+## Summary
+
+[Brief description of what this specification proposes]
+
+## Motivation
+
+[Why is this change needed? What problem does it solve?]
+
+## Proposed Changes
+
+- New specification: `{spec_name}`
+- See `specs/{spec_name}/spec.md` for details
+
+## Impact
+
+[What parts of the system will this affect?]
+
+## Alternatives Considered
+
+[What other approaches were considered and why was this chosen?]
+
+## Open Questions
+
+- [ ] Question 1
+- [ ] Question 2
+"""
+        proposal_file.write_text(proposal_content)
+        console.print(f"[green]Created proposal:[/green] {proposal_file}")
+
     console.print(f"[green]Created new spec:[/green] {new_file}")
+    console.print(f"\n[yellow]Note:[/yellow] New specs are created in changes/ as proposals")
     console.print("\n[dim]Next steps:[/dim]")
-    console.print(f"  1. Edit the spec file: $EDITOR {new_file}")
-    console.print(f"  2. Replace [placeholders] with your content")
-    console.print(f"  3. Add requirements and scenarios")
+    console.print(f"  1. Edit the proposal: $EDITOR {proposal_file}")
+    console.print(f"  2. Edit the spec file: $EDITOR {new_file}")
+    console.print(f"  3. Use ## ADDED Requirements for new features")
     console.print(f"  4. Run: openspec validate")
+    console.print(f"  5. After approval, merge to specs/ and archive this change")
 
 def cmd_view_spec(spec_name: str, spec_dir: Optional[Path] = None, raw_mode: bool = False):
     """View a specific spec by name"""
@@ -2695,9 +2710,8 @@ Examples:
 
   # Create and edit
   openspec template                       Show OpenSpec template
-  openspec new authentication             Create new spec
-  openspec new auth backend               Create backend/auth.spec.md
-  openspec new myspec --dir custom        Create in custom directory
+  openspec new authentication             Create new delta spec in changes/
+  openspec new user-profile               Creates changes/<timestamp>/specs/user-profile/
 
   # Validation
   openspec validate                       Validate all specs
@@ -2753,7 +2767,6 @@ Examples:
     # new command
     new_parser = subparsers.add_parser("new", help="Create new spec from template")
     new_parser.add_argument("spec_name", nargs="?", help="Name of the new spec")
-    new_parser.add_argument("category", nargs="?", help="Category for named file pattern (optional)")
     new_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     new_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
 
