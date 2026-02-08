@@ -1643,10 +1643,10 @@ dot
 
 ## Internal Documentation
 
-- [README.md](../../README.md) - Quick start and overview
-- [docs/xdg_setup.md](../../docs/xdg_setup.md) - XDG implementation details
-- [docs/coloring.md](../../docs/coloring.md) - Modern CLI tools and colors
-- [.openspec/specs/dotfiles-caching/spec.md](../002-dotfiles-caching/spec.md) - Shell integration caching system
+- [README.md](README.md) - Quick start and overview
+- [docs/xdg_setup.md](docs/xdg_setup.md) - XDG implementation details
+- [docs/coloring.md](docs/coloring.md) - Modern CLI tools and colors
+- [.openspec/specs/dotfiles-caching/spec.md](.openspec/specs/002-dotfiles-caching/spec.md) - Shell integration caching system
 - [.openspec/specs/shortcuts-system/spec.md](../003-shortcuts-system/spec.md) - Keyboard shortcuts system
 
 ---
