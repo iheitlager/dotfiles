@@ -4,10 +4,26 @@
 **Version:** 1.0.0
 **Status:** Implemented
 **Date:** 2026-02-07
+**Owner:** Ilja Heitlager
 
 ## Overview
 
 A dynamic, modular keyboard shortcuts documentation system that automatically discovers and displays keyboard shortcuts across all dotfiles modules, providing developers with instant access to keybindings without searching through configuration files.
+
+### Philosophy
+
+- **Zero-Maintenance Documentation**: Shortcuts are documented where they're defined, eliminating documentation drift
+- **Discoverable by Default**: All shortcuts are automatically indexed and searchable without manual registration
+- **Context-Aware Display**: Group shortcuts by topic (git, nvim, docker) for easy reference
+- **Cache for Speed**: Smart caching ensures instant access while staying fresh
+
+### Key Capabilities
+
+- **Automatic Discovery**: Scans all topic directories for `shortcuts.md` files
+- **Multiple Access Methods**: Direct command (`shortcuts`), short alias (`sc`), help integration
+- **Topic Filtering**: View all shortcuts or filter by specific topic
+- **Smart Caching**: mtime-based cache with automatic invalidation
+- **Extensible Format**: Standardized module structure for consistency
 
 ---
 

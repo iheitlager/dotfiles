@@ -424,18 +424,27 @@ def extract_metadata(lines: List[str]) -> Optional[SpecMetadata]:
     )
 
 def parse_sections(lines: List[str]) -> Dict[str, List[str]]:
-    """Parse spec into sections based on ## headings"""
+    """Parse spec into sections based on ## and ### headings"""
     sections = {}
     current_section = None
     current_lines = []
 
     for line in lines:
+        # Check for both ## (main sections) and ### (subsections)
         if line.startswith("## "):
             # Save previous section
             if current_section:
                 sections[current_section] = current_lines
             # Start new section
             current_section = line[3:].strip()
+            current_lines = []
+        elif line.startswith("### ") and not line.startswith("### Requirement"):
+            # Also track subsections (but not requirements)
+            # Save previous section
+            if current_section:
+                sections[current_section] = current_lines
+            # Start new subsection
+            current_section = line[4:].strip()
             current_lines = []
         elif current_section:
             current_lines.append(line)
