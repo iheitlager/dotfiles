@@ -102,14 +102,14 @@ The system MUST follow the XDG Base Directory Specification for all configuratio
 
 - GIVEN a topic has a config/ subdirectory (e.g., nvim/config/)
 - WHEN bootstrap runs
-- THEN it SHALL symlink ~/.dotfiles/<topic>/config/ to ~/.config/<topic>/
+- THEN it SHALL symlink `~/.dotfiles/<topic>/config/` to `~/.config/<topic>/`
 - AND the symlink SHALL be validated to point to an existing source
 
 #### Scenario: General Config Symlinked
 
-- GIVEN config/<app>/ exists in the general config directory (e.g., config/bat/)
+- GIVEN `config/<app>/` exists in the general config directory (e.g., config/bat/)
 - WHEN bootstrap runs
-- THEN it SHALL symlink ~/.dotfiles/config/<app>/ to ~/.config/<app>/
+- THEN it SHALL symlink `~/.dotfiles/config/<app>/` to `~/.config/<app>/`
 - AND SHALL process all subdirectories under config/
 
 #### Scenario: XDG Variables Exported
@@ -261,16 +261,16 @@ The system MUST support two config directory patterns with conflict detection an
 
 #### Scenario: Topic-Specific Config Pattern
 
-- GIVEN a topic has structure: <topic>/config/
+- GIVEN a topic has structure: `<topic>/config/`
 - WHEN bootstrap runs link_config_files()
-- THEN it SHALL create symlink: ~/.config/<topic>/ → ~/.dotfiles/<topic>/config/
+- THEN it SHALL create symlink: `~/.config/<topic>/` → `~/.dotfiles/<topic>/config/`
 - AND SHALL handle interactive prompts for conflicts
 
 #### Scenario: General Config Pattern
 
-- GIVEN config/<app>/ exists
+- GIVEN `config/<app>/` exists
 - WHEN bootstrap runs link_config_files()
-- THEN it SHALL create symlink: ~/.config/<app>/ → ~/.dotfiles/config/<app>/
+- THEN it SHALL create symlink: `~/.config/<app>/` → `~/.dotfiles/config/<app>/`
 - AND SHALL process all subdirectories under config/
 
 #### Scenario: Config Conflict Validation
@@ -280,7 +280,7 @@ The system MUST support two config directory patterns with conflict detection an
 - THEN it SHALL detect the conflict
 - AND SHALL list all conflicts with priorities (topic/config has precedence)
 - AND SHALL exit with error code 1 before any installation
-- AND SHALL provide resolution command (rm -rf config/<topic>)
+- AND SHALL provide resolution command (`rm -rf config/<topic>`)
 
 #### Scenario: Symlink Overwrite Handling
 

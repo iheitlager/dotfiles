@@ -561,6 +561,54 @@ Within each, files can use:
 
 ---
 
+## Metadata
+
+This section provides project-specific links for tracking and traceability.
+
+### Implementation Files
+
+**Main Tool:**
+- [local/bin/openspec](local/bin/openspec) - Complete OpenSpec validator and tooling
+
+**Key Functions by Requirement:**
+
+1. **Structured Format** - `parse_spec()`, `validate_spec()`, `extract_sections()`
+2. **RFC 2119 Statements** - `validate_requirement_statements()`, RFC keyword detection
+3. **Given-When-Then Scenarios** - `extract_scenarios()`, scenario validation
+4. **Project-Root-Relative** - `extract_references()`, path resolution logic
+5. **Validation Profiles** - `load_validation_rules()`, profile system (strict/standard/lenient)
+6. **Project Initialization** - `cmd_init()`, directory structure creation
+7. **Template Exclusion** - Template detection in file paths
+8. **Multiple Output Formats** - `cmd_validate()` with `--json` flag
+9. **Statistics & Coverage** - `cmd_stats()`, `cmd_coverage()`
+10. **Change Directory Support** - Delta spec detection and validation
+11. **Lifecycle Markers** - `extract_lifecycle_sections()`, ADDED/MODIFIED/REMOVED/RENAMED
+12. **Proposal Workflow** - Change proposal validation
+13. **Project Context** - Rules.toml, README.md generation
+
+**Templates:**
+- [local/share/spec/template.md](local/share/spec/template.md) - Main spec template
+- [local/share/spec/template-delta.md](local/share/spec/template-delta.md) - Delta spec template
+
+### Test Coverage
+
+**Manual Testing:**
+- Validation: Run `openspec validate` on valid and invalid specs
+- Templates: Run `openspec new test-spec`, verify structure
+- Statistics: Run `openspec stats`, verify counts
+- Coverage: Run `openspec coverage`, verify reference tracking
+
+**Test Procedures:** Comprehensive testing across all 13 requirements
+
+### Related Specifications
+
+This is the meta-specification that defines the OpenSpec format itself. All other specs follow this specification:
+- [001-dotfiles-core](../001-dotfiles-core/spec.md)
+- [002-dotfiles-caching](../002-dotfiles-caching/spec.md)
+- [003-shortcuts-system](../003-shortcuts-system/spec.md)
+
+---
+
 ## References
 
 - **RFC 2119 - Key words for use in RFCs**: https://datatracker.ietf.org/doc/html/rfc2119
