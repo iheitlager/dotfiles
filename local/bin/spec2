@@ -325,23 +325,22 @@ def extract_metadata(lines: List[str]) -> Optional[SpecMetadata]:
     title = None
 
     for i, line in enumerate(lines[:20]):
-        line = line.strip()
+        line_stripped = line.strip()
 
         # Extract title from first heading
-        if line.startswith("# ") and not title:
-            title = line[2:].strip()
+        if line_stripped.startswith("# ") and not title:
+            title = line_stripped[2:].strip()
             continue
 
-        # Extract metadata fields (format: **Field:** value or **Field**: value)
-        if line.startswith("**") and ("**:" in line or "**: " in line):
-            # Handle both "**Field**:" and "**Field:**"
-            match = re.match(r'\*\*([^*]+)\*\*:\s*(.+)', line)
-            if match:
-                field_name = match.group(1).strip()
-                field_value = match.group(2).strip()
-                # Remove markdown links, keeping just the text
-                field_value = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', field_value)
-                metadata_fields[field_name] = field_value
+        # Extract metadata fields (format: **Field:** value)
+        # Pattern: **Word:** value (colon is inside the asterisks)
+        match = re.match(r'\*\*([^*]+):\*\*\s*(.+)', line_stripped)
+        if match:
+            field_name = match.group(1).strip()
+            field_value = match.group(2).strip()
+            # Remove markdown links, keeping just the text
+            field_value = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', field_value)
+            metadata_fields[field_name] = field_value
 
     if not title:
         return None
