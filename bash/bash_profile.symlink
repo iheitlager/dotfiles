@@ -21,7 +21,7 @@ export BASH_SILENCE_DEPRECATION_WARNING=1
 
 # Editor and pager
 export PAGER=less
-export EDITOR=vim
+export EDITOR=nvim
 export MANPAGER="col -b | bat --plain --language=man"
 export CLICOLOR=1
 export LESS='-RFX --use-color'

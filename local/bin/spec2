@@ -9,10 +9,11 @@
 # ]
 # ///
 """
-spec2 - Python-based OpenSpec validator and tooling
+spec2 - Python-based OpenSpec browser and validator
 
-A structured validation tool for OpenSpec specification files with:
-- Project initialization with templates
+Interactive OpenSpec browser with fzf and comprehensive validation:
+- Interactive fzf browser (default)
+- List and status views
 - Metadata and section validation
 - Requirements and scenarios checking
 - Reference integrity validation
@@ -20,9 +21,13 @@ A structured validation tool for OpenSpec specification files with:
 - Coverage tracking
 
 Usage:
-    spec2 init                      Initialize .openspec/ in current directory
+    spec2                           Interactive fzf browser (default)
+    spec2 list                      List all specs with metadata
+    spec2 status                    Compact overview table
     spec2 validate                  Validate all specs
     spec2 validate <name>           Validate specific spec
+    spec2 template                  Show OpenSpec template
+    spec2 new <name> [category]     Create new spec from template
     spec2 check-links               Validate all references
     spec2 coverage                  Show reference coverage report
     spec2 stats                     Statistics across specs
@@ -274,6 +279,50 @@ def deep_merge(base: Dict, override: Dict) -> Dict:
         else:
             result[key] = value
     return result
+
+# =============================================================================
+# RENDERING AND DISPLAY
+# =============================================================================
+
+# Global rendering mode (can be set via --raw flag)
+RAW_MODE = False
+
+def get_markdown_formatter() -> List[str]:
+    """Determine markdown formatter command"""
+    if RAW_MODE:
+        # Raw mode: use bat for syntax highlighting only
+        if shutil.which("bat"):
+            return ["bat", "--style=plain", "--color=always", "--language=markdown"]
+        return ["cat"]
+    else:
+        # Default: use glow for beautiful markdown rendering
+        if shutil.which("glow"):
+            return ["glow", "-s", "dark"]
+        elif shutil.which("bat"):
+            return ["bat", "--style=plain", "--color=always", "--language=markdown"]
+        return ["cat"]
+
+def render_markdown(file_path: Path, line_number: int = 1):
+    """Render markdown file with highlighting at specific line"""
+    formatter = get_markdown_formatter()
+
+    try:
+        if formatter[0] == "bat":
+            # bat can highlight specific lines
+            subprocess.run(
+                formatter + [f"--highlight-line={line_number}", str(file_path)],
+                check=False
+            )
+        elif formatter[0] == "glow":
+            # glow renders beautifully but doesn't support line highlighting
+            subprocess.run(formatter + [str(file_path)], check=False)
+        else:
+            # cat fallback
+            subprocess.run(formatter + [str(file_path)], check=False)
+    except Exception as e:
+        console.print(f"[yellow]Warning:[/yellow] Failed to render: {e}")
+        # Fallback to cat
+        subprocess.run(["cat", str(file_path)], check=False)
 
 # =============================================================================
 # SPEC FILE DISCOVERY
@@ -1005,6 +1054,374 @@ Run `spec2 --help` for full command reference.
         f.write(content)
 
 # =============================================================================
+# FZF INTERACTIVE BROWSER
+# =============================================================================
+
+def check_fzf_available() -> bool:
+    """Check if fzf is installed"""
+    return shutil.which("fzf") is not None
+
+def build_fzf_list(spec_dir: Path) -> List[tuple]:
+    """Build list of entries for fzf (files and requirements)"""
+    entries = []
+    spec_files = find_spec_files(spec_dir)
+
+    for spec_file in spec_files:
+        metadata, lines, sections = parse_spec_file(spec_file)
+        requirements = extract_requirements(lines, sections)
+
+        title = (metadata.title if metadata else spec_file.parent.name).strip().replace('\n', ' ')
+        domain = (metadata.domain if metadata else "").strip().replace('\n', ' ')
+        rel_path = spec_file.relative_to(spec_dir)
+
+        # Add file entry
+        entries.append(("FILE", str(spec_file), 1, title, domain))
+
+        # Add requirement entries
+        for req in requirements:
+            req_name = req.name.strip().replace('\n', ' ')
+            entries.append(("REQ", str(spec_file), req.line_number or 1, req_name, title))
+
+    return entries
+
+def format_fzf_entry(entry_type: str, line_num: int, name: str, meta: str) -> str:
+    """Format entry for fzf display"""
+    if entry_type == "FILE":
+        return f"{line_num}|📄 {name:<50}  {meta}"
+    else:
+        return f"{line_num}|   └─ {name:<47}  {meta}"
+
+def fzf_browser(spec_dir: Path, edit_mode: bool = False):
+    """Interactive fzf browser for specs"""
+    if not check_fzf_available():
+        console.print("[red]Error:[/red] fzf not installed. Install with: brew install fzf")
+        sys.exit(1)
+
+    # Build selection list
+    entries = build_fzf_list(spec_dir)
+
+    if not entries:
+        console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        return
+
+    # Format for fzf
+    fzf_input = "\n".join(
+        format_fzf_entry(entry[0], entry[2], entry[3], entry[4])
+        for entry in entries
+    )
+
+    # Create temp file for entry data
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as tf:
+        temp_file = tf.name
+        for i, entry in enumerate(entries, 1):
+            tf.write(f"{entry[0]}|{entry[1]}|{entry[2]}\n")
+
+    # Get formatter for preview
+    formatter = get_markdown_formatter()
+    formatter_cmd = " ".join(formatter)
+
+    # Preview command that reads from temp file
+    preview_cmd = f'''
+        line=$(sed -n "{{n}}p" {temp_file} | cut -d'|' -f3)
+        file=$(sed -n "{{n}}p" {temp_file} | cut -d'|' -f2)
+        {formatter_cmd} "$file" 2>/dev/null || cat "$file"
+    '''
+
+    try:
+        # Run fzf
+        result = subprocess.run(
+            [
+                "fzf",
+                "--ansi",
+                "--height=100%",
+                "--layout=reverse",
+                "--border",
+                "--delimiter=|",
+                "--with-nth=2..",
+                "--prompt=OpenSpec > ",
+                "--header=Enter: view | Ctrl-/: zoom | Ctrl-D: scroll down | Ctrl-U: scroll up",
+                "--preview", preview_cmd,
+                "--preview-window=right:60%:wrap",
+                "--bind=ctrl-/:change-preview-window(80%|60%:wrap)",
+                "--bind=ctrl-d:preview-half-page-down",
+                "--bind=ctrl-u:preview-half-page-up",
+            ],
+            input=fzf_input,
+            text=True,
+            capture_output=True,
+            check=False
+        )
+
+        if result.returncode == 0:
+            # Get selected index
+            selected_line = result.stdout.strip()
+            # Find which entry was selected
+            for i, entry in enumerate(entries, 1):
+                if format_fzf_entry(entry[0], entry[2], entry[3], entry[4]) == selected_line:
+                    selected_file = Path(entry[1])
+                    selected_line_num = entry[2]
+
+                    if edit_mode:
+                        # Open in $EDITOR
+                        editor = os.environ.get('EDITOR', 'nvim')
+                        # Pass line number if editor supports it
+                        if editor in ['vim', 'nvim', 'vi']:
+                            subprocess.run([editor, f"+{selected_line_num}", str(selected_file)])
+                        elif editor in ['code', 'subl']:
+                            subprocess.run([editor, f"{selected_file}:{selected_line_num}"])
+                        else:
+                            subprocess.run([editor, str(selected_file)])
+                    else:
+                        # Render the selected spec
+                        os.system('clear')
+                        render_markdown(selected_file, selected_line_num)
+                    break
+    finally:
+        # Cleanup temp file
+        try:
+            os.unlink(temp_file)
+        except:
+            pass
+
+# =============================================================================
+# LIST AND STATUS COMMANDS
+# =============================================================================
+
+def cmd_list(args):
+    """List all specs with metadata and requirements"""
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print("[red]Error:[/red] No spec directory found")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+        if not spec_dir.exists():
+            console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
+            sys.exit(1)
+
+    console.print(f"[bold]OpenSpec Files[/bold] [dim]({spec_dir})[/dim]\n")
+
+    spec_files = find_spec_files(spec_dir)
+    if not spec_files:
+        console.print("[yellow]No spec files found[/yellow]")
+        return
+
+    for spec_file in spec_files:
+        metadata, lines, sections = parse_spec_file(spec_file)
+        requirements = extract_requirements(lines, sections)
+
+        rel_path = spec_file.relative_to(spec_dir)
+        title = metadata.title if metadata else spec_file.parent.name
+
+        # Print spec header
+        console.print(f"[bold green]{title}[/bold green]")
+        console.print(f"  [dim]Path:[/dim]    {rel_path}")
+
+        if metadata:
+            if metadata.domain:
+                console.print(f"  [dim]Domain:[/dim]  {metadata.domain}")
+            if metadata.version:
+                console.print(f"  [dim]Version:[/dim] {metadata.version}")
+            if metadata.status:
+                console.print(f"  [dim]Status:[/dim]  {metadata.status}")
+
+        # List requirements
+        if requirements:
+            console.print(f"\n  [cyan]Requirements:[/cyan]")
+            for req in requirements:
+                line_info = f" [dim](line {req.line_number})[/dim]" if req.line_number else ""
+                console.print(f"    [yellow]•[/yellow] {req.name}{line_info}")
+
+        console.print()
+
+def cmd_status(args):
+    """Show compact status overview"""
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print("[red]Error:[/red] No spec directory found")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+        if not spec_dir.exists():
+            console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
+            sys.exit(1)
+
+    spec_files = find_spec_files(spec_dir)
+    file_count = len(spec_files)
+
+    console.print(f"[bold]OpenSpec Status[/bold] [dim]({spec_dir})[/dim]\n")
+    console.print(f"Files: [green]{file_count}[/green]\n")
+
+    # Create status table
+    table = Table(box=box.SIMPLE)
+    table.add_column("Specification", style="bold", width=50)
+    table.add_column("Version", style="cyan", width=8)
+    table.add_column("Status", style="green", width=12)
+    table.add_column("Reqs", style="yellow", justify="right")
+
+    total_reqs = 0
+
+    for spec_file in spec_files:
+        metadata, lines, sections = parse_spec_file(spec_file)
+        requirements = extract_requirements(lines, sections)
+
+        title = metadata.title if metadata else spec_file.parent.name
+        version = metadata.version if metadata and metadata.version else "-"
+        status = metadata.status if metadata and metadata.status else "-"
+        req_count = len(requirements)
+
+        total_reqs += req_count
+
+        # Truncate title if too long
+        if len(title) > 50:
+            title = title[:47] + "..."
+
+        table.add_row(title, version, status, str(req_count))
+
+    console.print(table)
+    console.print(f"\nTotal Requirements: [bold yellow]{total_reqs}[/bold yellow]")
+
+# =============================================================================
+# TEMPLATE AND NEW SPEC COMMANDS
+# =============================================================================
+
+def cmd_template(args):
+    """Show the OpenSpec template"""
+    template_file = find_template_file()
+
+    if not template_file:
+        console.print("[red]Error:[/red] Template not found")
+        console.print("Searched in:")
+        console.print("  - ~/.dotfiles/local/share/spec/template.md")
+        console.print("  - ~/.local/share/spec/template.md")
+        console.print("  - /usr/local/share/spec/template.md")
+        console.print("  - /usr/share/spec/template.md")
+        sys.exit(1)
+
+    # Just cat the template (no formatting)
+    with open(template_file, 'r') as f:
+        print(f.read())
+
+def cmd_new(args):
+    """Create new spec from template"""
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print("[red]Error:[/red] No spec directory found")
+            console.print("Run 'spec2 init' to initialize OpenSpec")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+        if not spec_dir.exists():
+            console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
+            console.print("Run 'spec2 init' to initialize OpenSpec")
+            sys.exit(1)
+
+    if not args.spec_name:
+        console.print("[red]Error:[/red] Spec name required")
+        console.print("Usage: spec2 new <spec-name> [category]")
+        console.print("\nExamples:")
+        console.print("  spec2 new authentication           # Creates directory-based spec")
+        console.print("  spec2 new auth backend             # Creates backend/auth.spec.md")
+        sys.exit(1)
+
+    spec_name = args.spec_name
+    category = args.category
+
+    # Detect existing pattern
+    spec_files = find_spec_files(spec_dir)
+    has_named = any(f.name.endswith('.spec.md') and f.name != 'spec.md' for f in spec_files)
+    has_directory = any(f.name == 'spec.md' for f in spec_files)
+
+    # Determine target file
+    if category or has_named:
+        # Named file pattern
+        if not category:
+            category = "general"
+        target_dir = spec_dir / category
+        target_dir.mkdir(exist_ok=True)
+        new_file = target_dir / f"{spec_name}.spec.md"
+        console.print(f"[dim]Using named file pattern:[/dim] {category}/{spec_name}.spec.md")
+    else:
+        # Directory pattern
+        specs_dir = spec_dir / "specs"
+        specs_dir.mkdir(exist_ok=True)
+
+        # Check for numbered directories
+        existing_dirs = [d for d in specs_dir.iterdir() if d.is_dir()]
+        max_num = 0
+        has_numbered = False
+
+        for d in existing_dirs:
+            match = re.match(r'^(\d{3})-', d.name)
+            if match:
+                has_numbered = True
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+
+        if has_numbered:
+            next_num = f"{max_num + 1:03d}"
+            dir_name = f"{next_num}-{spec_name}"
+        else:
+            dir_name = spec_name
+
+        target_dir = specs_dir / dir_name
+        target_dir.mkdir(exist_ok=True)
+        new_file = target_dir / "spec.md"
+        console.print(f"[dim]Using directory pattern:[/dim] {dir_name}/spec.md")
+
+    if new_file.exists():
+        console.print(f"[red]Error:[/red] Spec file already exists: {new_file}")
+        sys.exit(1)
+
+    # Copy template
+    template_file = find_template_file()
+    if not template_file:
+        console.print("[yellow]Warning:[/yellow] Template not found, creating empty spec")
+        new_file.write_text("# New Specification\n\nTODO: Add content\n")
+    else:
+        shutil.copy(template_file, new_file)
+
+        # Replace date placeholder
+        from datetime import date
+        content = new_file.read_text()
+        content = content.replace("[YYYY-MM-DD]", date.today().isoformat())
+        new_file.write_text(content)
+
+    console.print(f"[green]Created new spec:[/green] {new_file}")
+    console.print("\n[dim]Next steps:[/dim]")
+    console.print(f"  1. Edit the spec file: $EDITOR {new_file}")
+    console.print(f"  2. Replace [placeholders] with your content")
+    console.print(f"  3. Add requirements and scenarios")
+    console.print(f"  4. Run: spec2 validate")
+
+def cmd_browse(args):
+    """Interactive fzf browser (default command)"""
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print("[red]Error:[/red] No spec directory found")
+            console.print("Searched for: .openspec, openspec, .spec, spec, .specs, specs")
+            console.print("Run 'spec2 init' to initialize OpenSpec")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+        if not spec_dir.exists():
+            console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
+            sys.exit(1)
+
+    edit_mode = getattr(args, 'edit', False)
+    fzf_browser(spec_dir, edit_mode)
+
+# =============================================================================
 # CLI COMMANDS
 # =============================================================================
 
@@ -1015,6 +1432,36 @@ def cmd_init(args):
 
 def cmd_validate(args):
     """Validate specs"""
+    # Check if reading from stdin
+    if not sys.stdin.isatty():
+        # Read from stdin to temp file
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as tf:
+            temp_file = tf.name
+            tf.write(sys.stdin.read())
+
+        # Validate the temp file
+        spec_path = Path(temp_file)
+        project_root = Path.cwd()
+        rules = DEFAULT_RULES.copy()
+
+        result = validate_spec(spec_path, project_root, rules)
+
+        # Determine output format
+        output_format = "json" if args.json or (hasattr(args, 'format') and args.format == "json") else "terminal"
+        print_validation_results([result], output_format)
+
+        # Cleanup
+        os.unlink(temp_file)
+
+        # Exit code
+        if result.has_errors():
+            sys.exit(1)
+        elif result.has_warnings() and args.fail_on_warning:
+            sys.exit(2)
+        else:
+            sys.exit(0)
+
     # Try to find spec directory
     if args.dir == ".openspec":
         # Default case - search for any spec directory
@@ -1062,8 +1509,11 @@ def cmd_validate(args):
         result = validate_spec(spec_file, project_root, rules)
         results.append(result)
 
+    # Determine output format
+    output_format = "json" if args.json or args.format == "json" else "terminal"
+
     # Print results
-    print_validation_results(results, args.format)
+    print_validation_results(results, output_format)
 
     # Exit code
     has_errors = any(r.has_errors() for r in results)
@@ -1313,27 +1763,110 @@ def cmd_check_links(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="spec2 - Python-based OpenSpec validator",
+        description="""spec2 - Python-based OpenSpec browser and validator
+
+Interactive OpenSpec browser with fzf and comprehensive validation.
+Full feature parity with bash 'spec' command plus enhanced validation.""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Commands:
+  (none)           Interactive fzf browser (default)
+  browse           Interactive fzf browser
+  list             List all specs with metadata and requirements
+  status           Show compact status overview table
+  validate [name]  Validate all specs or specific spec (supports stdin)
+  template         Show the OpenSpec template
+  new <name> [cat] Create new spec from template
+  init             Initialize .openspec/ in project
+  stats            Show statistics across specs
+  coverage         Show reference coverage report
+  check-links      Validate all reference links
+  rules show       Show active validation rules
+
+Common Options (available on most commands):
+  --dir DIR                 Spec directory (default: .openspec)
+                            Auto-discovers: .openspec, openspec, .specs, specs, .spec, spec
+  --project-folder PATH     Project root for resolving references (default: .)
+  --raw                     Use raw mode (bat syntax highlighting instead of glow)
+  --edit                    Open selected file in $EDITOR (browse only)
+  --strict                  Use strict validation profile (validate only)
+  --fail-on-warning         Exit code 2 on warnings (validate only)
+  --json                    JSON output format (validate only)
+  -v, --verbose             Verbose output (coverage only)
+
 Examples:
-  spec2 init                           Initialize .openspec/ in current directory
+  # Interactive browser
+  spec2                                Interactive fzf browser (default)
+  spec2 --raw                          Use bat instead of glow
+  spec2 --edit                         Browse and edit in $EDITOR
+  spec2 browse --dir custom-specs      Browse custom directory
+
+  # List and status
+  spec2 list                           List all specs with details
+  spec2 status                         Compact status overview
+  spec2 list --dir /path/specs         List from specific directory
+
+  # Create and edit
+  spec2 template                       Show OpenSpec template
+  spec2 new authentication             Create new spec
+  spec2 new auth backend               Create backend/auth.spec.md
+  spec2 new myspec --dir custom        Create in custom directory
+
+  # Validation
   spec2 validate                       Validate all specs
   spec2 validate shortcuts             Validate specific spec
+  cat file.md | spec2 validate         Validate from stdin
   spec2 validate --strict              Use strict validation
+  spec2 validate --project-folder ~/   Custom project root
+
+  # Analysis
   spec2 coverage                       Show reference coverage report
   spec2 check-links                    Validate all reference links
   spec2 stats                          Show statistics
   spec2 rules show                     Show active rules
+
+  # Advanced
+  spec2 validate --fail-on-warning     Exit code 2 on warnings
+  spec2 validate --json                JSON output
+  spec2 coverage -v                    Show specs without coverage
         """
     )
 
+    # Global flags
+    parser.add_argument("--raw", action="store_true", help="Use raw mode (bat syntax highlighting instead of glow)")
+    parser.add_argument("--edit", action="store_true", help="Open selected file in $EDITOR (browse mode)")
+
     subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # browse command (default)
+    browse_parser = subparsers.add_parser("browse", help="Interactive fzf browser (default)")
+    browse_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
+    browse_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
+
+    # list command
+    list_parser = subparsers.add_parser("list", help="List all specs with metadata")
+    list_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
+    list_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
+
+    # status command
+    status_parser = subparsers.add_parser("status", help="Show compact status overview")
+    status_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
+    status_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
 
     # init command
     init_parser = subparsers.add_parser("init", help="Initialize OpenSpec in project")
     init_parser.add_argument("--dir", default=".openspec", help="Directory name (default: .openspec)")
     init_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
+
+    # template command
+    template_parser = subparsers.add_parser("template", help="Show the OpenSpec template")
+
+    # new command
+    new_parser = subparsers.add_parser("new", help="Create new spec from template")
+    new_parser.add_argument("spec_name", nargs="?", help="Name of the new spec")
+    new_parser.add_argument("category", nargs="?", help="Category for named file pattern (optional)")
+    new_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
+    new_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
 
     # validate command
     validate_parser = subparsers.add_parser("validate", help="Validate specs")
@@ -1342,7 +1875,8 @@ Examples:
     validate_parser.add_argument("--project-folder", default=".", help="Project root for resolving references")
     validate_parser.add_argument("--strict", action="store_true", help="Use strict validation profile")
     validate_parser.add_argument("--fail-on-warning", action="store_true", help="Exit with code 2 on warnings")
-    validate_parser.add_argument("--format", choices=["terminal", "json"], default="terminal", help="Output format")
+    validate_parser.add_argument("--json", action="store_true", help="JSON output format")
+    validate_parser.add_argument("--format", choices=["terminal", "json"], help="Output format (deprecated: use --json)")
 
     # stats command
     stats_parser = subparsers.add_parser("stats", help="Show statistics across specs")
@@ -1368,12 +1902,33 @@ Examples:
 
     args = parser.parse_args()
 
+    # Set global RAW_MODE flag
+    global RAW_MODE
+    RAW_MODE = args.raw
+
+    # Default to browse if no command specified
     if not args.command:
-        parser.print_help()
-        sys.exit(1)
+        args.command = "browse"
+        # Add default attributes for browse command
+        if not hasattr(args, 'dir'):
+            args.dir = ".openspec"
+        if not hasattr(args, 'project_folder'):
+            args.project_folder = "."
+        if not hasattr(args, 'edit'):
+            args.edit = False
 
     # Route to command handlers
-    if args.command == "init":
+    if args.command == "browse":
+        cmd_browse(args)
+    elif args.command == "list":
+        cmd_list(args)
+    elif args.command == "status":
+        cmd_status(args)
+    elif args.command == "template":
+        cmd_template(args)
+    elif args.command == "new":
+        cmd_new(args)
+    elif args.command == "init":
         cmd_init(args)
     elif args.command == "validate":
         cmd_validate(args)
