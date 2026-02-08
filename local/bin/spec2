@@ -426,11 +426,6 @@ def extract_requirements(lines: List[str], sections: Dict[str, List[str]]) -> Li
             req_name = line_stripped.replace("### Requirement:", "").replace("###", "").strip()
             current_req = Requirement(name=req_name, statement="", scenarios=[], line_number=i+1)
 
-        # Extract requirement statement (contains MUST/SHALL/SHOULD)
-        elif current_req and any(keyword in line_stripped.upper() for keyword in ["MUST", "SHALL", "SHOULD", "MAY"]):
-            if not current_req.statement:
-                current_req.statement = line_stripped
-
         # Extract scenarios (#### Scenario: Name)
         elif line_stripped.startswith("#### Scenario:"):
             scenario_name = line_stripped.replace("#### Scenario:", "").strip()
@@ -438,9 +433,27 @@ def extract_requirements(lines: List[str], sections: Dict[str, List[str]]) -> Li
                 current_req.scenarios.append({"name": scenario_name, "steps": []})
 
         # Extract scenario steps (GIVEN/WHEN/THEN/AND)
+        # IMPORTANT: Check this BEFORE requirement statement to avoid capturing steps as statements
         elif line_stripped.startswith("- ") and current_req and current_req.scenarios:
             step = line_stripped[2:].strip()
             current_req.scenarios[-1]["steps"].append(step)
+
+        # Extract requirement statement (contains MUST/SHALL/SHOULD)
+        # Checked AFTER scenario steps to avoid misclassifying steps like "THEN it SHALL..."
+        elif current_req and any(keyword in line_stripped.upper() for keyword in ["MUST", "SHALL", "SHOULD", "MAY"]):
+            if not current_req.statement:
+                current_req.statement = line_stripped
+
+        # Capture continuation lines (indented content under a step)
+        # These are lines that are indented but don't start with - or #
+        elif (line.startswith(("  ", "\t")) and
+              not line_stripped.startswith(("-", "#", "###", "####")) and
+              line_stripped and
+              current_req and
+              current_req.scenarios and
+              current_req.scenarios[-1]["steps"]):
+            # Append to the last step as continuation
+            current_req.scenarios[-1]["steps"][-1] += " " + line_stripped
 
     if current_req:
         requirements.append(current_req)
