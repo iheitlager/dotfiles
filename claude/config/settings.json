@@ -50,6 +50,7 @@
       "Read(~/.config/secrets)"
     ]
   },
+  "model": "opus",
   "hooks": {
     "SessionStart": [
       {
@@ -80,6 +81,5 @@
     "~/.dotfiles",
     "~/wc/**",
     "/workspace/**"
-  ],
-  "model": "opus"
+  ]
 }

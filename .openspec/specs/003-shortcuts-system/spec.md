@@ -33,7 +33,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ---
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Dynamic Discovery
 The system MUST automatically discover all keyboard shortcut documentation files across the dotfiles repository without requiring manual registration.

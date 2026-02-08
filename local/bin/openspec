@@ -9,7 +9,7 @@
 # ]
 # ///
 """
-spec2 - Python-based OpenSpec browser and validator
+openspec - Python-based OpenSpec browser and validator
 
 Interactive OpenSpec browser with fzf and comprehensive validation:
 - Interactive fzf browser (default)
@@ -21,17 +21,17 @@ Interactive OpenSpec browser with fzf and comprehensive validation:
 - Coverage tracking
 
 Usage:
-    spec2                           Interactive fzf browser (default)
-    spec2 list                      List all specs with metadata
-    spec2 status                    Compact overview table
-    spec2 validate                  Validate all specs
-    spec2 validate <name>           Validate specific spec
-    spec2 template                  Show OpenSpec template
-    spec2 new <name> [category]     Create new spec from template
-    spec2 check-links               Validate all references
-    spec2 coverage                  Show reference coverage report
-    spec2 stats                     Statistics across specs
-    spec2 rules show                Show active rules
+    openspec                           Interactive fzf browser (default)
+    openspec list                      List all specs with metadata
+    openspec status                    Compact overview table
+    openspec validate                  Validate all specs
+    openspec validate <name>           Validate specific spec
+    openspec template                  Show OpenSpec template
+    openspec new <name> [category]     Create new spec from template
+    openspec check-links               Validate all references
+    openspec coverage                  Show reference coverage report
+    openspec stats                     Statistics across specs
+    openspec rules show                Show active rules
 """
 
 import argparse
@@ -57,7 +57,7 @@ try:
     from rich import box
 except ImportError:
     # Check if we can use uv to run this script
-    if os.environ.get("SPEC2_NO_AUTO_UV") != "1":
+    if os.environ.get("OPENSPEC_NO_AUTO_UV") != "1":
         try:
             # Re-exec using uv
             script_path = Path(__file__).resolve()
@@ -70,7 +70,7 @@ except ImportError:
             pass
 
     # Fallback error message
-    print("Error: rich library not found. Run with: uv run --script spec2", file=sys.stderr)
+    print("Error: rich library not found. Run with: uv run --script openspec", file=sys.stderr)
     print("Or install rich: uv pip install rich", file=sys.stderr)
     sys.exit(1)
 
@@ -83,6 +83,19 @@ class Severity(Enum):
     ERROR = "ERROR"
     WARNING = "WARNING"
     INFO = "INFO"
+
+class SpecType(Enum):
+    """Type of specification"""
+    MAIN = "main"          # Main specs in .openspec/specs/
+    DELTA = "delta"        # Delta specs in .openspec/changes/
+    ARCHIVE = "archive"    # Archived changes in .openspec/changes/archive/
+
+class LifecycleMarker(Enum):
+    """Requirement lifecycle markers for delta specs"""
+    ADDED = "ADDED"           # New requirements being proposed
+    MODIFIED = "MODIFIED"     # Changes to existing requirements
+    REMOVED = "REMOVED"       # Requirements being deprecated
+    RENAMED = "RENAMED"       # Requirement name changes
 
 @dataclass
 class ValidationIssue:
@@ -148,13 +161,24 @@ class Reference:
     exists: Optional[bool] = None
 
 @dataclass
+class SpecFile:
+    """A spec file with metadata about its location and type"""
+    path: Path
+    spec_type: SpecType
+    change_id: Optional[str] = None  # For delta/archive specs, the change ID
+    relative_path: Optional[str] = None  # Relative path from spec dir
+
+@dataclass
 class ValidationResult:
     """Complete validation result for a spec"""
     spec_file: str
     metadata: Optional[SpecMetadata]
+    spec_type: SpecType = SpecType.MAIN
+    change_id: Optional[str] = None  # ID of the change (for delta/archive specs)
     issues: List[ValidationIssue] = field(default_factory=list)
     requirements: List[Requirement] = field(default_factory=list)
     references: List[Reference] = field(default_factory=list)
+    lifecycle_sections: Dict[str, List[str]] = field(default_factory=dict)  # Track lifecycle marker sections
 
     def has_errors(self) -> bool:
         return any(issue.severity == Severity.ERROR for issue in self.issues)
@@ -172,21 +196,27 @@ class ValidationResult:
         return sum(1 for issue in self.issues if issue.severity == Severity.INFO)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             "spec_file": self.spec_file,
             "metadata": self.metadata.to_dict() if self.metadata else None,
+            "spec_type": self.spec_type.value,
             "issues": [issue.to_dict() for issue in self.issues],
             "error_count": self.error_count(),
             "warning_count": self.warning_count(),
             "info_count": self.info_count(),
         }
+        if self.change_id:
+            result["change_id"] = self.change_id
+        if self.lifecycle_sections:
+            result["lifecycle_sections"] = {k: len(v) for k, v in self.lifecycle_sections.items()}
+        return result
 
 # =============================================================================
 # CONFIGURATION AND RULES
 # =============================================================================
 
 DEFAULT_RULES = {
-    "spec2": {
+    "openspec": {
         "version": "1.0",
         "profile": "standard",
     },
@@ -197,7 +227,7 @@ DEFAULT_RULES = {
             "optional": ["Issue", "Priority"],
         },
         "sections": {
-            "required": ["Overview", "RFC 2119 Keywords", "ADDED Requirements"],
+            "required": ["Overview", "RFC 2119 Keywords", "Requirements"],
             "recommended": ["Philosophy", "Key Capabilities", "References"],
         },
         "requirements": {
@@ -225,7 +255,7 @@ PROFILE_OVERRIDES = {
                 "required": ["Domain", "Version", "Status", "Date", "Owner"],
             },
             "sections": {
-                "required": ["Overview", "RFC 2119 Keywords", "ADDED Requirements", "Philosophy", "Key Capabilities", "References"],
+                "required": ["Overview", "RFC 2119 Keywords", "Requirements", "Philosophy", "Key Capabilities", "References"],
             },
         },
         "reporting": {
@@ -238,7 +268,7 @@ PROFILE_OVERRIDES = {
                 "required": ["Domain", "Status"],
             },
             "sections": {
-                "required": ["Overview", "ADDED Requirements"],
+                "required": ["Overview", "Requirements"],
             },
             "requirements": {
                 "must_have_scenarios": False,
@@ -264,7 +294,7 @@ def load_rules(spec_dir: Path, profile: Optional[str] = None) -> Dict[str, Any]:
             print(f"Warning: Failed to load {rules_file}: {e}", file=sys.stderr)
 
     # Apply profile overrides
-    profile_name = profile or rules.get("spec2", {}).get("profile", "standard")
+    profile_name = profile or rules.get("openspec", {}).get("profile", "standard")
     if profile_name in PROFILE_OVERRIDES:
         rules = deep_merge(rules, PROFILE_OVERRIDES[profile_name])
 
@@ -291,15 +321,17 @@ def get_markdown_formatter() -> List[str]:
     """Determine markdown formatter command"""
     if RAW_MODE:
         # Raw mode: use bat for syntax highlighting only
+        # --wrap never: disable line continuation characters
         if shutil.which("bat"):
-            return ["bat", "--style=plain", "--color=always", "--language=markdown"]
+            return ["bat", "--style=plain", "--color=always", "--language=markdown", "--wrap", "never"]
         return ["cat"]
     else:
         # Default: use glow for beautiful markdown rendering
         if shutil.which("glow"):
-            return ["glow", "-s", "dark"]
+            # Use compact width and no padding for cleaner output
+            return ["glow", "-s", "dark", "-w", "120"]
         elif shutil.which("bat"):
-            return ["bat", "--style=plain", "--color=always", "--language=markdown"]
+            return ["bat", "--style=plain", "--color=always", "--language=markdown", "--wrap", "never"]
         return ["cat"]
 
 def render_markdown(file_path: Path, line_number: int = 1):
@@ -377,30 +409,119 @@ def find_spec_dir(start_dir: Path = None, explicit_name: str = None) -> Optional
     return None
 
 def find_spec_files(spec_dir: Path) -> List[Path]:
-    """Find all spec files, excluding templates"""
+    """Find all spec files, excluding templates (legacy function for compatibility)"""
+    spec_file_objs = find_all_spec_files(spec_dir, include_changes=False, include_archive=False)
+    return [sf.path for sf in spec_file_objs]
+
+def find_all_spec_files(
+    spec_dir: Path,
+    include_changes: bool = True,
+    include_archive: bool = False
+) -> List[SpecFile]:
+    """Find all spec files with type information
+
+    Args:
+        spec_dir: Root .openspec directory
+        include_changes: Include delta specs from changes/
+        include_archive: Include archived specs from changes/archive/
+
+    Returns:
+        List of SpecFile objects with path and type information
+    """
     spec_files = []
 
-    # Pattern 1: Directory-based (001-name/spec.md)
+    # Exclude templates
+    def is_template(path: Path) -> bool:
+        return (
+            "template" in path.name.lower() or
+            path.parent.name == "template" or
+            path.name in ["template.md", "template.spec.md"]
+        )
+
+    # 1. Main specs in .openspec/specs/
     specs_subdir = spec_dir / "specs"
     if specs_subdir.exists():
-        spec_files.extend(specs_subdir.glob("*/spec.md"))
+        # Pattern 1: Directory-based (001-name/spec.md)
+        for spec_file in specs_subdir.glob("*/spec.md"):
+            if not is_template(spec_file):
+                spec_files.append(SpecFile(
+                    path=spec_file,
+                    spec_type=SpecType.MAIN,
+                    relative_path=str(spec_file.relative_to(spec_dir))
+                ))
 
-    # Pattern 2: Named files (category/name.spec.md)
-    spec_files.extend(spec_dir.glob("*/*.spec.md"))
+        # Pattern 2: Named files (category/name.spec.md)
+        for spec_file in specs_subdir.glob("*/*.spec.md"):
+            if not is_template(spec_file):
+                spec_files.append(SpecFile(
+                    path=spec_file,
+                    spec_type=SpecType.MAIN,
+                    relative_path=str(spec_file.relative_to(spec_dir))
+                ))
 
-    # Exclude templates
-    excluded = [
-        spec_dir / "template.md",
-        spec_dir / "template.spec.md",
-    ]
+    # 2. Delta specs in .openspec/changes/
+    if include_changes:
+        changes_dir = spec_dir / "changes"
+        if changes_dir.exists():
+            # Find all change directories (excluding archive/)
+            for change_dir in changes_dir.iterdir():
+                if not change_dir.is_dir() or change_dir.name == "archive":
+                    continue
 
-    # Filter out templates and files with "template" in name
-    return [
-        f for f in spec_files
-        if f not in excluded
-        and "template" not in f.name.lower()
-        and f.parent.name != "template"
-    ]
+                change_id = change_dir.name
+                change_specs_dir = change_dir / "specs"
+
+                if change_specs_dir.exists():
+                    # Find specs within this change
+                    for spec_file in change_specs_dir.glob("*/spec.md"):
+                        if not is_template(spec_file):
+                            spec_files.append(SpecFile(
+                                path=spec_file,
+                                spec_type=SpecType.DELTA,
+                                change_id=change_id,
+                                relative_path=str(spec_file.relative_to(spec_dir))
+                            ))
+
+                    for spec_file in change_specs_dir.glob("*/*.spec.md"):
+                        if not is_template(spec_file):
+                            spec_files.append(SpecFile(
+                                path=spec_file,
+                                spec_type=SpecType.DELTA,
+                                change_id=change_id,
+                                relative_path=str(spec_file.relative_to(spec_dir))
+                            ))
+
+    # 3. Archived specs in .openspec/changes/archive/
+    if include_archive:
+        archive_dir = spec_dir / "changes" / "archive"
+        if archive_dir.exists():
+            for change_dir in archive_dir.iterdir():
+                if not change_dir.is_dir():
+                    continue
+
+                change_id = change_dir.name
+                change_specs_dir = change_dir / "specs"
+
+                if change_specs_dir.exists():
+                    for spec_file in change_specs_dir.glob("*/spec.md"):
+                        if not is_template(spec_file):
+                            spec_files.append(SpecFile(
+                                path=spec_file,
+                                spec_type=SpecType.ARCHIVE,
+                                change_id=change_id,
+                                relative_path=str(spec_file.relative_to(spec_dir))
+                            ))
+
+                    for spec_file in change_specs_dir.glob("*/*.spec.md"):
+                        if not is_template(spec_file):
+                            spec_files.append(SpecFile(
+                                path=spec_file,
+                                spec_type=SpecType.ARCHIVE,
+                                change_id=change_id,
+                                relative_path=str(spec_file.relative_to(spec_dir))
+                            ))
+
+    return spec_files
 
 def find_spec_by_name(spec_dir: Path, name: str) -> Optional[Path]:
     """Find a specific spec by name or number"""
@@ -505,21 +626,23 @@ def parse_sections(lines: List[str]) -> Dict[str, List[str]]:
     return sections
 
 def extract_requirements(lines: List[str], sections: Dict[str, List[str]]) -> List[Requirement]:
-    """Extract requirements from ADDED Requirements section"""
+    """Extract requirements from Requirements section (or ADDED/MODIFIED/REMOVED for delta specs)"""
     requirements = []
 
-    # Find ADDED Requirements section
-    added_req_section = None
+    # Find Requirements section - can be plain "Requirements" or lifecycle markers
+    req_section = None
     for section_name in sections:
-        if "ADDED" in section_name and "Requirement" in section_name:
-            added_req_section = section_name
+        # Match: "Requirements", "ADDED Requirements", "MODIFIED Requirements", etc.
+        if "Requirement" in section_name:
+            req_section = section_name
             break
 
-    if not added_req_section:
+    if not req_section:
         return requirements
 
-    section_lines = sections[added_req_section]
+    section_lines = sections[req_section]
     current_req = None
+    last_found_line = 0  # Track where we found the last requirement to search forward only
 
     for i, line in enumerate(section_lines):
         line_stripped = line.strip()
@@ -530,7 +653,20 @@ def extract_requirements(lines: List[str], sections: Dict[str, List[str]]) -> Li
                 requirements.append(current_req)
 
             req_name = line_stripped.replace("### Requirement:", "").replace("###", "").strip()
-            current_req = Requirement(name=req_name, statement="", scenarios=[], line_number=i+1)
+
+            # Find absolute line number in the full file by searching forward from last found position
+            # This ensures we find requirements in order and don't match earlier occurrences
+            abs_line_num = None
+            for abs_i in range(last_found_line + 1, len(lines) + 1):
+                full_line = lines[abs_i - 1]  # Convert 1-indexed to 0-indexed
+                full_stripped = full_line.strip()
+                # Match lines that are requirement headings (### ...) and have the same name
+                if full_stripped.startswith("###") and req_name in full_stripped:
+                    abs_line_num = abs_i
+                    last_found_line = abs_i  # Update for next search
+                    break
+
+            current_req = Requirement(name=req_name, statement="", scenarios=[], line_number=abs_line_num or i+1)
 
         # Extract scenarios (#### Scenario: Name)
         elif line_stripped.startswith("#### Scenario:"):
@@ -592,6 +728,32 @@ def extract_references(lines: List[str]) -> List[Reference]:
 
     return references
 
+def extract_lifecycle_sections(sections: Dict[str, List[str]]) -> Dict[str, List[str]]:
+    """Extract lifecycle marker sections from delta specs
+
+    Returns dict mapping lifecycle marker names to section content:
+        {
+            'ADDED': [...lines...],
+            'MODIFIED': [...lines...],
+            'REMOVED': [...lines...],
+            'RENAMED': [...lines...]
+        }
+    """
+    lifecycle_sections = {}
+
+    for marker in LifecycleMarker:
+        # Look for section like "## ADDED Requirements" or "## MODIFIED Requirements"
+        section_key = None
+        for key in sections.keys():
+            if marker.value in key and "Requirement" in key:
+                section_key = key
+                break
+
+        if section_key:
+            lifecycle_sections[marker.value] = sections[section_key]
+
+    return lifecycle_sections
+
 # =============================================================================
 # VALIDATION
 # =============================================================================
@@ -634,13 +796,24 @@ def validate_metadata(metadata: Optional[SpecMetadata], rules: Dict[str, Any]) -
 
     return issues
 
-def validate_sections(sections: Dict[str, List[str]], rules: Dict[str, Any]) -> List[ValidationIssue]:
-    """Validate spec sections against rules"""
+def validate_sections(sections: Dict[str, List[str]], rules: Dict[str, Any], spec_type: SpecType = SpecType.MAIN) -> List[ValidationIssue]:
+    """Validate spec sections against rules
+
+    Args:
+        sections: Parsed sections from spec
+        rules: Validation rules
+        spec_type: Type of spec (main specs have different requirements than deltas)
+    """
     issues = []
 
     section_rules = rules.get("validation", {}).get("sections", {})
     required_sections = section_rules.get("required", [])
     recommended_sections = section_rules.get("recommended", [])
+
+    # For delta specs, "Requirements" is not required - they use lifecycle markers
+    # (ADDED/MODIFIED/REMOVED/RENAMED Requirements) instead
+    if spec_type == SpecType.DELTA:
+        required_sections = [s for s in required_sections if "Requirements" not in s or "RFC 2119" in s]
 
     # Normalize section names for comparison (case-insensitive, flexible matching)
     normalized_sections = {s.lower().strip(): s for s in sections.keys()}
@@ -667,6 +840,60 @@ def validate_sections(sections: Dict[str, List[str]], rules: Dict[str, Any]) -> 
                 rule=f"section.recommended.{recommended.lower().replace(' ', '_')}",
                 message=f"Recommended section missing: {recommended}"
             ))
+
+    return issues
+
+def validate_lifecycle_markers(lifecycle_sections: Dict[str, List[str]]) -> List[ValidationIssue]:
+    """Validate lifecycle markers in delta specs
+
+    Delta specs MUST have at least one lifecycle marker section:
+    - ADDED Requirements (new requirements)
+    - MODIFIED Requirements (changes to existing)
+    - REMOVED Requirements (deprecations)
+    - RENAMED Requirements (name changes)
+    """
+    issues = []
+
+    if not lifecycle_sections:
+        issues.append(ValidationIssue(
+            severity=Severity.ERROR,
+            rule="lifecycle.none_found",
+            message="Delta spec must have at least one lifecycle marker (ADDED/MODIFIED/REMOVED/RENAMED Requirements)"
+        ))
+        return issues
+
+    # Validate that each lifecycle section has content
+    for marker, content in lifecycle_sections.items():
+        if not content or all(not line.strip() for line in content):
+            issues.append(ValidationIssue(
+                severity=Severity.WARNING,
+                rule=f"lifecycle.empty_{marker.lower()}",
+                message=f"{marker} Requirements section is empty"
+            ))
+
+    return issues
+
+def validate_main_spec_lifecycle(sections: Dict[str, List[str]]) -> List[ValidationIssue]:
+    """Validate that main specs don't use delta lifecycle markers
+
+    Main specs (in specs/) should use "## Requirements" or "## ADDED Requirements".
+    They should NOT use MODIFIED, REMOVED, or RENAMED sections as these
+    are only for delta specs (in specs/changes/).
+    """
+    issues = []
+
+    invalid_markers = [LifecycleMarker.MODIFIED, LifecycleMarker.REMOVED, LifecycleMarker.RENAMED]
+
+    for marker in invalid_markers:
+        for section_key in sections.keys():
+            if marker.value in section_key and "Requirement" in section_key:
+                issues.append(ValidationIssue(
+                    severity=Severity.ERROR,
+                    rule=f"lifecycle.invalid_in_main_{marker.value.lower()}",
+                    message=f"Main specs must not use '## {marker.value} Requirements'. "
+                            f"This section is only for delta specs in specs/changes/. "
+                            f"Main specs should use '## Requirements'."
+                ))
 
     return issues
 
@@ -795,25 +1022,49 @@ def resolve_reference(ref_path: str, spec_file: Path, project_root: Path) -> Opt
 def validate_spec(
     spec_path: Path,
     project_root: Path,
-    rules: Dict[str, Any]
+    rules: Dict[str, Any],
+    spec_type: SpecType = SpecType.MAIN,
+    change_id: Optional[str] = None
 ) -> ValidationResult:
-    """Validate a single spec file"""
+    """Validate a single spec file
+
+    Args:
+        spec_path: Path to the spec file
+        project_root: Root directory for resolving references
+        rules: Validation rules
+        spec_type: Type of spec (main, delta, or archive)
+        change_id: Change ID for delta/archive specs
+    """
     metadata, lines, sections = parse_spec_file(spec_path)
     requirements = extract_requirements(lines, sections)
     references = extract_references(lines)
 
+    # Extract lifecycle sections for delta specs
+    lifecycle_sections = extract_lifecycle_sections(sections) if spec_type == SpecType.DELTA else {}
+
     result = ValidationResult(
         spec_file=str(spec_path),
         metadata=metadata,
+        spec_type=spec_type,
+        change_id=change_id,
         requirements=requirements,
         references=references,
+        lifecycle_sections=lifecycle_sections,
     )
 
     # Run validators
     result.issues.extend(validate_metadata(metadata, rules))
-    result.issues.extend(validate_sections(sections, rules))
+    result.issues.extend(validate_sections(sections, rules, spec_type))
     result.issues.extend(validate_requirements(requirements, rules))
     result.issues.extend(validate_references(references, spec_path, project_root, rules))
+
+    # Validate lifecycle markers for delta specs
+    if spec_type == SpecType.DELTA:
+        result.issues.extend(validate_lifecycle_markers(lifecycle_sections))
+
+    # Validate that main specs don't use delta lifecycle markers
+    if spec_type == SpecType.MAIN:
+        result.issues.extend(validate_main_spec_lifecycle(sections))
 
     return result
 
@@ -861,8 +1112,8 @@ def print_terminal_results(results: List[ValidationResult]):
         else:
             status = "[green]✓ PASSED[/green]"
 
-        # Print spec header
-        console.print(f"\n{status} {spec_name}", style="bold")
+        # Print spec header (compact - no leading newline)
+        console.print(f"{status} {spec_name}", style="bold")
 
         # Print issues if any
         if result.issues:
@@ -884,8 +1135,8 @@ def print_terminal_results(results: List[ValidationResult]):
         total_warnings += result.warning_count()
         total_info += result.info_count()
 
-    # Print summary
-    console.print("\n" + "=" * 60)
+    # Print summary (compact separator)
+    console.print("=" * 60)
     console.print(f"Validated {len(results)} spec(s)", style="bold")
 
     if total_errors > 0:
@@ -906,24 +1157,34 @@ def init_project(project_folder: Path, spec_dir_name: str = ".openspec"):
     """Initialize OpenSpec directory structure in project"""
     spec_dir = project_folder / spec_dir_name
 
-    # Create directories
+    # Create main directories
     spec_dir.mkdir(exist_ok=True)
     (spec_dir / "specs").mkdir(exist_ok=True)
+    (spec_dir / "changes").mkdir(exist_ok=True)
+    (spec_dir / "changes" / "archive").mkdir(exist_ok=True)
 
     console.print(f"[green]✓[/green] Created {spec_dir}/")
     console.print(f"[green]✓[/green] Created {spec_dir}/specs/")
+    console.print(f"[green]✓[/green] Created {spec_dir}/changes/")
+    console.print(f"[green]✓[/green] Created {spec_dir}/changes/archive/")
 
-    # Copy template
+    # Copy templates
     template_source = find_template_file()
     if template_source:
         shutil.copy(template_source, spec_dir / "template.md")
-        console.print(f"[green]✓[/green] Copied template to {spec_dir}/template.md")
-    else:
-        console.print("[yellow]⚠[/yellow] Template not found, skipping")
+        console.print(f"[green]✓[/green] Copied main spec template to {spec_dir}/template.md")
 
-    # Generate validate.py (copy of spec2 itself)
-    spec2_source = Path(__file__).resolve()
-    shutil.copy(spec2_source, spec_dir / "validate.py")
+        # Also copy delta template if it exists
+        delta_template = template_source.parent / "template-delta.md"
+        if delta_template.exists():
+            shutil.copy(delta_template, spec_dir / "template-delta.md")
+            console.print(f"[green]✓[/green] Copied delta spec template to {spec_dir}/template-delta.md")
+    else:
+        console.print("[yellow]⚠[/yellow] Templates not found, skipping")
+
+    # Generate validate.py (copy of openspec itself)
+    openspec_source = Path(__file__).resolve()
+    shutil.copy(openspec_source, spec_dir / "validate.py")
     (spec_dir / "validate.py").chmod(0o755)
     console.print(f"[green]✓[/green] Created {spec_dir}/validate.py")
 
@@ -935,11 +1196,20 @@ def init_project(project_folder: Path, spec_dir_name: str = ".openspec"):
     create_readme(spec_dir / "README.md")
     console.print(f"[green]✓[/green] Created {spec_dir}/README.md")
 
+    # Create project.md template
+    create_project_md_template(spec_dir / "project.md")
+    console.print(f"[green]✓[/green] Created {spec_dir}/project.md")
+
+    # Create AGENTS.md for tool-specific instructions
+    create_agents_md(spec_dir / "AGENTS.md")
+    console.print(f"[green]✓[/green] Created {spec_dir}/AGENTS.md")
+
     console.print(f"\n[bold green]✓ OpenSpec initialized in {spec_dir}[/bold green]")
     console.print("\nNext steps:")
-    console.print(f"  1. Create a spec: mkdir {spec_dir}/specs/001-my-spec && cp {spec_dir}/template.md {spec_dir}/specs/001-my-spec/spec.md")
-    console.print(f"  2. Edit your spec: vim {spec_dir}/specs/001-my-spec/spec.md")
-    console.print(f"  3. Validate: spec2 validate --dir {spec_dir}")
+    console.print(f"  1. Edit {spec_dir}/project.md with your project context")
+    console.print(f"  2. Create a spec: mkdir {spec_dir}/specs/001-my-spec && cp {spec_dir}/template.md {spec_dir}/specs/001-my-spec/spec.md")
+    console.print(f"  3. Edit your spec: vim {spec_dir}/specs/001-my-spec/spec.md")
+    console.print(f"  4. Validate: openspec validate --dir {spec_dir}")
 
 def find_template_file() -> Optional[Path]:
     """Find the template.md file"""
@@ -962,7 +1232,7 @@ def create_rules_example(path: Path):
     content = '''# OpenSpec Validation Rules
 # Copy to rules.toml to customize validation
 
-[spec2]
+[openspec]
 version = "1.0"
 profile = "standard"  # strict | standard | lenient
 
@@ -972,7 +1242,7 @@ recommended = ["Owner"]
 optional = ["Issue", "Priority"]
 
 [validation.sections]
-required = ["Overview", "RFC 2119 Keywords", "ADDED Requirements"]
+required = ["Overview", "RFC 2119 Keywords", "Requirements"]
 recommended = ["Philosophy", "Key Capabilities", "References"]
 
 [validation.requirements]
@@ -1003,7 +1273,7 @@ This directory contains OpenSpec specification files for this project.
 
 - `specs/` - Individual specification files
 - `template.md` - Template for new specs
-- `validate.py` - Local validation script (copy of spec2)
+- `validate.py` - Local validation script (copy of openspec)
 - `rules.toml` - Project-specific validation rules (optional)
 
 ## Usage
@@ -1019,8 +1289,8 @@ cp template.md specs/001-my-feature/spec.md
 ### Validate specs
 
 ```bash
-# Using global spec2 command
-spec2 validate
+# Using global openspec command
+openspec validate
 
 # Using local validator
 ./validate.py validate
@@ -1035,7 +1305,7 @@ spec2 validate
 Set profile in `rules.toml`:
 
 ```toml
-[spec2]
+[openspec]
 profile = "strict"
 ```
 
@@ -1048,7 +1318,464 @@ All file references in specs should be **project-root-relative**:
 
 ## More Information
 
-Run `spec2 --help` for full command reference.
+Run `openspec --help` for full command reference.
+'''
+    with open(path, 'w') as f:
+        f.write(content)
+
+def create_proposal_template(path: Path, change_id: str, title: str):
+    """Create proposal.md template for a change"""
+    content = f'''# Proposal: {title}
+
+**Change ID:** {change_id}
+**Status:** Draft
+**Date:** {Path(__file__).stat().st_mtime}  # Will be replaced with actual date
+**Author:** [Your Name]
+
+## Intent
+
+[1-2 paragraphs explaining WHY this change is needed. What problem does it solve? What value does it add?]
+
+## Scope
+
+### In Scope
+- [What will be changed/added/removed]
+- [Specific features or capabilities]
+- [Documentation updates needed]
+
+### Out of Scope
+- [What won't be included in this change]
+- [Future work that's related but separate]
+
+## Approach
+
+### High-Level Design
+
+[Describe the technical approach. How will this be implemented? What are the key architectural decisions?]
+
+### Implementation Steps
+
+1. [Step 1: e.g., Update data models]
+2. [Step 2: e.g., Implement new functionality]
+3. [Step 3: e.g., Add tests]
+4. [Step 4: e.g., Update documentation]
+
+### Alternatives Considered
+
+**Option A: [Alternative approach name]**
+- Pros: [Benefits]
+- Cons: [Drawbacks]
+- Decision: [Why not chosen]
+
+**Option B: [Another alternative]**
+- Pros: [Benefits]
+- Cons: [Drawbacks]
+- Decision: [Why not chosen]
+
+## Impact Analysis
+
+### Breaking Changes
+- [List any breaking changes]
+- [Migration path if needed]
+
+### Dependencies
+- [External dependencies to add]
+- [Internal components affected]
+
+### Testing Strategy
+- [ ] Unit tests
+- [ ] Integration tests
+- [ ] Manual testing scenarios
+
+## Rollout Plan
+
+1. [Phase 1: e.g., Implement core functionality]
+2. [Phase 2: e.g., Add documentation]
+3. [Phase 3: e.g., Deploy to production]
+
+### Rollback Plan
+[How to revert this change if needed]
+
+## Success Criteria
+
+- [ ] [Measurable criterion 1]
+- [ ] [Measurable criterion 2]
+- [ ] All tests pass
+- [ ] Documentation updated
+
+---
+
+**License:** Apache-2.0
+**Copyright:** {Path(__file__).stat().st_mtime // 31536000 + 1970} [Author]
+'''
+    with open(path, 'w') as f:
+        f.write(content)
+
+def create_tasks_template(path: Path):
+    """Create tasks.md template for implementation tracking"""
+    from datetime import date
+    content = f'''# Implementation Tasks
+
+**Date:** {date.today().isoformat()}
+**Status:** Not Started
+
+## Pre-Implementation
+
+- [ ] Review proposal with team
+- [ ] Get approval for approach
+- [ ] Set up development branch
+- [ ] Review related ADRs and specs
+
+## Implementation
+
+### Phase 1: Core Changes
+- [ ] [Task 1: Specific implementation task]
+- [ ] [Task 2: Another implementation task]
+- [ ] [Task 3: Write unit tests for Task 1]
+- [ ] [Task 4: Write unit tests for Task 2]
+
+### Phase 2: Integration
+- [ ] [Task 5: Integration with existing systems]
+- [ ] [Task 6: End-to-end testing]
+- [ ] [Task 7: Performance testing]
+
+### Phase 3: Documentation
+- [ ] Update spec with final requirements
+- [ ] Update CHANGELOG.md
+- [ ] Update README if needed
+- [ ] Create/update ADR if architectural decisions made
+
+## Testing
+
+- [ ] All unit tests pass
+- [ ] All integration tests pass
+- [ ] Manual testing completed
+- [ ] Edge cases verified
+- [ ] Performance benchmarks met
+
+## Review and Merge
+
+- [ ] Code review completed
+- [ ] All comments addressed
+- [ ] CI/CD pipeline passes
+- [ ] Merge to main branch
+- [ ] Archive change to changes/archive/
+
+## Post-Merge
+
+- [ ] Deploy to production (if applicable)
+- [ ] Monitor for issues
+- [ ] Update related documentation
+- [ ] Close related issues
+
+---
+
+**Notes:**
+- Add additional tasks as discovered during implementation
+- Check off tasks as completed
+- Update status field above (Not Started → In Progress → Completed)
+'''
+    with open(path, 'w') as f:
+        f.write(content)
+
+def create_project_md_template(path: Path):
+    """Create project.md template with project context"""
+    content = '''# Project Context
+
+This document provides context about this project for AI assistants and developers.
+
+## Tech Stack
+
+### Languages
+- [Primary language: e.g., Python 3.11+]
+- [Secondary: e.g., Shell/Bash]
+- [Frontend: e.g., TypeScript/React if applicable]
+
+### Frameworks & Libraries
+- [Framework 1: e.g., FastAPI]
+- [Library 1: e.g., Rich for terminal UI]
+- [Library 2: e.g., Click for CLI]
+
+### Tools
+- **Package Manager:** [e.g., uv, npm, cargo]
+- **Testing:** [e.g., pytest, jest]
+- **Linting:** [e.g., ruff, eslint]
+- **Type Checking:** [e.g., mypy, typescript]
+
+## Architecture
+
+### High-Level Design
+
+[Describe the overall architecture. Is it a CLI tool? Web service? Library?]
+
+### Key Components
+
+1. **Component A**: [Purpose and responsibilities]
+2. **Component B**: [Purpose and responsibilities]
+3. **Component C**: [Purpose and responsibilities]
+
+### Data Flow
+
+```
+[User] → [Input Layer] → [Processing] → [Storage] → [Output]
+```
+
+## Patterns and Conventions
+
+### Code Organization
+- [e.g., "Use topic-based directories"]
+- [e.g., "One class per file"]
+- [e.g., "Group by feature, not by type"]
+
+### Naming Conventions
+- **Files:** [e.g., snake_case for Python, kebab-case for configs]
+- **Functions:** [e.g., verb_noun pattern]
+- **Classes:** [e.g., PascalCase]
+- **Constants:** [e.g., UPPER_SNAKE_CASE]
+
+### Error Handling
+- [e.g., "Use custom exceptions"]
+- [e.g., "Always provide user-friendly error messages"]
+- [e.g., "Log errors with context"]
+
+### Testing Strategy
+- [e.g., "Unit tests for all business logic"]
+- [e.g., "Integration tests for CLI commands"]
+- [e.g., "Aim for >80% coverage"]
+
+## Development Workflow
+
+### Setting Up Development Environment
+
+```bash
+# Clone and setup
+git clone [repo-url]
+cd [project]
+[setup commands]
+```
+
+### Running Tests
+
+```bash
+[test commands]
+```
+
+### Building
+
+```bash
+[build commands]
+```
+
+## Dependencies
+
+### Required
+- [Dependency 1]: [Purpose]
+- [Dependency 2]: [Purpose]
+
+### Optional
+- [Optional 1]: [Purpose, when needed]
+
+## Configuration
+
+### Environment Variables
+- `VAR_NAME`: [Purpose and default value]
+
+### Config Files
+- `config/app.yml`: [Application config]
+- `.env`: [Environment-specific settings]
+
+## Common Tasks
+
+### Adding a New Feature
+1. Create spec in `.openspec/changes/`
+2. Create proposal.md
+3. Implement with tests
+4. Update CHANGELOG
+5. Merge spec changes back to main specs
+
+### Fixing a Bug
+1. Write failing test
+2. Fix the bug
+3. Ensure test passes
+4. Update spec if behavior changed
+
+## Project-Specific Context
+
+### Current Focus
+[What is the project currently focused on? What's the roadmap?]
+
+### Known Limitations
+- [Limitation 1]
+- [Limitation 2]
+
+### Future Plans
+- [Planned feature 1]
+- [Planned improvement 2]
+
+---
+
+**Last Updated:** [Date]
+**Maintained By:** [Team/Person]
+'''
+    with open(path, 'w') as f:
+        f.write(content)
+
+def create_agents_md(path: Path):
+    """Create AGENTS.md with tool-specific instructions"""
+    content = '''# AI Agent Instructions
+
+This document contains instructions for AI assistants (Claude, GPT, etc.) working with this project's OpenSpec specifications.
+
+## About OpenSpec
+
+This project uses OpenSpec for behavior-driven specification documentation. Specs use:
+- **RFC 2119 keywords** (MUST/SHALL/SHOULD/MAY) for precise requirements
+- **Given-When-Then scenarios** for testable behavior specifications
+- **Lifecycle markers** (ADDED/MODIFIED/REMOVED/RENAMED) for tracking changes
+
+## Directory Structure
+
+```
+.openspec/
+├── specs/              # Main specs (current system truth)
+│   ├── 001-core/spec.md
+│   └── 002-feature/spec.md
+├── changes/            # Delta specs (proposed changes)
+│   ├── 001-proposal/
+│   │   ├── proposal.md      # Intent, scope, approach
+│   │   ├── specs/           # Delta specs with lifecycle markers
+│   │   │   └── 002-feature/spec.md
+│   │   └── tasks.md         # Implementation checklist
+│   └── archive/        # Completed changes
+├── project.md          # Project context and conventions
+├── template.md         # Spec template
+└── validate.py         # Local validator
+```
+
+## Workflow for AI Assistants
+
+### When Asked to Create a Spec
+
+1. Read `project.md` to understand project context
+2. Create directory: `specs/NNN-name/`
+3. Use `template.md` as starting point
+4. Include:
+   - Proper frontmatter (Domain, Version, Status, Date)
+   - Overview with Philosophy and Key Capabilities
+   - RFC 2119 Keywords section
+   - ADDED Requirements with scenarios
+5. Validate: `openspec validate`
+
+### When Asked to Propose a Change
+
+1. Create change directory: `changes/NNN-proposal-name/`
+2. Create `proposal.md` explaining intent, scope, approach
+3. Create `specs/` subdirectory with delta specs
+4. Use lifecycle markers:
+   - `## ADDED Requirements` for new features
+   - `## MODIFIED Requirements` for changes
+   - `## REMOVED Requirements` for deprecations
+   - `## RENAMED Requirements` for renames
+5. Create `tasks.md` with implementation checklist
+6. Validate: `openspec validate`
+
+### When Implementing a Change
+
+1. Review `proposal.md` for approach
+2. Follow `tasks.md` checklist
+3. Update delta specs as implementation evolves
+4. When complete: merge delta specs to main specs
+5. Archive: move change to `changes/archive/`
+
+## Tool-Specific Commands
+
+### Claude Code
+
+```bash
+# Browse specs interactively
+spec
+
+# List all specs
+spec list
+
+# Validate specs
+openspec validate
+
+# Create new spec
+# (Use /spec skill or create manually)
+```
+
+### Validation
+
+```bash
+# Validate all specs (including changes)
+openspec validate
+
+# Validate only main specs
+openspec validate --no-changes
+
+# Strict validation
+openspec validate --strict
+
+# JSON output for CI/CD
+openspec validate --json
+```
+
+## Writing Requirements
+
+### Format
+
+```markdown
+### Requirement: Feature Name
+
+The system MUST [clear, testable behavior].
+
+#### Scenario: Happy Path
+
+- GIVEN [precondition]
+- WHEN [action]
+- THEN [expected result]
+- AND [additional expectations]
+
+#### Scenario: Error Case
+
+- GIVEN [error condition]
+- WHEN [action attempted]
+- THEN [error handling behavior]
+```
+
+### Best Practices
+
+- Use RFC 2119 keywords (MUST/SHALL/SHOULD/MAY) consistently
+- Write specific, testable scenarios
+- Include both happy path and error cases
+- Reference actual paths, values, and conditions
+- Focus on behavior, not implementation details
+
+### Prohibited
+
+- ❌ No color codes or ANSI escape sequences
+- ❌ No HTML tags
+- ❌ No emoji in requirements (keep formal)
+- ❌ No vague statements without RFC 2119 keywords
+
+## Project-Specific Guidelines
+
+[Add your project-specific conventions here]
+
+### Naming Conventions
+[e.g., "Use verb-noun for requirement names"]
+
+### Testing Requirements
+[e.g., "Every requirement must have at least one test"]
+
+### Documentation Standards
+[e.g., "Update CHANGELOG.md when merging changes"]
+
+---
+
+**Generated by:** openspec init
+**Last Updated:** [Update when making significant changes]
 '''
     with open(path, 'w') as f:
         f.write(content)
@@ -1117,16 +1844,40 @@ def fzf_browser(spec_dir: Path, edit_mode: bool = False):
         for i, entry in enumerate(entries, 1):
             tf.write(f"{entry[0]}|{entry[1]}|{entry[2]}\n")
 
-    # Get formatter for preview
-    formatter = get_markdown_formatter()
-    formatter_cmd = " ".join(formatter)
+    # For preview, use bat for compact output (even if not in RAW_MODE)
+    # bat is more suitable for preview windows than glow's full-page rendering
+    # --wrap never: disable line wrapping and continuation characters
+    bat_available = shutil.which("bat")
 
     # Preview command that reads from temp file
-    preview_cmd = f'''
-        line=$(sed -n "{{n}}p" {temp_file} | cut -d'|' -f3)
-        file=$(sed -n "{{n}}p" {temp_file} | cut -d'|' -f2)
-        {formatter_cmd} "$file" 2>/dev/null || cat "$file"
-    '''
+    # fzf replaces {n} with the line number (1-indexed)
+    # NOTE: Using n+1 as workaround for indexing issue
+    if bat_available:
+        preview_cmd = f'''
+            n={{n}}
+            entry=$(sed -n "$((n+1))p" {temp_file})
+            file=$(echo "$entry" | cut -d'|' -f2)
+            line=$(echo "$entry" | cut -d'|' -f3)
+            if [ -f "$file" ] && [ -n "$line" ]; then
+                # Calculate line range to center the highlighted line in preview
+                # Show from max(1, line-10) to show context around the target line
+                start=$((line > 10 ? line - 10 : 1))
+                bat --style=numbers --color=always --language=markdown --wrap never \
+                    --paging=never --highlight-line="$line" --line-range="$start:" "$file"
+            else
+                echo "Preview not available (n=$n, entry=$entry)"
+            fi
+        '''
+    else:
+        preview_cmd = f'''
+            entry=$(sed -n "{{n}}p" {temp_file})
+            file=$(echo "$entry" | cut -d'|' -f2)
+            if [ -f "$file" ]; then
+                cat "$file"
+            else
+                echo "Preview not available"
+            fi
+        '''
 
     try:
         # Run fzf
@@ -1202,13 +1953,16 @@ def cmd_list(args):
             console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
             sys.exit(1)
 
-    console.print(f"[bold]OpenSpec Files[/bold] [dim]({spec_dir})[/dim]\n")
-
     spec_files = find_spec_files(spec_dir)
     if not spec_files:
-        console.print("[yellow]No spec files found[/yellow]")
+        if not args.json:
+            console.print("[yellow]No spec files found[/yellow]")
+        else:
+            print(json.dumps({"specs": [], "count": 0}))
         return
 
+    # Collect spec data
+    specs_data = []
     for spec_file in spec_files:
         metadata, lines, sections = parse_spec_file(spec_file)
         requirements = extract_requirements(lines, sections)
@@ -1216,26 +1970,83 @@ def cmd_list(args):
         rel_path = spec_file.relative_to(spec_dir)
         title = metadata.title if metadata else spec_file.parent.name
 
-        # Print spec header
-        console.print(f"[bold green]{title}[/bold green]")
-        console.print(f"  [dim]Path:[/dim]    {rel_path}")
+        spec_info = {
+            "title": title,
+            "path": str(rel_path),
+            "file": str(spec_file),
+        }
 
         if metadata:
-            if metadata.domain:
-                console.print(f"  [dim]Domain:[/dim]  {metadata.domain}")
-            if metadata.version:
-                console.print(f"  [dim]Version:[/dim] {metadata.version}")
-            if metadata.status:
-                console.print(f"  [dim]Status:[/dim]  {metadata.status}")
+            spec_info["domain"] = metadata.domain
+            spec_info["version"] = metadata.version
+            spec_info["status"] = metadata.status
 
-        # List requirements
         if requirements:
-            console.print(f"\n  [cyan]Requirements:[/cyan]")
-            for req in requirements:
-                line_info = f" [dim](line {req.line_number})[/dim]" if req.line_number else ""
-                console.print(f"    [yellow]•[/yellow] {req.name}{line_info}")
+            spec_info["requirements"] = [
+                {
+                    "name": req.name,
+                    "line": req.line_number
+                }
+                for req in requirements
+            ]
+            spec_info["requirement_count"] = len(requirements)
+        else:
+            spec_info["requirement_count"] = 0
 
-        console.print()
+        specs_data.append(spec_info)
+
+    # Output based on format
+    if args.json:
+        # JSON output
+        output = {
+            "spec_dir": str(spec_dir),
+            "count": len(specs_data),
+            "specs": specs_data
+        }
+        print(json.dumps(output, indent=2))
+    elif args.full:
+        # Full detailed output
+        console.print(f"[bold]OpenSpec Files[/bold] [dim]({spec_dir})[/dim]\n")
+        for spec_info in specs_data:
+            console.print(f"[bold green]{spec_info['title']}[/bold green]")
+            console.print(f"  [dim]Path:[/dim]    {spec_info['path']}")
+
+            if "domain" in spec_info and spec_info["domain"]:
+                console.print(f"  [dim]Domain:[/dim]  {spec_info['domain']}")
+            if "version" in spec_info and spec_info["version"]:
+                console.print(f"  [dim]Version:[/dim] {spec_info['version']}")
+            if "status" in spec_info and spec_info["status"]:
+                console.print(f"  [dim]Status:[/dim]  {spec_info['status']}")
+
+            if "requirements" in spec_info and spec_info["requirements"]:
+                console.print(f"\n  [cyan]Requirements:[/cyan]")
+                for req in spec_info["requirements"]:
+                    line_info = f" [dim](line {req['line']})[/dim]" if req['line'] else ""
+                    console.print(f"    [yellow]•[/yellow] {req['name']}{line_info}")
+
+            console.print()
+    else:
+        # Short default output
+        console.print(f"[bold]OpenSpec Files[/bold] [dim]({spec_dir})[/dim]\n")
+        for spec_info in specs_data:
+            # Compact one-line format
+            title = spec_info['title']
+            path = spec_info['path']
+            version = spec_info.get('version', '')
+            status = spec_info.get('status', '')
+            req_count = spec_info['requirement_count']
+
+            # Format: Title | path | version | status | N reqs
+            line = f"[bold green]{title}[/bold green]"
+            line += f" [dim]│[/dim] {path}"
+            if version:
+                line += f" [dim]│[/dim] [cyan]v{version}[/cyan]"
+            if status:
+                status_color = "green" if status == "Implemented" else "yellow"
+                line += f" [dim]│[/dim] [{status_color}]{status}[/{status_color}]"
+            line += f" [dim]│[/dim] {req_count} req{'s' if req_count != 1 else ''}"
+
+            console.print(line)
 
 def cmd_status(args):
     """Show compact status overview"""
@@ -1314,21 +2125,21 @@ def cmd_new(args):
         spec_dir = find_spec_dir()
         if not spec_dir:
             console.print("[red]Error:[/red] No spec directory found")
-            console.print("Run 'spec2 init' to initialize OpenSpec")
+            console.print("Run 'openspec init' to initialize OpenSpec")
             sys.exit(1)
     else:
         spec_dir = Path(args.dir).resolve()
         if not spec_dir.exists():
             console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
-            console.print("Run 'spec2 init' to initialize OpenSpec")
+            console.print("Run 'openspec init' to initialize OpenSpec")
             sys.exit(1)
 
     if not args.spec_name:
         console.print("[red]Error:[/red] Spec name required")
-        console.print("Usage: spec2 new <spec-name> [category]")
+        console.print("Usage: openspec new <spec-name> [category]")
         console.print("\nExamples:")
-        console.print("  spec2 new authentication           # Creates directory-based spec")
-        console.print("  spec2 new auth backend             # Creates backend/auth.spec.md")
+        console.print("  openspec new authentication           # Creates directory-based spec")
+        console.print("  openspec new auth backend             # Creates backend/auth.spec.md")
         sys.exit(1)
 
     spec_name = args.spec_name
@@ -1400,7 +2211,28 @@ def cmd_new(args):
     console.print(f"  1. Edit the spec file: $EDITOR {new_file}")
     console.print(f"  2. Replace [placeholders] with your content")
     console.print(f"  3. Add requirements and scenarios")
-    console.print(f"  4. Run: spec2 validate")
+    console.print(f"  4. Run: openspec validate")
+
+def cmd_view_spec(spec_name: str, spec_dir: Optional[Path] = None, raw_mode: bool = False):
+    """View a specific spec by name"""
+    if spec_dir is None:
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print("[red]Error:[/red] No spec directory found")
+            console.print("Searched for: .openspec, openspec, .spec, spec, .specs, specs")
+            console.print("Run 'openspec init' to initialize OpenSpec")
+            sys.exit(1)
+
+    # Find the spec file
+    spec_file = find_spec_by_name(spec_dir, spec_name)
+    if not spec_file:
+        console.print(f"[red]Error:[/red] Spec not found: {spec_name}")
+        console.print(f"[dim]Try 'openspec list' to see available specs[/dim]")
+        sys.exit(1)
+
+    # Render the spec
+    os.system('clear')
+    render_markdown(spec_file, line_number=1)
 
 def cmd_browse(args):
     """Interactive fzf browser (default command)"""
@@ -1410,7 +2242,7 @@ def cmd_browse(args):
         if not spec_dir:
             console.print("[red]Error:[/red] No spec directory found")
             console.print("Searched for: .openspec, openspec, .spec, spec, .specs, specs")
-            console.print("Run 'spec2 init' to initialize OpenSpec")
+            console.print("Run 'openspec init' to initialize OpenSpec")
             sys.exit(1)
     else:
         spec_dir = Path(args.dir).resolve()
@@ -1433,12 +2265,29 @@ def cmd_init(args):
 def cmd_validate(args):
     """Validate specs"""
     # Check if reading from stdin
+    # To properly detect stdin with data (not just non-TTY), we check if stdin
+    # has data available using select with zero timeout
+    stdin_content = None
     if not sys.stdin.isatty():
+        import select
+        # Check if stdin is readable with select
+        try:
+            readable, _, _ = select.select([sys.stdin], [], [], 0.0)
+            if readable:
+                # Read stdin content - if empty, treat as no stdin input
+                stdin_content = sys.stdin.read()
+                if not stdin_content or not stdin_content.strip():
+                    stdin_content = None  # Empty stdin, don't treat as input
+        except (ValueError, OSError):
+            # stdin doesn't support select or is closed
+            stdin_content = None
+
+    if stdin_content:
         # Read from stdin to temp file
         import tempfile
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md') as tf:
             temp_file = tf.name
-            tf.write(sys.stdin.read())
+            tf.write(stdin_content)
 
         # Validate the temp file
         spec_path = Path(temp_file)
@@ -1469,14 +2318,14 @@ def cmd_validate(args):
         if not spec_dir:
             console.print(f"[red]Error:[/red] No spec directory found")
             console.print(f"Searched for: .openspec, openspec, .spec, spec, .specs, specs")
-            console.print(f"Run 'spec2 init' to initialize OpenSpec")
+            console.print(f"Run 'openspec init' to initialize OpenSpec")
             sys.exit(1)
     else:
         # Explicit directory provided
         spec_dir = Path(args.dir).resolve()
         if not spec_dir.exists():
             console.print(f"[red]Error:[/red] Directory not found: {spec_dir}")
-            console.print(f"Run 'spec2 init' to initialize OpenSpec")
+            console.print(f"Run 'openspec init' to initialize OpenSpec")
             sys.exit(1)
 
     project_root = Path(args.project_folder).resolve()
@@ -1489,15 +2338,19 @@ def cmd_validate(args):
     if args.fail_on_warning:
         rules["reporting"]["fail_on_warning"] = True
 
-    # Find specs to validate
+    # Find specs to validate (include changes by default, exclude archive)
+    include_changes = getattr(args, 'include_changes', True)
+    include_archive = getattr(args, 'include_archive', False)
+
     if args.spec_name:
         spec_file = find_spec_by_name(spec_dir, args.spec_name)
         if not spec_file:
             console.print(f"[red]Error:[/red] Spec not found: {args.spec_name}")
             sys.exit(1)
-        spec_files = [spec_file]
+        # Wrap in SpecFile for consistency
+        spec_files = [SpecFile(path=spec_file, spec_type=SpecType.MAIN)]
     else:
-        spec_files = find_spec_files(spec_dir)
+        spec_files = find_all_spec_files(spec_dir, include_changes=include_changes, include_archive=include_archive)
 
     if not spec_files:
         console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
@@ -1505,8 +2358,14 @@ def cmd_validate(args):
 
     # Validate each spec
     results = []
-    for spec_file in spec_files:
-        result = validate_spec(spec_file, project_root, rules)
+    for spec_file_obj in spec_files:
+        result = validate_spec(
+            spec_file_obj.path,
+            project_root,
+            rules,
+            spec_type=spec_file_obj.spec_type,
+            change_id=spec_file_obj.change_id
+        )
         results.append(result)
 
     # Determine output format
@@ -1693,7 +2552,7 @@ def cmd_rules_show(args):
     rules = load_rules(spec_dir)
 
     console.print("\n[bold]Active Validation Rules[/bold]\n")
-    console.print(f"Profile: {rules['spec2']['profile']}")
+    console.print(f"Profile: {rules['openspec']['profile']}")
     console.print(f"\nRequired Metadata: {', '.join(rules['validation']['metadata']['required'])}")
     console.print(f"Required Sections: {', '.join(rules['validation']['sections']['required'])}")
 
@@ -1762,8 +2621,34 @@ def cmd_check_links(args):
 # =============================================================================
 
 def main():
+    # Handle direct spec viewing: openspec <spec-name>
+    # Check if first arg (after flags) looks like a spec name, not a known command
+    import sys
+    known_commands = ['browse', 'list', 'status', 'validate', 'template', 'new', 'init',
+                     'stats', 'coverage', 'check-links', 'rules']
+
+    # Find first non-flag argument
+    first_arg = None
+    raw_mode = False
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if arg in ['--raw', '--edit']:
+            if arg == '--raw':
+                raw_mode = True
+            continue
+        if not arg.startswith('-'):
+            first_arg = arg
+            break
+
+    # If first arg is not a known command, treat it as a spec name to view
+    if first_arg and first_arg not in known_commands:
+        spec_dir = find_spec_dir()
+        if spec_dir:
+            cmd_view_spec(first_arg, spec_dir, raw_mode)
+            return
+        # If no spec dir found, fall through to normal parsing for better error
+
     parser = argparse.ArgumentParser(
-        description="""spec2 - Python-based OpenSpec browser and validator
+        description="""openspec - Python-based OpenSpec browser and validator
 
 Interactive OpenSpec browser with fzf and comprehensive validation.
 Full feature parity with bash 'spec' command plus enhanced validation.""",
@@ -1795,40 +2680,42 @@ Common Options (available on most commands):
   -v, --verbose             Verbose output (coverage only)
 
 Examples:
-  # Interactive browser
-  spec2                                Interactive fzf browser (default)
-  spec2 --raw                          Use bat instead of glow
-  spec2 --edit                         Browse and edit in $EDITOR
-  spec2 browse --dir custom-specs      Browse custom directory
+  # View specs
+  openspec                                Interactive fzf browser (default)
+  openspec dotfiles-core                  View specific spec directly
+  openspec 001-dotfiles-core              View by full name with number
+  openspec --raw                          Use bat instead of glow
+  openspec --edit                         Browse and edit in $EDITOR
+  openspec browse --dir custom-specs      Browse custom directory
 
   # List and status
-  spec2 list                           List all specs with details
-  spec2 status                         Compact status overview
-  spec2 list --dir /path/specs         List from specific directory
+  openspec list                           List all specs with details
+  openspec status                         Compact status overview
+  openspec list --dir /path/specs         List from specific directory
 
   # Create and edit
-  spec2 template                       Show OpenSpec template
-  spec2 new authentication             Create new spec
-  spec2 new auth backend               Create backend/auth.spec.md
-  spec2 new myspec --dir custom        Create in custom directory
+  openspec template                       Show OpenSpec template
+  openspec new authentication             Create new spec
+  openspec new auth backend               Create backend/auth.spec.md
+  openspec new myspec --dir custom        Create in custom directory
 
   # Validation
-  spec2 validate                       Validate all specs
-  spec2 validate shortcuts             Validate specific spec
-  cat file.md | spec2 validate         Validate from stdin
-  spec2 validate --strict              Use strict validation
-  spec2 validate --project-folder ~/   Custom project root
+  openspec validate                       Validate all specs
+  openspec validate shortcuts             Validate specific spec
+  cat file.md | openspec validate         Validate from stdin
+  openspec validate --strict              Use strict validation
+  openspec validate --project-folder ~/   Custom project root
 
   # Analysis
-  spec2 coverage                       Show reference coverage report
-  spec2 check-links                    Validate all reference links
-  spec2 stats                          Show statistics
-  spec2 rules show                     Show active rules
+  openspec coverage                       Show reference coverage report
+  openspec check-links                    Validate all reference links
+  openspec stats                          Show statistics
+  openspec rules show                     Show active rules
 
   # Advanced
-  spec2 validate --fail-on-warning     Exit code 2 on warnings
-  spec2 validate --json                JSON output
-  spec2 coverage -v                    Show specs without coverage
+  openspec validate --fail-on-warning     Exit code 2 on warnings
+  openspec validate --json                JSON output
+  openspec coverage -v                    Show specs without coverage
         """
     )
 
@@ -1847,6 +2734,8 @@ Examples:
     list_parser = subparsers.add_parser("list", help="List all specs with metadata")
     list_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     list_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
+    list_parser.add_argument("--full", action="store_true", help="Show full details including requirements")
+    list_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # status command
     status_parser = subparsers.add_parser("status", help="Show compact status overview")

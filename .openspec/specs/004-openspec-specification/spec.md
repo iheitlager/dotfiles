@@ -36,7 +36,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ---
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Structured Specification Format
 
@@ -172,16 +172,16 @@ The validator MUST support configurable validation profiles (strict, standard, l
 
 ### Requirement: Project Initialization
 
-The spec2 init command MUST create a complete OpenSpec directory structure for new projects.
+The openspec init command MUST create a complete OpenSpec directory structure for new projects.
 
 #### Scenario: Initialize in Empty Project
 
 - GIVEN an empty project directory
-- WHEN running `spec2 init`
+- WHEN running `openspec init`
 - THEN it MUST create `.openspec/` directory
 - AND it MUST create `.openspec/specs/` subdirectory
 - AND it MUST copy template.md to `.openspec/template.md`
-- AND it MUST create `.openspec/validate.py` (copy of spec2)
+- AND it MUST create `.openspec/validate.py` (copy of openspec)
 - AND it MUST create `.openspec/rules.toml.example`
 - AND it MUST create `.openspec/README.md`
 - AND all files MUST be created successfully
@@ -189,14 +189,14 @@ The spec2 init command MUST create a complete OpenSpec directory structure for n
 #### Scenario: Initialize with Custom Directory Name
 
 - GIVEN a project directory
-- WHEN running `spec2 init --dir custom-specs`
+- WHEN running `openspec init --dir custom-specs`
 - THEN it MUST create `custom-specs/` directory
 - AND it MUST follow the same structure as `.openspec/`
 
 #### Scenario: Initialize Existing Directory
 
 - GIVEN `.openspec/` already exists
-- WHEN running `spec2 init`
+- WHEN running `openspec init`
 - THEN it MUST not fail
 - AND it MUST update or overwrite existing files
 - AND it MUST preserve existing specs in `specs/` subdirectory
@@ -208,7 +208,7 @@ The validator MUST exclude template files from validation scans.
 #### Scenario: Template.md in Spec Directory
 
 - GIVEN `.openspec/template.md` exists
-- WHEN running `spec2 validate`
+- WHEN running `openspec validate`
 - THEN it MUST not include template.md in validation results
 - AND it MUST only validate files in `specs/` subdirectory
 
@@ -226,7 +226,7 @@ The validator MUST support both terminal (human-readable) and JSON (machine-read
 #### Scenario: Terminal Output (Default)
 
 - GIVEN validation results with errors and warnings
-- WHEN running `spec2 validate` without --format flag
+- WHEN running `openspec validate` without --format flag
 - THEN it MUST display results using rich terminal formatting
 - AND it MUST show spec status (PASSED/WARNINGS/FAILED) with colors
 - AND it MUST show summary with error/warning counts
@@ -235,7 +235,7 @@ The validator MUST support both terminal (human-readable) and JSON (machine-read
 #### Scenario: JSON Output for CI/CD
 
 - GIVEN validation results
-- WHEN running `spec2 validate --format json`
+- WHEN running `openspec validate --format json`
 - THEN it MUST output valid JSON to stdout
 - AND JSON MUST include all validation results
 - AND JSON MUST include summary statistics
@@ -258,7 +258,7 @@ The validator MUST provide commands to analyze specifications and track coverage
 #### Scenario: Statistics Command
 
 - GIVEN multiple specification files
-- WHEN running `spec2 stats`
+- WHEN running `openspec stats`
 - THEN it MUST display total specs, requirements, scenarios, and references
 - AND it MUST show specs grouped by status
 - AND it MUST calculate totals across all specs
@@ -266,11 +266,120 @@ The validator MUST provide commands to analyze specifications and track coverage
 #### Scenario: Rules Display
 
 - GIVEN active validation rules
-- WHEN running `spec2 rules show`
+- WHEN running `openspec rules show`
 - THEN it MUST display the current profile name
 - AND it MUST list required metadata fields
 - AND it MUST list required sections
 - AND output MUST be human-readable
+
+### Requirement: Change Directory Support
+
+The system MUST support delta specs in `.openspec/changes/` directory for tracking proposed modifications.
+
+#### Scenario: Delta Spec Discovery
+
+- GIVEN a delta spec exists in `.openspec/changes/001-feature/specs/`
+- WHEN openspec discovers specs
+- THEN it SHALL include the delta spec
+- AND it SHALL mark it with spec_type=delta
+- AND it SHALL extract the change_id from the directory name
+
+#### Scenario: Delta Spec Validation
+
+- GIVEN a delta spec with lifecycle markers
+- WHEN openspec validates it
+- THEN it SHALL validate metadata and structure
+- AND it SHALL check that at least one lifecycle marker exists
+- AND it SHALL not require "ADDED Requirements" section (other markers allowed)
+
+### Requirement: Lifecycle Markers
+
+Delta specs MUST use lifecycle markers to indicate the nature of changes to requirements.
+
+#### Scenario: ADDED Requirements
+
+- GIVEN a delta spec with "## ADDED Requirements" section
+- WHEN the validator parses it
+- THEN it SHALL extract all new requirements
+- AND each requirement SHALL have scenarios
+- AND requirements SHALL follow normal validation rules
+
+#### Scenario: MODIFIED Requirements
+
+- GIVEN a delta spec with "## MODIFIED Requirements" section
+- WHEN the validator parses it
+- THEN it SHALL extract modified requirements
+- AND requirements SHALL indicate what changed from the original
+
+#### Scenario: REMOVED Requirements
+
+- GIVEN a delta spec with "## REMOVED Requirements" section
+- WHEN the validator parses it
+- THEN it SHALL list requirements being deprecated
+- AND SHALL include rationale for removal
+
+#### Scenario: RENAMED Requirements
+
+- GIVEN a delta spec with "## RENAMED Requirements" section
+- WHEN the validator parses it
+- THEN it SHALL map old names to new names
+- AND SHALL preserve requirement content
+
+#### Scenario: No Lifecycle Markers
+
+- GIVEN a delta spec with no lifecycle marker sections
+- WHEN the validator runs
+- THEN it MUST report an ERROR
+- AND it MUST indicate that delta specs require at least one lifecycle marker
+
+### Requirement: Proposal Workflow
+
+The system MUST support a proposal-based change workflow with structured artifacts.
+
+#### Scenario: Complete Change Structure
+
+- GIVEN a change directory `.openspec/changes/001-feature/`
+- WHEN it contains proposal.md, specs/, and tasks.md
+- THEN it represents a complete change proposal
+- AND proposal.md SHALL document intent, scope, and approach
+- AND specs/ SHALL contain delta specs with lifecycle markers
+- AND tasks.md SHALL provide implementation checklist
+
+#### Scenario: Proposal Template
+
+- GIVEN openspec init has run
+- WHEN a developer creates a new change manually
+- THEN they SHALL follow the proposal template structure
+- AND include Intent, Scope, Approach sections
+- AND include Alternatives Considered
+- AND include Impact Analysis
+
+### Requirement: Project Context Documentation
+
+The system MUST support project.md and AGENTS.md for providing context to developers and AI assistants.
+
+#### Scenario: Project Context (project.md)
+
+- GIVEN openspec init creates `.openspec/project.md`
+- WHEN a developer or AI reads it
+- THEN it SHALL document tech stack, architecture, and conventions
+- AND it SHALL include project-specific patterns
+- AND it SHALL guide implementation decisions
+
+#### Scenario: AI Agent Instructions (AGENTS.md)
+
+- GIVEN openspec init creates `.openspec/AGENTS.md`
+- WHEN an AI assistant works with the project
+- THEN it SHALL understand OpenSpec workflow
+- AND it SHALL follow project-specific guidelines
+- AND it SHALL use correct lifecycle markers for changes
+
+#### Scenario: Context Consistency
+
+- GIVEN project.md and AGENTS.md exist
+- WHEN they're updated
+- THEN they SHALL remain consistent with each other
+- AND they SHALL reflect actual project structure
 
 ---
 
@@ -281,7 +390,7 @@ The validator MUST provide commands to analyze specifications and track coverage
 OpenSpec is implemented as two complementary tools:
 
 1. **spec** (Bash): Interactive spec browser using fzf for navigation and basic validation
-2. **spec2** (Python): Advanced validator with structured validation, reference checking, and rules engine
+2. **openspec** (Python): Advanced validator with structured validation, reference checking, and rules engine
 
 ```
 OpenSpec System Architecture:
@@ -291,7 +400,7 @@ OpenSpec System Architecture:
 └──────────────┬─────────────────┬────────────────────┘
                │                 │
        ┌───────▼────────┐  ┌────▼─────────┐
-       │ spec (Bash)    │  │ spec2 (Python)│
+       │ spec (Bash)    │  │ openspec (Python)│
        │ - Interactive  │  │ - Validation  │
        │ - Quick browse │  │ - CI/CD       │
        │ - fzf UI       │  │ - Analysis    │
@@ -299,7 +408,17 @@ OpenSpec System Architecture:
                │                │
     ┌──────────▼────────────────▼──────────┐
     │      .openspec/ Directory             │
-    │  ├── specs/001-feature/spec.md       │
+    │  ├── specs/                           │
+    │  │   └── 001-feature/spec.md          │
+    │  ├── changes/                         │
+    │  │   ├── 001-proposal/                │
+    │  │   │   ├── proposal.md              │
+    │  │   │   ├── specs/                   │
+    │  │   │   │   └── 001-feature/spec.md  │
+    │  │   │   └── tasks.md                 │
+    │  │   └── archive/                     │
+    │  ├── project.md                       │
+    │  ├── AGENTS.md                        │
     │  ├── template.md                      │
     │  ├── validate.py (local copy)        │
     │  ├── rules.toml (optional)           │
@@ -309,28 +428,39 @@ OpenSpec System Architecture:
 
 ### Key Components
 
-#### spec2 Python Validator
+#### openspec Python Validator
 
-- **Single File**: `local/bin/spec2` (~1100 LOC)
+- **Single File**: `local/bin/openspec` (~2150 LOC)
 - **Dependencies**: Uses PEP 723 inline dependencies (rich library)
-- **Execution**: Run with `uv run --script spec2` for automatic dependency management
+- **Execution**: Run with `uv run --script openspec` for automatic dependency management
 
 #### Validation Pipeline
 
-1. **Spec Discovery**: Find all `spec.md` files in directory structure, excluding templates
-2. **Parsing**: Extract metadata, sections, requirements, scenarios, references
-3. **Rule Loading**: Load default rules, merge with project rules.toml, apply profile
-4. **Validation**: Run metadata, section, requirement, and reference validators
-5. **Reporting**: Format results as terminal output or JSON
+1. **Spec Discovery**: Find all `spec.md` files in specs/, changes/, and changes/archive/ (configurable)
+2. **Type Detection**: Classify specs as main, delta, or archive based on location
+3. **Parsing**: Extract metadata, sections, requirements, scenarios, references, and lifecycle markers
+4. **Rule Loading**: Load default rules, merge with project rules.toml, apply profile
+5. **Validation**: Run metadata, section, requirement, reference, and lifecycle validators
+6. **Reporting**: Format results as terminal output or JSON
 
 #### Directory Patterns
 
-OpenSpec supports two directory patterns:
+OpenSpec supports three directory types:
 
-1. **Directory-based**: `.openspec/specs/001-feature-name/spec.md`
-2. **Named files**: `.openspec/category/feature.spec.md`
+1. **Main Specs**: `.openspec/specs/NNN-feature-name/spec.md` - Current system truth
+2. **Delta Specs**: `.openspec/changes/NNN-proposal/specs/NNN-feature/spec.md` - Proposed changes
+3. **Archive**: `.openspec/changes/archive/NNN-proposal/` - Completed changes
 
-Both patterns are scanned automatically; choose based on project preference.
+Within each, files can use:
+- **Directory-based**: `001-feature-name/spec.md`
+- **Named files**: `category/feature.spec.md`
+
+#### Change Management Workflow
+
+1. **Create Proposal**: Create `changes/NNN-name/` with proposal.md, specs/, and tasks.md
+2. **Develop**: Implement changes following tasks.md checklist
+3. **Merge**: Integrate delta specs into main specs (manual or automated)
+4. **Archive**: Move completed change to `changes/archive/`
 
 ---
 
@@ -338,7 +468,7 @@ Both patterns are scanned automatically; choose based on project preference.
 
 ### Manual Testing
 
-- Create test project with `spec2 init`
+- Create test project with `openspec init`
 - Create sample spec from template
 - Validate with different profiles (standard, strict, lenient)
 - Test reference integrity with real and broken links
@@ -411,7 +541,7 @@ Both patterns are scanned automatically; choose based on project preference.
 
 - [Bash spec command](local/bin/spec) - Interactive spec browser
 - [Template file](local/share/spec/template.md) - Specification template
-- [Python validator](local/bin/spec2) - Validation tool
+- [Python validator](local/bin/openspec) - Validation tool
 
 ### Test Coverage
 

@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", mentions "openspec", or discusses system specifications and requirements documentation.
-version: 1.1.0
+description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", "create proposal", "propose changes", mentions "openspec", or discusses system specifications and requirements documentation.
+version: 2.0.0
 ---
 
 # OpenSpec Management Skill
@@ -59,6 +59,7 @@ When creating or validating specs:
 4. This format enables OpenSpec's merge tools to track specification evolution over time
 
 **Sources**:
+- [OpenSpec Repository](https://github.com/Fission-AI/OpenSpec)
 - [OpenSpec Specification Format](https://thedocs.io/openspec/concepts/spec-format/)
 - [OpenSpec Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md)
 - [OpenSpec Deep Dive Guide](https://redreamality.com/garden/notes/openspec-guide/)
@@ -108,16 +109,40 @@ spec status             # Compact overview table
 
 ### View Spec Locations
 
-OpenSpec files are in `.openspec/specs/` with numbered directories:
+OpenSpec uses a structured directory layout:
 
 ```
 .openspec/
-├── README.md
-└── specs/
-    ├── 001-dotfiles-core/spec.md
-    ├── 002-dotfiles-caching/spec.md
-    └── 003-shortcuts-system/spec.md
+├── specs/                          # Main specs (current truth)
+│   ├── 001-dotfiles-core/spec.md
+│   ├── 002-dotfiles-caching/spec.md
+│   └── 003-shortcuts-system/spec.md
+├── changes/                        # Delta specs (proposed changes)
+│   ├── 001-feature-proposal/
+│   │   ├── proposal.md             # Intent, scope, approach
+│   │   ├── specs/                  # Delta specs with lifecycle markers
+│   │   │   └── 002-caching/spec.md
+│   │   └── tasks.md                # Implementation checklist
+│   └── archive/                    # Completed changes
+│       └── 001-feature-proposal/
+├── project.md                      # Project context for AI/developers
+├── AGENTS.md                       # AI assistant instructions
+├── template.md                     # Spec template
+├── validate.py                     # Local validator (copy of openspec)
+├── rules.toml                      # Validation rules (optional)
+└── README.md                       # OpenSpec documentation
 ```
+
+### Project Context Files
+
+**project.md**: Documents tech stack, architecture, patterns, and conventions
+- Read this first when starting work on a project
+- Provides context for making implementation decisions
+
+**AGENTS.md**: Instructions for AI assistants
+- Explains OpenSpec workflow
+- Documents project-specific guidelines
+- Shows how to use lifecycle markers
 
 ## Creating New Specs
 
@@ -237,6 +262,99 @@ When the user wants to edit a spec:
 3. **Make targeted edits**: Use Edit tool for specific changes
 4. **Maintain structure**: Keep RFC 2119 keywords and scenario format
 5. **Update version**: If requirements change significantly, bump version
+
+## Creating Proposals for Changes
+
+When the user wants to propose changes to existing specs or add new features, use the proposal workflow:
+
+### Proposal Workflow
+
+1. **Create Change Directory**:
+   ```bash
+   mkdir -p ~/.dotfiles/.openspec/changes/NNN-proposal-name/specs
+   ```
+
+2. **Create proposal.md**:
+   - **Intent**: Why is this change needed? What problem does it solve?
+   - **Scope**: What's in scope vs. out of scope?
+   - **Approach**: How will this be implemented?
+   - **Alternatives**: What other approaches were considered?
+   - **Impact**: Breaking changes, dependencies, testing strategy
+
+3. **Create Delta Specs** with lifecycle markers:
+   - Use `## ADDED Requirements` for brand new requirements
+   - Use `## MODIFIED Requirements` for changes to existing requirements
+   - Use `## REMOVED Requirements` for deprecating features
+   - Use `## RENAMED Requirements` for renaming requirements
+
+4. **Create tasks.md**:
+   - Implementation checklist
+   - Pre-implementation, implementation, testing, review phases
+   - Track progress as tasks are completed
+
+### Example Delta Spec Structure
+
+```markdown
+# Feature Name (Delta)
+
+**Domain:** [Domain]
+**Version:** [Version]
+**Status:** Proposed
+**Date:** YYYY-MM-DD
+
+## Overview
+
+This delta spec proposes [summary of changes].
+
+## RFC 2119 Keywords
+
+[Standard boilerplate]
+
+## ADDED Requirements
+
+### Requirement: New Feature
+
+The system MUST support [new functionality].
+
+#### Scenario: New Behavior
+- GIVEN [context]
+- WHEN [action]
+- THEN [expected new behavior]
+
+## MODIFIED Requirements
+
+### Requirement: Existing Feature (Modified)
+
+The system MUST support [updated functionality].
+
+**Changes from v1.0:**
+- Added: [What's new]
+- Changed: [What changed]
+- Removed: [What was removed]
+
+#### Scenario: Updated Behavior (NEW)
+- GIVEN [context]
+- WHEN [action]
+- THEN [new expected behavior]
+
+## REMOVED Requirements
+
+### Requirement: Deprecated Feature
+
+This requirement is being removed because [rationale].
+
+**Migration path**: [How to adapt to removal]
+```
+
+### When to Use Proposals
+
+- Adding significant new features
+- Making breaking changes
+- Removing functionality
+- Major refactoring that affects behavior
+- Any change that requires team discussion/approval
+
+For small bug fixes or minor improvements, you can update main specs directly.
 
 ## Validating Specs
 
