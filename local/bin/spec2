@@ -31,8 +31,10 @@ Usage:
 
 import argparse
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass, field, asdict
@@ -41,6 +43,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse
 
+# Auto-exec with uv if dependencies not available
 try:
     from rich.console import Console
     from rich.table import Table
@@ -48,7 +51,22 @@ try:
     from rich.syntax import Syntax
     from rich import box
 except ImportError:
-    print("Error: rich library not found. Run with: uv run spec2", file=sys.stderr)
+    # Check if we can use uv to run this script
+    if os.environ.get("SPEC2_NO_AUTO_UV") != "1":
+        try:
+            # Re-exec using uv
+            script_path = Path(__file__).resolve()
+            result = subprocess.run(
+                ["uv", "run", "--script", str(script_path)] + sys.argv[1:],
+                check=False
+            )
+            sys.exit(result.returncode)
+        except FileNotFoundError:
+            pass
+
+    # Fallback error message
+    print("Error: rich library not found. Run with: uv run --script spec2", file=sys.stderr)
+    print("Or install rich: uv pip install rich", file=sys.stderr)
     sys.exit(1)
 
 # =============================================================================
