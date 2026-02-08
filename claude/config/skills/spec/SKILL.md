@@ -10,6 +10,59 @@ version: 1.1.0
 
 This skill helps you work with **OpenSpec** specifications—behavior-driven documentation that describes systems using RFC 2119 keywords and Given-When-Then scenarios. Supports creating, browsing, editing, and managing specs.
 
+## Understanding OpenSpec: Main Specs vs. Delta Specs
+
+OpenSpec uses two types of specifications to track system evolution:
+
+### Main Specs (`.openspec/specs/`)
+
+**Source of truth** for the current system's implemented features.
+
+- Located in `.openspec/specs/NNN-name/spec.md`
+- Document what the system **actually does NOW**
+- `## ADDED Requirements` = Requirements that are **currently active/implemented** in the system
+- These are the permanent record of system capabilities
+
+**Example**: If you have a spec with Status: Implemented showing "ADDED Requirements", those requirements describe features that exist in the current version.
+
+### Delta Specs (`.openspec/changes/`)
+
+**Proposed modifications** stored temporarily (not yet in system).
+
+- Located in `.openspec/changes/`
+- Document changes being planned or developed
+- `## ADDED Requirements` = **Brand new** requirements being proposed (not yet implemented)
+- `## MODIFIED Requirements` = Changes to existing requirements
+- `## REMOVED Requirements` = Features being deprecated
+- `## RENAMED Requirements` = Requirement name changes
+
+**Workflow**: Delta specs are created for new features → implemented → then "intelligently merged" into main specs using lifecycle markers.
+
+### What "ADDED Requirements" Really Means
+
+The meaning depends on context:
+
+| Context | Meaning |
+|---------|---------|
+| **Main Spec** | "These requirements are currently active/implemented in the system" |
+| **Delta Spec** | "These are brand new requirements we're proposing to add" |
+
+**In main specs** (what we typically work with), `## ADDED Requirements` is a lifecycle marker indicating these requirements were added to the system and are now part of its permanent specification. It's NOT about future changes—it's about documenting the current state.
+
+### Why This Matters
+
+When creating or validating specs:
+
+1. **Main specs** document existing systems → use `## ADDED Requirements` for all current features
+2. **Delta specs** propose changes → use `## ADDED` for new features, `## MODIFIED` for changes, `## REMOVED` for deprecations
+3. The OpenSpec validator requires `## ADDED Requirements` as a section header (not just `## Requirements`)
+4. This format enables OpenSpec's merge tools to track specification evolution over time
+
+**Sources**:
+- [OpenSpec Specification Format](https://thedocs.io/openspec/concepts/spec-format/)
+- [OpenSpec Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md)
+- [OpenSpec Deep Dive Guide](https://redreamality.com/garden/notes/openspec-guide/)
+
 ## When to Use This Skill
 
 Invoke this skill when the user wants to:
@@ -194,10 +247,10 @@ When the user asks to validate a spec, check for required sections and proper st
 Every OpenSpec MUST include:
 
 1. **Title** - `# [System Name] Specification`
-2. **Frontmatter** - Domain, Version, Status, Date
+2. **Frontmatter** - Domain, Version, Status, Date (Owner is recommended)
 3. **Overview** - Brief description
 4. **RFC 2119 Keywords** - Standard compliance statement
-5. **ADDED Requirements** - At least one requirement
+5. **ADDED Requirements** - At least one requirement (note: must use "ADDED", not just "Requirements")
 
 ### Validation Checklist
 
@@ -205,12 +258,12 @@ Run through this checklist and report findings:
 
 ```markdown
 ✅ Has proper title format
-✅ Has frontmatter (Domain, Version, Status, Date)
+✅ Has frontmatter (Domain, Version, Status, Date required; Owner recommended)
 ✅ Has Overview section
 ✅ Has Philosophy subsection (recommended)
 ✅ Has Key Capabilities subsection (recommended)
 ✅ Has RFC 2119 Keywords section
-✅ Has ADDED Requirements section
+✅ Has ADDED Requirements section (not just "Requirements")
 ✅ Has at least one Requirement
 ✅ Each requirement has at least one Scenario
 ✅ Scenarios use proper Given-When-Then format
@@ -245,9 +298,10 @@ Summary: Spec is valid! No issues found.
 Report these if found:
 
 ❌ **Missing RFC 2119 section**: Required for standards compliance
+❌ **Wrong section header**: Using "## Requirements" instead of "## ADDED Requirements"
 ❌ **Vague scenarios**: Missing GIVEN/WHEN/THEN or too abstract
 ❌ **No requirements**: Spec must have at least one requirement
-❌ **Missing frontmatter**: Need Domain, Version, Status, Date
+❌ **Missing frontmatter**: Need Domain, Version, Status, Date (Owner recommended)
 ❌ **Weak keywords**: Using "should" instead of RFC 2119 SHOULD
 ❌ **No scenarios**: Requirements must have concrete examples
 ❌ **Implementation details**: Scenarios should describe behavior, not code
