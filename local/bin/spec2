@@ -1126,6 +1126,109 @@ def cmd_stats(args):
     for status, count in sorted(specs_by_status.items()):
         console.print(f"  {status}: {count}")
 
+def cmd_coverage(args):
+    """Show reference coverage for each spec"""
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print(f"[red]Error:[/red] No spec directory found")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+
+    project_root = Path(args.project_folder).resolve()
+
+    spec_files = find_spec_files(spec_dir)
+    if not spec_files:
+        console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        return
+
+    rules = load_rules(spec_dir)
+
+    # Create coverage table
+    table = Table(title="Spec Reference Coverage", box=box.ROUNDED)
+    table.add_column("Spec", style="cyan", no_wrap=True)
+    table.add_column("Status", style="yellow")
+    table.add_column("ADRs", justify="center")
+    table.add_column("Tests", justify="center")
+    table.add_column("Source", justify="center")
+    table.add_column("External", justify="center")
+    table.add_column("Total Refs", justify="right")
+
+    # Collect coverage data
+    coverage_data = []
+    total_with_adrs = 0
+    total_with_tests = 0
+    total_with_source = 0
+
+    for spec_file in spec_files:
+        result = validate_spec(spec_file, project_root, rules)
+        spec_name = spec_file.parent.name
+
+        # Count references by type
+        adr_refs = sum(1 for ref in result.references if ref.ref_type == 'adr')
+        test_refs = sum(1 for ref in result.references if ref.ref_type == 'test')
+        source_refs = sum(1 for ref in result.references if ref.ref_type == 'source')
+        external_refs = sum(1 for ref in result.references if ref.ref_type == 'external')
+        total_refs = len(result.references)
+
+        # Track coverage
+        if adr_refs > 0:
+            total_with_adrs += 1
+        if test_refs > 0:
+            total_with_tests += 1
+        if source_refs > 0:
+            total_with_source += 1
+
+        # Format cells with color
+        adr_cell = f"[green]{adr_refs}[/green]" if adr_refs > 0 else f"[dim]{adr_refs}[/dim]"
+        test_cell = f"[green]{test_refs}[/green]" if test_refs > 0 else f"[dim]{test_refs}[/dim]"
+        source_cell = f"[green]{source_refs}[/green]" if source_refs > 0 else f"[dim]{source_refs}[/dim]"
+        external_cell = f"[blue]{external_refs}[/blue]" if external_refs > 0 else f"[dim]{external_refs}[/dim]"
+
+        status = result.metadata.status if result.metadata else "Unknown"
+
+        table.add_row(
+            spec_name,
+            status,
+            adr_cell,
+            test_cell,
+            source_cell,
+            external_cell,
+            str(total_refs)
+        )
+
+        coverage_data.append({
+            "name": spec_name,
+            "adr_refs": adr_refs,
+            "test_refs": test_refs,
+            "source_refs": source_refs,
+            "total_refs": total_refs
+        })
+
+    console.print("\n")
+    console.print(table)
+
+    # Print coverage summary
+    total_specs = len(spec_files)
+    console.print(f"\n[bold]Coverage Summary:[/bold]")
+    console.print(f"  Specs with ADR references: {total_with_adrs}/{total_specs} ({100*total_with_adrs//total_specs if total_specs > 0 else 0}%)")
+    console.print(f"  Specs with test references: {total_with_tests}/{total_specs} ({100*total_with_tests//total_specs if total_specs > 0 else 0}%)")
+    console.print(f"  Specs with source references: {total_with_source}/{total_specs} ({100*total_with_source//total_specs if total_specs > 0 else 0}%)")
+
+    # List specs without coverage
+    if args.verbose:
+        console.print(f"\n[bold]Specs without test coverage:[/bold]")
+        for data in coverage_data:
+            if data["test_refs"] == 0:
+                console.print(f"  [yellow]• {data['name']}[/yellow]")
+
+        console.print(f"\n[bold]Specs without ADR references:[/bold]")
+        for data in coverage_data:
+            if data["adr_refs"] == 0:
+                console.print(f"  [yellow]• {data['name']}[/yellow]")
+
 def cmd_rules_show(args):
     """Show active rules"""
     # Try to find spec directory
@@ -1144,6 +1247,66 @@ def cmd_rules_show(args):
     console.print(f"\nRequired Metadata: {', '.join(rules['validation']['metadata']['required'])}")
     console.print(f"Required Sections: {', '.join(rules['validation']['sections']['required'])}")
 
+def cmd_check_links(args):
+    """Check all reference links for validity"""
+    # Try to find spec directory
+    if args.dir == ".openspec":
+        spec_dir = find_spec_dir()
+        if not spec_dir:
+            console.print(f"[red]Error:[/red] No spec directory found")
+            sys.exit(1)
+    else:
+        spec_dir = Path(args.dir).resolve()
+
+    project_root = Path(args.project_folder).resolve()
+
+    spec_files = find_spec_files(spec_dir)
+    if not spec_files:
+        console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        return
+
+    rules = load_rules(spec_dir)
+
+    # Check all references
+    total_refs = 0
+    broken_refs = 0
+    refs_by_type = {}
+
+    console.print("\n[bold]Checking Reference Links[/bold]\n")
+
+    for spec_file in spec_files:
+        result = validate_spec(spec_file, project_root, rules)
+        spec_name = spec_file.parent.name
+
+        # Find broken references
+        spec_broken = []
+        for ref in result.references:
+            total_refs += 1
+            ref_type = ref.ref_type or "unknown"
+            refs_by_type[ref_type] = refs_by_type.get(ref_type, 0) + 1
+
+            if ref.ref_type != 'external' and not ref.exists:
+                broken_refs += 1
+                spec_broken.append(ref)
+
+        if spec_broken:
+            console.print(f"[yellow]{spec_name}:[/yellow]")
+            for ref in spec_broken:
+                console.print(f"  [red]✗[/red] {ref.target} (line {ref.line_number})")
+
+    # Summary
+    console.print(f"\n[bold]Summary:[/bold]")
+    console.print(f"  Total references: {total_refs}")
+    console.print(f"  Broken links: [{'red' if broken_refs > 0 else 'green'}]{broken_refs}[/]")
+    console.print(f"\n[bold]By type:[/bold]")
+    for ref_type, count in sorted(refs_by_type.items()):
+        console.print(f"  {ref_type}: {count}")
+
+    if broken_refs == 0:
+        console.print(f"\n[green]✓ All reference links are valid[/green]")
+    else:
+        sys.exit(1)
+
 # =============================================================================
 # MAIN CLI
 # =============================================================================
@@ -1158,6 +1321,8 @@ Examples:
   spec2 validate                       Validate all specs
   spec2 validate shortcuts             Validate specific spec
   spec2 validate --strict              Use strict validation
+  spec2 coverage                       Show reference coverage report
+  spec2 check-links                    Validate all reference links
   spec2 stats                          Show statistics
   spec2 rules show                     Show active rules
         """
@@ -1184,6 +1349,17 @@ Examples:
     stats_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     stats_parser.add_argument("--project-folder", default=".", help="Project root directory")
 
+    # coverage command
+    coverage_parser = subparsers.add_parser("coverage", help="Show reference coverage report")
+    coverage_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
+    coverage_parser.add_argument("--project-folder", default=".", help="Project root directory")
+    coverage_parser.add_argument("--verbose", "-v", action="store_true", help="Show specs without coverage")
+
+    # check-links command
+    check_links_parser = subparsers.add_parser("check-links", help="Validate all reference links")
+    check_links_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
+    check_links_parser.add_argument("--project-folder", default=".", help="Project root directory")
+
     # rules command
     rules_parser = subparsers.add_parser("rules", help="Manage validation rules")
     rules_subparsers = rules_parser.add_subparsers(dest="rules_command")
@@ -1203,6 +1379,10 @@ Examples:
         cmd_validate(args)
     elif args.command == "stats":
         cmd_stats(args)
+    elif args.command == "coverage":
+        cmd_coverage(args)
+    elif args.command == "check-links":
+        cmd_check_links(args)
     elif args.command == "rules":
         if args.rules_command == "show":
             cmd_rules_show(args)
