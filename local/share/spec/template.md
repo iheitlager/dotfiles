@@ -125,6 +125,32 @@ The system MUST/SHALL/SHOULD [another clear requirement statement].
 
 ---
 
+## Metadata [for project tracking]
+
+This section provides project-specific links for tracking and traceability. All file paths should be project-root-relative (not `../../` relative).
+
+### Related Documentation
+
+- [ADR-001: Example Architecture Decision](docs/adr/001-example-decision.md)
+- [Design Doc: Feature Name](docs/design/feature-name.md)
+
+### Test Coverage
+
+- **Unit Tests**: `tests/unit/test_feature.py`
+- **Integration Tests**: `tests/integration/test_feature_integration.py`
+- **BDD Scenarios**: `tests/bdd/features/feature.feature`
+
+### Related Issues
+
+- **GitHub Issue**: #123
+- **JIRA Ticket**: PROJ-456
+
+### Related Specifications
+
+- [OpenSpec: Related Spec](.openspec/specs/002-related-spec/spec.md)
+
+---
+
 ## References
 
 - **RFC 2119 - Key words for use in RFCs**: https://datatracker.ietf.org/doc/html/rfc2119
