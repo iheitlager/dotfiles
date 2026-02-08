@@ -16,7 +16,6 @@ A modular, XDG-compliant dotfiles management system for macOS that provides topi
 - **XDG Base Directory Compliance**: All configuration follows the XDG specification for portability and cleanliness
 - **Scripting Over Configuration Management**: Simple bash scripts instead of complex convergence-based tools (Ansible, Chef, etc.)
 - **Version Control First**: All configuration is versioned in git for reproducibility and sharing across machines
-- **Aggressive Caching**: Shell integrations are cached with mtime-based invalidation for fast startup times
 - **Homebrew-Centric**: Package management through Homebrew with automatic discovery from all topics
 
 ### Key Capabilities
@@ -25,7 +24,7 @@ A modular, XDG-compliant dotfiles management system for macOS that provides topi
 - **Automatic Discovery**: Topics, packages, and shell configurations are discovered automatically without registration
 - **Conflict Prevention**: Validates configuration structure before installation to prevent errors
 - **Stale Cleanup**: Detects and removes orphaned symlinks from XDG directories
-- **Maintenance Tool**: `dot` command provides package management, cache control, and topic installation
+- **Maintenance Tool**: `dot` command provides package management and topic installation
 
 ---
 
@@ -62,7 +61,7 @@ The system MUST support modular topic-based organization where each topic is ind
 - GIVEN a topic directory is deleted from ~/.dotfiles
 - WHEN the shell starts
 - THEN the system SHALL continue without errors
-- AND the cache SHALL be regenerated without the deleted topic
+- AND the system SHALL not attempt to load files from the deleted topic
 
 #### Scenario: Partial Topic Definition
 
@@ -167,7 +166,7 @@ The system MUST automatically discover and install Homebrew packages from all to
 - WHEN `dot` completes installation
 - THEN it SHALL export current state to ${XDG_DATA_HOME}/Brewfile
 - AND the Brewfile SHALL include taps, formulae, and casks
-- AND SHALL serve as cache for future installations
+- AND SHALL enable faster reinstallation from the generated list
 
 #### Scenario: Brewfile Usage
 
@@ -194,21 +193,21 @@ The system MUST aggregate and load shell configurations from all topics with pro
 
 - GIVEN topics have bash_env files
 - WHEN the shell starts and sources .bash_profile
-- THEN it SHALL load all bash_env files (or cached equivalent)
+- THEN it SHALL load all bash_env files
 - AND SHALL export environment variables before aliases load
 
 #### Scenario: bash_aliases Sourced Second
 
 - GIVEN topics have bash_aliases files
 - WHEN .bashrc is sourced
-- THEN it SHALL load all bash_aliases files (or cached equivalent)
+- THEN it SHALL load all bash_aliases files
 - AND SHALL load after bash_env so aliases can reference environment variables
 
 #### Scenario: bash_completion Sourced Last
 
 - GIVEN topics have bash_completion files
 - WHEN .bashrc is sourced
-- THEN it SHALL load all bash_completion files (or cached equivalent)
+- THEN it SHALL load all bash_completion files
 - AND SHALL load after aliases for proper tab completion
 
 ### Requirement: Configuration Symlinks
@@ -283,28 +282,6 @@ The system MUST execute topic-specific install.sh scripts with error handling.
 - THEN it SHALL display all topics with install.sh scripts
 - AND SHALL show them in a readable list format
 
-### Requirement: Cache Integration
-
-The system MUST integrate with the dotfiles caching system for optimal performance.
-
-**Note**: Detailed caching requirements are specified in the [Dotfiles Caching System Specification](../002-dotfiles-caching/spec.md).
-
-#### Scenario: Cached Shell Integration
-
-- GIVEN the shell starts
-- WHEN bash_profile and bashrc are sourced
-- THEN they SHALL check for cached shell integrations
-- AND SHALL use cached versions when available and fresh
-- AND SHALL regenerate caches automatically when stale
-
-#### Scenario: Cache Control via dot Command
-
-- GIVEN the dot command manages caches
-- WHEN user runs `dot invalidate`
-- THEN all shell integration caches SHALL be removed
-- WHEN user runs `dot status`
-- THEN cache status SHALL be displayed
-
 ### Requirement: Symlink Hygiene
 
 The system MUST detect and remove stale symlinks in XDG directories.
@@ -352,12 +329,11 @@ The system MUST provide comprehensive status information about the dotfiles inst
 - GIVEN dotfiles are installed
 - WHEN user runs `dot status`
 - THEN it SHALL display:
-  1. Shell cache status (files, sizes, ages, source counts)
-  2. Brewfile status (path, tap/formula/cask counts)
-  3. Homebrew status (prefix, installed counts)
-  4. XDG paths (CONFIG, DATA, STATE, CACHE)
-  5. Topics summary (with feature indicators: I=install, B=brew, A=aliases, E=env, C=completion, X=config)
-  6. Outdated packages (first 5, with timeout)
+  1. Brewfile status (path, tap/formula/cask counts)
+  2. Homebrew status (prefix, installed counts)
+  3. XDG paths (CONFIG, DATA, STATE, CACHE)
+  4. Topics summary (with feature indicators: I=install, B=brew, A=aliases, E=env, C=completion, X=config)
+  5. Outdated packages (first 5, with timeout)
 
 #### Scenario: Fast Status Display
 
@@ -380,13 +356,13 @@ The system MUST provide comprehensive status information about the dotfiles inst
 │                                                             │
 │  SOURCE: ~/.dotfiles/                                       │
 │  ├── <topic>/                    (19 topics)                │
-│  │   ├── bash_aliases            → cached to ~/.cache       │
-│  │   ├── bash_env                → cached to ~/.cache       │
-│  │   ├── bash_completion         → cached to ~/.cache       │
+│  │   ├── bash_aliases            → sourced by shell         │
+│  │   ├── bash_env                → sourced by shell         │
+│  │   ├── bash_completion         → sourced by shell         │
 │  │   ├── brew_packages           → aggregated to Brewfile   │
 │  │   ├── install.sh              → run by bootstrap         │
 │  │   ├── *.symlink               → linked to ~              │
-│  │   └── config/                 → linked to ~/.configi     │
+│  │   └── config/                 → linked to ~/.config      │
 │  ├── config/<app>/               → linked to ~/.config      │
 │  ├── local/                                                 │
 │  │   ├── bin/                    (executables)              │
@@ -397,13 +373,13 @@ The system MUST provide comprehensive status information about the dotfiles inst
 │                                                             │
 │  COMMANDS:                                                  │
 │  ├── script/bootstrap            Setup new machine          │
-│  └── local/bin/dot               Package & cache mgmt       │
+│  └── local/bin/dot               Package management         │
 │                                                             │
 │  XDG TARGET: (linked from dotfiles)                         │
 │  ├── ~/.config/<topic>/          User configuration         │
 │  ├── ~/.local/share/             User data, Brewfile        │
 │  ├── ~/.local/state/             Logs, history              │
-│  └── ~/.cache/dotfiles/          Shell caches               │
+│  └── ~/.cache/                   System cache directory     │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -501,16 +477,16 @@ The system MUST provide comprehensive status information about the dotfiles inst
 
 ### Topic Files Reference
 
-| File Type | Purpose | Loading Mechanism | Cached | Example |
-|-----------|---------|-------------------|--------|---------|
-| `bash_aliases` | Shell aliases and functions | Sourced by .bashrc | Yes (.cache/dotfiles/bash_aliases.sh) | `alias gs='git status'` |
-| `bash_env` | Environment variables | Sourced by .bash_profile | Yes (.cache/dotfiles/bash_env.sh) | `export EDITOR=nvim` |
-| `bash_completion` | Tab completion scripts | Sourced by .bashrc | Yes (.cache/dotfiles/bash_completion.sh) | `complete -F _git g` |
-| `brew_packages` | Homebrew dependencies | Sourced by dot command | Yes (Brewfile) | `brew "ripgrep"` |
-| `install.sh` | Topic-specific setup | Executed by bootstrap or `dot install` | No | Install plugins, set defaults |
-| `*.symlink` | Dotfiles to link to $HOME | Symlinked by bootstrap | No | bash_profile.symlink → ~/.bash_profile |
-| `config/` | XDG configuration directory | Symlinked by bootstrap | No | nvim/config → ~/.config/nvim |
-| `bash_shortcuts` | Keyboard shortcuts docs | Executed by shortcuts command | Yes (.cache/dotfiles/shortcuts/) | Display keybindings |
+| File Type | Purpose | Loading Mechanism | Example |
+|-----------|---------|-------------------|---------|
+| `bash_aliases` | Shell aliases and functions | Sourced by .bashrc | `alias gs='git status'` |
+| `bash_env` | Environment variables | Sourced by .bash_profile | `export EDITOR=nvim` |
+| `bash_completion` | Tab completion scripts | Sourced by .bashrc | `complete -F _git g` |
+| `brew_packages` | Homebrew dependencies | Aggregated by dot command | `brew "ripgrep"` |
+| `install.sh` | Topic-specific setup | Executed by bootstrap or `dot install` | Install plugins, set defaults |
+| `*.symlink` | Dotfiles to link to $HOME | Symlinked by bootstrap | bash_profile.symlink → ~/.bash_profile |
+| `config/` | XDG configuration directory | Symlinked by bootstrap | nvim/config → ~/.config/nvim |
+| `bash_shortcuts` | Keyboard shortcuts docs | Executed by shortcuts command | Display keybindings |
 
 ### Special Directories
 
@@ -520,7 +496,7 @@ Contains custom scripts available in PATH:
 
 | Script | Purpose |
 |--------|---------|
-| `dot` | Package manager, cache control, topic installation |
+| `dot` | Package manager, topic installation |
 | `hotkey` | System-wide hotkey daemon (Python) |
 | `shortcuts` | Display keyboard shortcuts for topics |
 | `launch-agents` | Multi-agent swarm management |
@@ -567,7 +543,7 @@ For applications that don't warrant a dedicated topic:
 
 **Purpose**: Define shell aliases and functions available in interactive shells.
 
-**Loading**: Sourced by .bashrc, cached to `~/.cache/dotfiles/bash_aliases.sh`
+**Loading**: Sourced by .bashrc
 
 **Format**:
 ```bash
@@ -602,7 +578,7 @@ fi
 
 **Purpose**: Export environment variables required by applications.
 
-**Loading**: Sourced by .bash_profile (login shells only), cached to `~/.cache/dotfiles/bash_env.sh`
+**Loading**: Sourced by .bash_profile (login shells only)
 
 **Format**:
 ```bash
@@ -634,7 +610,7 @@ fi
 
 **Purpose**: Provide tab completion for commands and aliases.
 
-**Loading**: Sourced by .bashrc after aliases, cached to `~/.cache/dotfiles/bash_completion.sh`
+**Loading**: Sourced by .bashrc after aliases
 
 **Format**:
 ```bash
@@ -882,16 +858,16 @@ config/
 
 #### Reserved Names
 
-| Name | Purpose | Discoverable |
-|------|---------|--------------|
-| `bash_aliases` | Shell aliases | Yes (cached) |
-| `bash_env` | Environment variables | Yes (cached) |
-| `bash_completion` | Tab completions | Yes (cached) |
-| `bash_shortcuts` | Keyboard shortcuts docs | Yes (cached) |
-| `brew_packages` | Homebrew dependencies | Yes (aggregated) |
-| `install.sh` | Topic installer | Yes (listed) |
-| `config/` | XDG config directory | Yes (symlinked) |
-| `*.symlink` | Home directory symlink | Yes (linked) |
+| Name | Purpose | Auto-Discovered |
+|------|---------|----------------|
+| `bash_aliases` | Shell aliases | Yes |
+| `bash_env` | Environment variables | Yes |
+| `bash_completion` | Tab completions | Yes |
+| `bash_shortcuts` | Keyboard shortcuts docs | Yes |
+| `brew_packages` | Homebrew dependencies | Yes |
+| `install.sh` | Topic installer | Yes |
+| `config/` | XDG config directory | Yes |
+| `*.symlink` | Home directory symlink | Yes |
 
 #### Custom Files
 
@@ -1036,7 +1012,6 @@ COMMANDS:
   install <topic>   Run install.sh for specific topic
   list              List topics with install.sh scripts
   status            Show installation status and outdated packages
-  invalidate        Clear dotfiles caches (shell integration)
   purge [--force]   Remove stale symlinks in XDG directories
   clean             Clean Claude Code config files from home directory
 
@@ -1081,67 +1056,6 @@ When `dot` runs (no --new):
    - Fall through to discovery algorithm above
 ```
 
-### Cache Strategy
-
-#### Cache Location
-
-All shell caches stored at:
-```
-${XDG_CACHE_HOME}/dotfiles/
-├── bash_env.sh           # Aggregated bash_env from all topics
-├── bash_aliases.sh       # Aggregated bash_aliases from all topics
-├── bash_completion.sh    # Aggregated bash_completion from all topics
-└── shortcuts/            # Keyboard shortcuts topics cache
-    └── topics.cache
-```
-
-#### Cache Generation
-
-Handled by shell initialization files (.bash_profile, .bashrc):
-
-```bash
-# Example from .bashrc for bash_aliases
-CACHE_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/bash_aliases.sh"
-
-# Check if cache is fresh
-if [ -f "$CACHE_FILE" ]; then
-    cache_valid=true
-    # Compare cache mtime against all source files
-    for file in "$DOTFILES"/*/bash_aliases; do
-        [ "$file" -nt "$CACHE_FILE" ] && cache_valid=false && break
-    done
-fi
-
-# If cache is stale or missing, regenerate
-if [ "$cache_valid" != true ]; then
-    mkdir -p "$(dirname "$CACHE_FILE")"
-    # Concatenate all bash_aliases files
-    cat "$DOTFILES"/*/bash_aliases > "$CACHE_FILE" 2>/dev/null
-fi
-
-# Source the cache
-[ -f "$CACHE_FILE" ] && source "$CACHE_FILE"
-```
-
-#### Invalidation Rules
-
-**Automatic**:
-- On shell start, compare cache mtime vs source files
-- If any source newer than cache, regenerate
-
-**Manual**:
-- `dot invalidate` - removes all cache files
-- Bootstrap purge - removes stale caches during setup
-
-#### Cache Performance
-
-| Operation | Uncached | Cached | Improvement |
-|-----------|----------|--------|-------------|
-| Shell startup (bash_aliases) | ~200ms | ~20ms | 10x faster |
-| Shell startup (bash_env) | ~150ms | ~15ms | 10x faster |
-| Shell startup (bash_completion) | ~250ms | ~25ms | 10x faster |
-| shortcuts command | ~150ms | ~50ms | 3x faster |
-
 ---
 
 ## XDG Base Directory Integration
@@ -1155,7 +1069,7 @@ The dotfiles system uses XDG Base Directory specification for organization:
 | `XDG_CONFIG_HOME` | `~/.config` | Topic configs, app settings |
 | `XDG_DATA_HOME` | `~/.local/share` | Brewfile, persistent data |
 | `XDG_STATE_HOME` | `~/.local/state` | Logs, history, runtime state |
-| `XDG_CACHE_HOME` | `~/.cache` | Shell caches, shortcuts cache |
+| `XDG_CACHE_HOME` | `~/.cache` | Temporary cache files |
 | (not XDG) | `~/.local/bin` | User executables (in PATH) |
 
 ### Triple-Layer Architecture
@@ -1210,7 +1124,7 @@ echo $XDG_CACHE_HOME    # Should be ~/.cache
 ls -la ~/.config        # Should contain topic symlinks
 ls -la ~/.local/share   # Should contain Brewfile
 ls -la ~/.local/state   # Should contain app state dirs
-ls -la ~/.cache         # Should contain dotfiles/ cache
+ls -la ~/.cache         # Should contain cached data
 
 # Verify symlink chain
 ls -la ~/.config/nvim           # → ~/.dotfiles/nvim/config/
@@ -1315,7 +1229,7 @@ chmod +x install.sh
 #### Step 3: Test Integration
 
 ```bash
-# Reload shell to test caching
+# Reload shell to test integration
 exec bash
 
 # Test environment
@@ -1467,25 +1381,6 @@ ls -la ~/.config/nvim
 readlink ~/.config/nvim  # Should point to dotfiles, not be duplicated
 ```
 
-### Test: Cache Invalidation
-
-```bash
-# Generate cache
-exec bash
-
-# Check cache exists
-ls -la ~/.cache/dotfiles/bash_aliases.sh
-
-# Modify source
-touch ~/.dotfiles/git/bash_aliases
-
-# Reload shell
-exec bash
-
-# Verify cache was regenerated (newer mtime)
-ls -la ~/.cache/dotfiles/bash_aliases.sh
-```
-
 ### Test: Symlink Validation
 
 ```bash
@@ -1567,8 +1462,8 @@ dot
 
 **Testing**:
 - Bootstrap SHALL be tested on clean macOS installation
-- Cache invalidation SHALL be verified with manual tests
 - Symlink creation SHALL be verified end-to-end
+- Topic discovery SHALL be verified with manual tests
 
 ### Portability
 
@@ -1592,22 +1487,15 @@ dot
 
 **Shell Startup**:
 - Interactive shell startup SHALL be <200ms
-- With caching, startup SHALL be <50ms faster
-- Cache freshness check SHALL be <10ms
 
 **Command Execution**:
 - `dot status` SHALL complete in <2 seconds
 - `dot list` SHALL complete in <500ms
-- `shortcuts` SHALL complete in <100ms (cached)
+- `shortcuts` SHALL complete in <100ms
 
 **Bootstrap**:
 - Initial bootstrap SHALL complete in <10 minutes (with Homebrew install)
 - Subsequent bootstrap runs SHALL complete in <2 minutes
-
-**Caching**:
-- Cache hits SHALL avoid filesystem scanning
-- Cache invalidation SHALL be automatic and transparent
-- Manual invalidation SHALL be instant
 
 ### User Experience
 
