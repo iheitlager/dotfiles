@@ -40,6 +40,13 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 The system MUST support modular topic-based organization where each topic is independently installable and discoverable.
 
+**Implementation:**
+- `bash/bashrc.symlink` - Discovers and sources bash_aliases and bash_completion from all topics
+- `bash/bash_profile.symlink` - Discovers and sources bash_env from all topics
+- `local/bin/dot::list` (lines 82-94) - Lists topics with install.sh scripts
+- `local/bin/dot::status` (lines 96-243) - Shows topic features (I=install, B=brew, A=aliases, etc.)
+- `script/bootstrap::run_installers()` (lines 318-333) - Executes install.sh for each topic
+
 #### Scenario: New Topic Added
 
 - GIVEN a developer creates a new topic directory at `~/.dotfiles/newtopic/`
@@ -73,6 +80,13 @@ The system MUST support modular topic-based organization where each topic is ind
 ### Requirement: XDG Base Directory Compliance
 
 The system MUST follow the XDG Base Directory Specification for all configuration, data, state, and cache paths.
+
+**Implementation:**
+- `script/bootstrap` (lines 23-26) - Exports XDG environment variables with defaults
+- `script/bootstrap::setup_xdg_dirs()` (lines 53-73) - Creates XDG directory structure
+- `script/bootstrap::link_config_files()` (lines 190-213) - Symlinks config directories to XDG_CONFIG_HOME
+- `bash/bash_profile.symlink` - Exports XDG variables at shell startup
+- `local/bin/dot::status` (lines 184-190) - Displays XDG paths
 
 #### Scenario: Bootstrap Creates XDG Directories
 
@@ -108,6 +122,18 @@ The system MUST follow the XDG Base Directory Specification for all configuratio
 ### Requirement: Bootstrap Installation
 
 The system MUST provide a one-time bootstrap process for new machines that is idempotent and safe.
+
+**Implementation:**
+- `script/bootstrap` (lines 353-362) - Main execution order
+- `script/bootstrap::setup_xdg_dirs()` (lines 53-73) - Step 1: Create XDG directories
+- `script/bootstrap::purge_stale_symlinks()` (lines 76-91) - Step 2: Clean stale symlinks
+- `script/bootstrap::validate_config_structure()` (lines 95-128) - Step 3: Validate config structure
+- `script/bootstrap::setup_gitconfig()` (lines 131-187) - Step 4: Setup local gitconfig
+- `script/bootstrap::install_brew_packages()` (lines 303-316) - Step 5: Install Homebrew packages
+- `script/bootstrap::install_dotfiles()` (lines 291-301) - Step 6: Install *.symlink files
+- `script/bootstrap::link_config_files()` (lines 190-213) - Step 7: Link config directories
+- `script/bootstrap::run_installers()` (lines 318-333) - Step 8: Run topic installers
+- `script/bootstrap` (lines 336-351) - Command-line flags parsing (--git, --no-brew)
 
 #### Scenario: Fresh Install
 
@@ -152,6 +178,14 @@ The system MUST provide a one-time bootstrap process for new machines that is id
 
 The system MUST automatically discover and install Homebrew packages from all topics.
 
+**Implementation:**
+- `local/bin/dot` (lines 400-410) - Uses existing Brewfile if available
+- `local/bin/dot` (lines 418-428) - Discovers and sources brew_packages from all topics
+- `local/bin/dot` (lines 430-437) - Exports Brewfile after installation
+- `local/bin/dot` (lines 386-394) - Export-only mode (--export flag)
+- `script/bootstrap::install_brew_packages()` (lines 303-316) - Calls dot --new during bootstrap
+- `homebrew/brew_install.sh` - Installs Homebrew if not present
+
 #### Scenario: Brew Packages Discovery
 
 - GIVEN multiple topics have brew_packages files
@@ -189,6 +223,11 @@ The system MUST aggregate and load shell configurations from all topics with pro
 
 **Note**: Performance optimization through caching is detailed in the [Dotfiles Caching System Specification](../002-dotfiles-caching/spec.md).
 
+**Implementation:**
+- `bash/bash_profile.symlink` - Discovers and sources all bash_env files from topics
+- `bash/bashrc.symlink` - Discovers and sources bash_aliases and bash_completion files
+- Shell integration is optimized via caching (see spec 002)
+
 #### Scenario: bash_env Sourced First
 
 - GIVEN topics have bash_env files
@@ -213,6 +252,12 @@ The system MUST aggregate and load shell configurations from all topics with pro
 ### Requirement: Configuration Symlinks
 
 The system MUST support two config directory patterns with conflict detection and validation.
+
+**Implementation:**
+- `script/bootstrap::link_config_files()` (lines 190-213) - Links both config patterns
+- `script/bootstrap::link_file()` (lines 216-289) - Helper function for symlink creation with conflict handling
+- `script/bootstrap::validate_config_structure()` (lines 95-128) - Validates no conflicting patterns
+- `script/bootstrap::install_dotfiles()` (lines 291-301) - Links *.symlink files to $HOME
 
 #### Scenario: Topic-Specific Config Pattern
 
@@ -250,6 +295,11 @@ The system MUST support two config directory patterns with conflict detection an
 
 The system MUST execute topic-specific install.sh scripts with error handling.
 
+**Implementation:**
+- `script/bootstrap::run_installers()` (lines 318-333) - Discovers and executes all install.sh scripts
+- `local/bin/dot::install` (lines 58-80) - Runs install.sh for specific topic
+- `local/bin/dot::list` (lines 82-94) - Lists all topics with install.sh scripts
+
 #### Scenario: Install Script Execution
 
 - GIVEN topics have install.sh files (e.g., bash/install.sh, osx/install.sh)
@@ -285,6 +335,13 @@ The system MUST execute topic-specific install.sh scripts with error handling.
 ### Requirement: Symlink Hygiene
 
 The system MUST detect and remove stale symlinks in XDG directories.
+
+**Implementation:**
+- `local/bin/dot::purge` (lines 270-320) - Scans XDG directories for stale symlinks
+- `local/bin/dot::purge` (lines 285-291) - Finds broken symlinks with maxdepth 2
+- `local/bin/dot::purge` (lines 296-300) - Lists stale symlinks with their targets
+- `local/bin/dot::purge` (lines 303-319) - Interactive or forced removal (--force flag)
+- `script/bootstrap::purge_stale_symlinks()` (lines 76-91) - Calls dot purge --force during bootstrap
 
 #### Scenario: Stale Symlink Detection
 
@@ -323,6 +380,14 @@ The system MUST detect and remove stale symlinks in XDG directories.
 ### Requirement: Status Reporting
 
 The system MUST provide comprehensive status information about the dotfiles installation.
+
+**Implementation:**
+- `local/bin/dot::status` (lines 96-243) - Main status command
+- `local/bin/dot::status` (lines 159-173) - Brewfile status (taps, formulae, casks)
+- `local/bin/dot::status` (lines 175-182) - Homebrew status (prefix, installed counts)
+- `local/bin/dot::status` (lines 184-190) - XDG paths display
+- `local/bin/dot::status` (lines 192-226) - Topics summary with feature indicators
+- `local/bin/dot::status` (lines 229-241) - Outdated packages (with timeout)
 
 #### Scenario: Complete Status Display
 
