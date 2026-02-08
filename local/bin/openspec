@@ -719,7 +719,9 @@ def extract_references(lines: List[str]) -> List[Reference]:
                 ref.ref_type = 'adr'
             elif '/test' in target or target.startswith('test'):
                 ref.ref_type = 'test'
-            elif target.endswith(('.py', '.js', '.ts', '.java', '.go', '.rs')):
+            elif target.endswith(('.py', '.js', '.ts', '.java', '.go', '.rs', '.sh', '.bash', '.symlink')) or \
+                 'script/' in target or '/bin/' in target or target.startswith('bin/') or \
+                 '/brew_install' in target:
                 ref.ref_type = 'source'
             else:
                 ref.ref_type = 'internal'
