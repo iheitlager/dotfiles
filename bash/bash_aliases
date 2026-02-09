@@ -47,15 +47,7 @@ alias t='tail -n 50'
 alias tf='tail -f'
 alias x='exit'
 
-# List aliases, optionally filtered
-_alias() {
-    if [ $# -eq 0 ]; then
-        alias | sort | bat --plain --language=bash
-    else
-        alias | sort | grep "$1" | bat --plain --language=bash
-    fi
-}
-alias a="_alias"
+alias a="aliases"
 
 alias c='clear'
 alias e='env | sort | bat --plain --language=bash' # make sure env is always sorted
