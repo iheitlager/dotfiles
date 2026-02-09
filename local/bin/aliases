@@ -197,10 +197,15 @@ extract_aliases() {
         echo ""
     fi
 
-    # Show count summary
-    local regular_count=${#regular_aliases[@]}
-    local function_alias_count=${#function_aliases[@]}
-    local functions_count=${#functions[@]}
+    # Show count summary - count keys safely
+    local regular_count=0
+    local function_alias_count=0
+    local functions_count=0
+
+    [[ -n "${!regular_aliases[*]}" ]] && regular_count=${#regular_aliases[@]}
+    [[ -n "${!function_aliases[*]}" ]] && function_alias_count=${#function_aliases[@]}
+    [[ -n "${!functions[*]}" ]] && functions_count=${#functions[@]}
+
     local total_aliases=$((regular_count + function_alias_count))
 
     if (( total_aliases > 0 || functions_count > 0 )); then
