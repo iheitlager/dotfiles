@@ -902,13 +902,13 @@ def validate_lifecycle_markers(lifecycle_sections: Dict[str, List[str]]) -> List
 def validate_main_spec_lifecycle(sections: Dict[str, List[str]]) -> List[ValidationIssue]:
     """Validate that main specs don't use delta lifecycle markers
 
-    Main specs (in specs/) should use "## Requirements" or "## ADDED Requirements".
-    They should NOT use MODIFIED, REMOVED, or RENAMED sections as these
+    Main specs (in specs/) should use "## Requirements" only.
+    They should NOT use ADDED, MODIFIED, REMOVED, or RENAMED sections as these
     are only for delta specs (in specs/changes/).
     """
     issues = []
 
-    invalid_markers = [LifecycleMarker.MODIFIED, LifecycleMarker.REMOVED, LifecycleMarker.RENAMED]
+    invalid_markers = [LifecycleMarker.ADDED, LifecycleMarker.MODIFIED, LifecycleMarker.REMOVED, LifecycleMarker.RENAMED]
 
     for marker in invalid_markers:
         for section_key in sections.keys():
