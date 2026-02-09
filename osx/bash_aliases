@@ -11,12 +11,12 @@ alias ghostty="/Applications/Ghostty.app/Contents/MacOS/ghostty"
 
 alias pubkey="more ~/.ssh/id_rsa.pub | pbcopy | echo '=> Public key copied to pasteboard.'" 
 
-workdir () { cd $WORK_DIR/$1 ; }
-studydir () { cd ~/studies/$1 ; }
-paperdir () { cd ~/papers/$1 ; }
-alias cdw='workdir'
-alias cds="studydir"
-alias cdp="paperdir"
+_workdir () { cd $WORK_DIR/$1 ; }
+_studydir () { cd ~/studies/$1 ; }
+_paperdir () { cd ~/papers/$1 ; }
+alias cdw='_workdir'
+alias cds="_studydir"
+alias cdp="_paperdir"
 
 bu () { cp $1 ~/tmp/`basename $1`-`date +%Y%m%d%H%M`.backup ; }
 
