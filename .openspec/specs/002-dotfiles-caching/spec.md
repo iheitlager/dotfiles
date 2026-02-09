@@ -33,11 +33,17 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ---
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Cache Management
 
 The system MUST cache shell integrations for fast startup with automatic and manual invalidation.
+
+**Implementation:**
+- `bash/bash_profile.symlink` - Generates and validates bash_env.sh cache
+- `bash/bashrc.symlink` - Generates and validates bash_aliases.sh and bash_completion.sh caches
+- `local/bin/dot::invalidate` (lines 245-268) - Manual cache invalidation command
+- `local/bin/dot::status` (lines 101-156) - Cache status display with sizes, ages, source counts
 
 #### Scenario: Cache Generation on First Run
 
@@ -86,6 +92,11 @@ The system MUST cache shell integrations for fast startup with automatic and man
 
 The system MUST cache bash_env, bash_aliases, and bash_completion files with proper loading order.
 
+**Implementation:**
+- `bash/bash_profile.symlink` - Caches bash_env files, sources in login shells
+- `bash/bashrc.symlink` - Caches bash_aliases and bash_completion, sources in interactive shells
+- Cache files stored at `${XDG_CACHE_HOME}/dotfiles/*.sh`
+
 #### Scenario: bash_env Cached and Sourced
 
 - GIVEN topics have bash_env files
@@ -116,6 +127,11 @@ The system MUST cache bash_env, bash_aliases, and bash_completion files with pro
 
 The system MUST accurately detect stale caches by comparing modification times.
 
+**Implementation:**
+- `bash/bash_profile.symlink` - Compares bash_env cache mtime against source files
+- `bash/bashrc.symlink` - Compares bash_aliases and bash_completion cache mtimes against sources
+- Uses `[ "$file" -nt "$CACHE_FILE" ]` test for mtime comparison
+
 #### Scenario: Cache Freshness Check
 
 - GIVEN a cache file exists at ${XDG_CACHE_HOME}/dotfiles/bash_aliases.sh
@@ -141,6 +157,11 @@ The system MUST accurately detect stale caches by comparing modification times.
 ### Requirement: Shortcuts Cache
 
 The system MUST cache the list of available keyboard shortcuts topics.
+
+**Implementation:**
+- `local/bin/shortcuts` - Discovers bash_shortcuts files, builds and validates cache
+- Cache stored at `${XDG_CACHE_HOME}/dotfiles/shortcuts/topics.cache`
+- `local/bin/dot::invalidate` - Removes shortcuts cache along with shell caches
 
 #### Scenario: Shortcuts Topics Cache
 
@@ -396,6 +417,37 @@ rm -rf ~/.dotfiles/testcache
 |----------|---------|---------|
 | `DOTFILES` | `~/.dotfiles` | Source directory for topics |
 | `XDG_CACHE_HOME` | `~/.cache` | Cache storage location |
+
+---
+
+## Metadata
+
+This section provides project-specific links for tracking and traceability.
+
+### Implementation Files
+
+**Cache Generation and Validation:**
+- [bash/bash_profile.symlink](bash/bash_profile.symlink) - bash_env cache management
+- [bash/bashrc.symlink](bash/bashrc.symlink) - bash_aliases and bash_completion cache management
+
+**Cache Control Commands:**
+- [local/bin/dot](local/bin/dot) - invalidate command (lines 245-268), status command (lines 101-156)
+- [local/bin/shortcuts](local/bin/shortcuts) - shortcuts cache management
+
+### Test Coverage
+
+**Manual Testing:**
+- Cache generation: Remove cache, start shell, verify cache created
+- Cache freshness: Modify source file, start shell, verify cache regenerated
+- Manual invalidation: Run `dot invalidate`, verify caches removed
+- Shortcuts cache: Run `shortcuts`, verify topics.cache created
+
+**Test Procedures:** Documented in "Testing Requirements" section of this spec
+
+### Related Specifications
+
+- [001-dotfiles-core](../001-dotfiles-core/spec.md) - Core dotfiles system that uses caching
+- [003-shortcuts-system](../003-shortcuts-system/spec.md) - Shortcuts system that uses caching
 
 ---
 

@@ -33,10 +33,15 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ---
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Dynamic Discovery
 The system MUST automatically discover all keyboard shortcut documentation files across the dotfiles repository without requiring manual registration.
+
+**Implementation:**
+- `local/bin/shortcuts` - Discovers bash_shortcuts files using find command
+- Uses `find "$DOTFILES" -type f -name 'bash_shortcuts'` for discovery
+- No hardcoded topic list, fully automatic
 
 #### Scenario: New Module Added
 - GIVEN a developer creates a new module directory in dotfiles
@@ -50,6 +55,11 @@ The system MUST automatically discover all keyboard shortcut documentation files
 
 ### Requirement: Smart Caching
 The system MUST cache discovered topics to minimize filesystem scanning while automatically invalidating stale caches.
+
+**Implementation:**
+- `local/bin/shortcuts` - Caching logic with mtime-based invalidation
+- Cache stored at `${XDG_CACHE_HOME}/dotfiles/shortcuts/topics.cache`
+- Compares cache mtime against bash_shortcuts source files
 
 #### Scenario: Cache Hit
 - GIVEN the topics cache exists and is fresh
@@ -68,6 +78,11 @@ The system MUST cache discovered topics to minimize filesystem scanning while au
 
 ### Requirement: Multiple Access Interfaces
 The system MUST provide multiple ergonomic ways to access shortcut documentation.
+
+**Implementation:**
+- `local/bin/shortcuts` - Main command with argument parsing
+- `bash/bash_aliases` - Defines `alias sc='shortcuts'`
+- `bash/bash_completion` - Bash help integration (if implemented)
 
 #### Scenario: Direct Command
 - GIVEN a user wants to see shortcuts
@@ -88,6 +103,11 @@ The system MUST provide multiple ergonomic ways to access shortcut documentation
 
 ### Requirement: Topic Filtering
 The system MUST allow users to view shortcuts for specific topics or all topics.
+
+**Implementation:**
+- `local/bin/shortcuts` - Argument parsing and topic filtering logic
+- Displays all topics when no argument provided
+- Filters to specific topic when argument matches
 
 #### Scenario: All Shortcuts
 - GIVEN multiple topics exist (bash, tmux, nvim, ghostty)
@@ -110,6 +130,11 @@ The system MUST allow users to view shortcuts for specific topics or all topics.
 ### Requirement: Cache Management
 The system MUST integrate with the dotfiles cache management infrastructure.
 
+**Implementation:**
+- `local/bin/shortcuts` - `--refresh` flag for manual cache rebuild
+- `local/bin/dot::invalidate` (lines 259-261) - Removes shortcuts cache
+- Integration via shared cache directory `${XDG_CACHE_HOME}/dotfiles/`
+
 #### Scenario: Cache Invalidation via dot Command
 - GIVEN the shortcuts cache exists
 - WHEN a user runs `dot invalidate`
@@ -125,6 +150,12 @@ The system MUST integrate with the dotfiles cache management infrastructure.
 
 ### Requirement: Extensible Module Format
 The system MUST support a simple, consistent format for module-specific shortcut documentation.
+
+**Implementation:**
+- `bash/bash_shortcuts` - Reference implementation with helper functions
+- `tmux/bash_shortcuts` - Tmux shortcuts implementation
+- `nvim/bash_shortcuts` - Neovim shortcuts implementation
+- `config/ghostty/bash_shortcuts` - Ghostty shortcuts implementation
 
 #### Scenario: Standard Format
 - GIVEN a module wants to document shortcuts
@@ -147,6 +178,11 @@ The system MUST support a simple, consistent format for module-specific shortcut
 ### Requirement: Performance Constraints
 The system MUST maintain fast response times for interactive use.
 
+**Implementation:**
+- `local/bin/shortcuts` - Optimized with caching to avoid filesystem scans
+- Cache hit: Single file read + bash script execution
+- Cold start: Find command + cache generation + execution
+
 #### Scenario: Cached Execution
 - GIVEN a valid cache exists
 - WHEN a user runs `shortcuts bash`
@@ -159,6 +195,13 @@ The system MUST maintain fast response times for interactive use.
 
 ### Requirement: Cross-Module Consistency
 All module `bash_shortcuts` files MUST follow a consistent structure and format.
+
+**Implementation:**
+- Consistent helper functions defined in each bash_shortcuts file:
+  - `shortcut()` - Formats key-description pairs
+  - `note()` - Formats explanatory notes
+- Standardized color codes: GREEN, CYAN, RESET
+- All files follow same organizational pattern
 
 #### Scenario: Helper Functions
 - GIVEN any module's `bash_shortcuts` file
@@ -418,6 +461,41 @@ time shortcuts bash
 - Output SHALL use consistent formatting and colors
 - Error messages SHALL be clear and actionable
 - Help text SHALL include examples
+
+---
+
+## Metadata
+
+This section provides project-specific links for tracking and traceability.
+
+### Implementation Files
+
+**Main Command:**
+- [local/bin/shortcuts](local/bin/shortcuts) - Shortcuts command with discovery, caching, and filtering
+
+**Shortcut Documentation Files:**
+- [bash/bash_shortcuts](bash/bash_shortcuts) - Bash keyboard shortcuts
+- [tmux/bash_shortcuts](tmux/bash_shortcuts) - Tmux keyboard shortcuts
+- [nvim/bash_shortcuts](nvim/bash_shortcuts) - Neovim keyboard shortcuts
+- [config/ghostty/bash_shortcuts](config/ghostty/bash_shortcuts) - Ghostty terminal shortcuts
+
+**Shell Integration:**
+- [bash/bash_aliases](bash/bash_aliases) - Defines `sc` alias for shortcuts command
+
+### Test Coverage
+
+**Manual Testing:**
+- Discovery: Add new bash_shortcuts file, run shortcuts, verify it appears
+- Caching: Run shortcuts twice, verify second run uses cache
+- Filtering: Run `shortcuts bash`, verify only bash shortcuts shown
+- Invalidation: Run `dot invalidate`, verify shortcuts cache removed
+
+**Test Procedures:** Documented in "Testing Requirements" section of this spec
+
+### Related Specifications
+
+- [001-dotfiles-core](../001-dotfiles-core/spec.md) - Core dotfiles system
+- [002-dotfiles-caching](../002-dotfiles-caching/spec.md) - Caching infrastructure used by shortcuts
 
 ---
 

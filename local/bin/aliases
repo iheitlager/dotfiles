@@ -1,0 +1,322 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# aliases - Display shell aliases for various topics
+# Usage: aliases [topic]
+# Dynamically discovers all bash_aliases files in dotfiles
+
+set -euo pipefail
+
+# Color codes
+BOLD='\033[1m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+# Configuration
+DOTFILES="${HOME}/.dotfiles"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+CACHE_FILE="${CACHE_DIR}/aliases.cache"
+
+# Associative arrays for topics
+declare -A TOPIC_PATHS
+declare -a TOPICS
+
+discover_aliases() {
+    # Discover all bash_aliases files in dotfiles directory
+    while IFS= read -r filepath; do
+        # Extract relative path from dotfiles root
+        local relpath="${filepath#$DOTFILES/}"
+        # Extract directory name as topic (parent directory)
+        local topic
+        if [[ "$relpath" == */* ]]; then
+            # For paths like "bash/bash_aliases" or "config/ghostty/bash_aliases"
+            local dir=$(dirname "$relpath")
+            # Use basename of directory for topic name, unless it's 'config'
+            if [[ "$dir" == config/* ]]; then
+                # For config/app/bash_aliases -> app
+                topic=$(basename "$dir")
+            else
+                # For bash/bash_aliases -> bash
+                topic=$(basename "$dir")
+            fi
+        else
+            # For bash_aliases in root (shouldn't happen, but handle it)
+            topic="general"
+        fi
+
+        TOPIC_PATHS["$topic"]="$relpath"
+    done < <(find "$DOTFILES" -type f -name "bash_aliases" 2>/dev/null | sort)
+
+    # Build sorted topics array
+    TOPICS=($(printf '%s\n' "${!TOPIC_PATHS[@]}" | sort))
+}
+
+load_aliases_from_cache() {
+    # Load topics from cache if valid
+    if [[ ! -f "$CACHE_FILE" ]]; then
+        return 1
+    fi
+
+    # Check if cache is stale (older than any bash_aliases file)
+    local cache_mtime=$(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+    local newest_file_mtime=0
+
+    while IFS= read -r file; do
+        local file_mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+        if (( file_mtime > newest_file_mtime )); then
+            newest_file_mtime=$file_mtime
+        fi
+    done < <(find "$DOTFILES" -type f -name "bash_aliases" 2>/dev/null)
+
+    if (( cache_mtime < newest_file_mtime )); then
+        return 1
+    fi
+
+    # Load from cache
+    while IFS='=' read -r topic path; do
+        TOPIC_PATHS["$topic"]="$path"
+    done < "$CACHE_FILE"
+
+    TOPICS=($(printf '%s\n' "${!TOPIC_PATHS[@]}" | sort))
+    return 0
+}
+
+save_aliases_to_cache() {
+    # Save discovered topics to cache
+    mkdir -p "$CACHE_DIR"
+    : > "$CACHE_FILE"
+
+    for topic in "${!TOPIC_PATHS[@]}"; do
+        echo "${topic}=${TOPIC_PATHS[$topic]}" >> "$CACHE_FILE"
+    done
+}
+
+init_aliases() {
+    # Try to load from cache first, fall back to discovery
+    if ! load_aliases_from_cache; then
+        discover_aliases
+        save_aliases_to_cache
+    fi
+}
+
+show_header() {
+    local topic=$1
+    echo -e "\n${BOLD}${CYAN}═══════════════════════════════════════════════════════════${RESET}"
+    echo -e "${BOLD}${CYAN}  $(echo "$topic" | tr '[:lower:]' '[:upper:]') ALIASES${RESET}"
+    echo -e "${BOLD}${CYAN}═══════════════════════════════════════════════════════════${RESET}\n"
+}
+
+extract_aliases() {
+    local file=$1
+
+    # Arrays to store different types
+    declare -A functions
+    declare -A regular_aliases
+    declare -A function_aliases
+
+    # First pass: collect all functions
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+
+        if [[ "$line" =~ ^[[:space:]]*(function[[:space:]]+)?([a-zA-Z0-9_-]+)[[:space:]]*\(\) ]]; then
+            local func_name="${BASH_REMATCH[2]}"
+            functions["$func_name"]=1
+        fi
+    done < "$file"
+
+    # Second pass: collect aliases and categorize
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+
+        if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([a-zA-Z0-9_-]+)=(.+)$ ]]; then
+            local alias_name="${BASH_REMATCH[1]}"
+            local alias_cmd="${BASH_REMATCH[2]}"
+
+            # Handle quoted values
+            if [[ "$alias_cmd" =~ ^\'(.*)\'([[:space:]]*#.*)?$ ]] || [[ "$alias_cmd" =~ ^\"(.*)\"([[:space:]]*#.*)?$ ]]; then
+                alias_cmd="${BASH_REMATCH[1]}"
+            elif [[ "$alias_cmd" =~ ^([^#]+)([[:space:]]+#.*)?$ ]]; then
+                alias_cmd="${BASH_REMATCH[1]}"
+                alias_cmd="${alias_cmd%%[[:space:]]}"
+            fi
+
+            # Check if alias points to a function
+            if [[ -n "${functions[$alias_cmd]:-}" ]]; then
+                function_aliases["$alias_name"]="$alias_cmd"
+            else
+                regular_aliases["$alias_name"]="$alias_cmd"
+            fi
+        fi
+    done < "$file"
+
+    # Display regular aliases
+    if [[ -n "${!regular_aliases[*]}" ]]; then
+        echo -e "${BOLD}  Aliases:${RESET}"
+        for alias_name in $(printf '%s\n' "${!regular_aliases[@]}" | sort); do
+            printf "    ${GREEN}%-20s${RESET} %s\n" "$alias_name" "${regular_aliases[$alias_name]}"
+        done
+        echo ""
+    fi
+
+    # Display aliases to functions
+    if [[ -n "${!function_aliases[*]}" ]]; then
+        echo -e "${BOLD}  Aliases to Functions:${RESET}"
+        for alias_name in $(printf '%s\n' "${!function_aliases[@]}" | sort); do
+            local target="${function_aliases[$alias_name]}"
+            # Determine function type and print with appropriate color
+            if [[ "$target" =~ ^__ ]]; then
+                printf "    ${GREEN}%-20s${RESET} %s ${CYAN}(dunder function)${RESET}\n" "$alias_name" "$target"
+            elif [[ "$target" =~ ^_ ]]; then
+                printf "    ${GREEN}%-20s${RESET} %s ${CYAN}(private function)${RESET}\n" "$alias_name" "$target"
+            else
+                printf "    ${GREEN}%-20s${RESET} %s ${DIM}(function)${RESET}\n" "$alias_name" "$target"
+            fi
+        done
+        echo ""
+    fi
+
+    # Display functions
+    if [[ -n "${!functions[*]}" ]]; then
+        echo -e "${BOLD}  Functions:${RESET}"
+        for func_name in $(printf '%s\n' "${!functions[@]}" | sort); do
+            # Categorize function
+            if [[ "$func_name" =~ ^__ ]]; then
+                printf "    ${GREEN}%-20s${RESET} ${CYAN}(dunder/special)${RESET}\n" "$func_name"
+            elif [[ "$func_name" =~ ^_ ]]; then
+                printf "    ${GREEN}%-20s${RESET} ${CYAN}(private)${RESET}\n" "$func_name"
+            else
+                printf "    ${GREEN}%-20s${RESET} ${DIM}(public)${RESET}\n" "$func_name"
+            fi
+        done
+        echo ""
+    fi
+
+    # Show count summary - count keys safely
+    local regular_count=0
+    local function_alias_count=0
+    local functions_count=0
+
+    [[ -n "${!regular_aliases[*]}" ]] && regular_count=${#regular_aliases[@]}
+    [[ -n "${!function_aliases[*]}" ]] && function_alias_count=${#function_aliases[@]}
+    [[ -n "${!functions[*]}" ]] && functions_count=${#functions[@]}
+
+    local total_aliases=$((regular_count + function_alias_count))
+
+    if (( total_aliases > 0 || functions_count > 0 )); then
+        echo -e "${DIM}  Total: $total_aliases aliases ($function_alias_count to functions), $functions_count functions${RESET}"
+    else
+        echo -e "${DIM}  (no aliases or functions found)${RESET}"
+    fi
+}
+
+show_aliases() {
+    local topic=$1
+
+    if [[ -z "${TOPIC_PATHS[$topic]:-}" ]]; then
+        echo -e "${YELLOW}Error: Unknown topic '${topic}'${RESET}" >&2
+        return 1
+    fi
+
+    local aliases_file="${DOTFILES}/${TOPIC_PATHS[$topic]}"
+
+    if [[ -f "$aliases_file" ]]; then
+        show_header "$topic"
+        extract_aliases "$aliases_file"
+    else
+        echo -e "${YELLOW}Warning: No aliases found for topic '${topic}' at ${aliases_file}${RESET}" >&2
+    fi
+}
+
+print_usage() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+
+    $HELP << EOF
+Usage: aliases [TOPIC] [OPTIONS]
+
+Display shell aliases for various topics. Automatically discovers
+bash_aliases files in ~/.dotfiles modules.
+
+TOPICS:$(
+    if [[ ${#TOPICS[@]} -gt 0 ]]; then
+        for topic in "${TOPICS[@]}"; do
+            local path="${TOPIC_PATHS[$topic]}"
+            printf "\n    %-12s %s" "$topic" "($path)"
+        done
+    else
+        echo "
+    (none found - bash_aliases files should exist in module directories)"
+    fi
+)
+
+OPTIONS:
+    --refresh         Force refresh cache and rescan dotfiles
+    -h, --help        Show this help message
+
+EXAMPLES:
+    aliases                 # Show all aliases
+    aliases bash            # Show bash aliases only
+    aliases --refresh       # Rescan dotfiles for new aliases
+    al                      # Short alias for aliases
+
+ABOUT:
+    Extracts and displays alias definitions and function names from
+    bash_aliases files across all dotfiles topics. Caches discovered
+    topics for fast access.
+
+EOF
+}
+
+main() {
+    # Initialize topics (from cache or discovery)
+    init_aliases
+
+    # Check if we have any topics
+    if [[ ${#TOPICS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}No aliases found in ${DOTFILES}${RESET}" >&2
+        echo "Expected to find 'bash_aliases' files in module directories." >&2
+        exit 1
+    fi
+
+    local topic="${1:-all}"
+
+    case "$topic" in
+        -h|--help|help)
+            print_usage
+            exit 0
+            ;;
+        --refresh)
+            # Force refresh cache
+            discover_aliases
+            save_aliases_to_cache
+            echo -e "${GREEN}Cache refreshed. Found ${#TOPICS[@]} topics.${RESET}"
+            exit 0
+            ;;
+        all)
+            for t in "${TOPICS[@]}"; do
+                show_aliases "$t"
+            done
+            ;;
+        *)
+            # Check if topic exists
+            if [[ -n "${TOPIC_PATHS[$topic]:-}" ]]; then
+                show_aliases "$topic"
+            else
+                echo -e "${YELLOW}Unknown topic: ${topic}${RESET}" >&2
+                echo ""
+                print_usage
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+main "$@"
