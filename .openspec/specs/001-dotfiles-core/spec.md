@@ -551,7 +551,6 @@ The system MUST provide comprehensive status information about the dotfiles inst
 | `install.sh` | Topic-specific setup | Executed by bootstrap or `dot install` | Install plugins, set defaults |
 | `*.symlink` | Dotfiles to link to $HOME | Symlinked by bootstrap | bash_profile.symlink → ~/.bash_profile |
 | `config/` | XDG configuration directory | Symlinked by bootstrap | nvim/config → ~/.config/nvim |
-| `bash_shortcuts` | Keyboard shortcuts docs | Executed by shortcuts command | Display keybindings |
 
 ### Special Directories
 
@@ -562,10 +561,6 @@ Contains custom scripts available in PATH:
 | Script | Purpose |
 |--------|---------|
 | `dot` | Package manager, topic installation |
-| `hotkey` | System-wide hotkey daemon (Python) |
-| `shortcuts` | Display keyboard shortcuts for topics |
-| `launch-agents` | Multi-agent swarm management |
-| `swarm-job` | Job queue for agent coordination |
 | `git-*` | Git utility scripts |
 
 #### local/lib/ - Shared Libraries
@@ -575,7 +570,6 @@ Contains reusable code sourced by scripts:
 | Library | Purpose |
 |---------|---------|
 | `shell-common.sh` | Common shell functions and utilities |
-| `templates/` | Script templates for code generation |
 
 #### local/share/ - Static Data
 
@@ -584,7 +578,6 @@ Contains non-executable data files:
 | File | Purpose |
 |------|---------|
 | `Brewfile` | Generated Homebrew package list |
-| `WORKSPACE_AGENT.md` | Workspace agent instructions |
 
 #### config/ - General XDG Configs
 
@@ -596,7 +589,6 @@ For applications that don't warrant a dedicated topic:
 | `ghostty/` | Terminal emulator |
 | `pip/` | Python package manager |
 | `ripgrep/` | Fast grep alternative |
-| `swarm-daemon/` | Agent coordination daemon |
 
 ---
 
@@ -804,7 +796,7 @@ echo "✓ mytopic installed"
 
 **Rules**:
 - One config/ per topic (under topic directory)
-- OR use config/<app>/ for apps without dedicated topic
+- OR use `config/<app>/` for apps without dedicated topic
 - Bootstrap validates no conflicts between patterns
 - Can contain any file structure (nested dirs, multiple files)
 
@@ -905,7 +897,6 @@ config/
 ├── bat/                  # → ~/.config/bat/
 │   └── config
 ├── ghostty/              # → ~/.config/ghostty/
-│   ├── bash_shortcuts*
 │   └── config
 ├── pip/                  # → ~/.config/pip/
 │   └── pip.conf
@@ -915,7 +906,7 @@ config/
 
 **Key Patterns**:
 - Apps without dedicated topic go under config/
-- Each subdirectory becomes ~/.config/<app>/
+- Each subdirectory becomes `~/.config/<app>/`
 - Can include bash_shortcuts for documentation
 - Simple apps that don't need brew_packages or install.sh
 
@@ -928,7 +919,6 @@ config/
 | `bash_aliases` | Shell aliases | Yes |
 | `bash_env` | Environment variables | Yes |
 | `bash_completion` | Tab completions | Yes |
-| `bash_shortcuts` | Keyboard shortcuts docs | Yes |
 | `brew_packages` | Homebrew dependencies | Yes |
 | `install.sh` | Topic installer | Yes |
 | `config/` | XDG config directory | Yes |
@@ -948,7 +938,6 @@ Files not matching reserved names:
 | bash_aliases | No | Sourced by shell |
 | bash_env | No | Sourced by shell |
 | bash_completion | No | Sourced by shell |
-| bash_shortcuts | Yes | Executed by shortcuts command |
 | brew_packages | No | Sourced by dot command |
 | install.sh | Yes | Executed by bootstrap/dot |
 | local/bin/* | Yes | User commands |

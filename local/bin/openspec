@@ -211,6 +211,19 @@ class ValidationResult:
             result["lifecycle_sections"] = {k: len(v) for k, v in self.lifecycle_sections.items()}
         return result
 
+class OutputMode(Enum):
+    """Output mode for commands"""
+    COMPACT = "compact"
+    VERBOSE = "verbose"
+    JSON = "json"
+
+@dataclass
+class OutputConfig:
+    """Configuration for output formatting"""
+    mode: OutputMode
+    use_color: bool = True
+    show_guidance: bool = True
+
 # =============================================================================
 # CONFIGURATION AND RULES
 # =============================================================================
@@ -252,14 +265,24 @@ PROFILE_OVERRIDES = {
     "strict": {
         "validation": {
             "metadata": {
-                "required": ["Domain", "Version", "Status", "Date", "Owner"],
+                "required": ["Domain", "Version", "Status", "Date"],
             },
             "sections": {
-                "required": ["Overview", "RFC 2119 Keywords", "Requirements", "Philosophy", "Key Capabilities", "References"],
+                "required": ["Overview", "RFC 2119 Keywords", "Requirements"],
+            },
+            "requirements": {
+                "allowed_keywords": ["MUST", "SHALL"],
             },
         },
         "reporting": {
             "fail_on_warning": True,
+        },
+    },
+    "standard": {
+        "validation": {
+            "requirements": {
+                "allowed_keywords": ["MUST", "SHALL", "SHOULD", "MAY"],
+            },
         },
     },
     "lenient": {
@@ -273,6 +296,7 @@ PROFILE_OVERRIDES = {
             "requirements": {
                 "must_have_scenarios": False,
                 "require_given_when_then": False,
+                "require_rfc2119_keywords": False,
             },
         },
     },
@@ -899,6 +923,20 @@ def validate_main_spec_lifecycle(sections: Dict[str, List[str]]) -> List[Validat
 
     return issues
 
+def extract_rfc2119_keyword(text: str) -> Optional[str]:
+    """Extract RFC 2119 keyword from requirement statement"""
+    if not text:
+        return None
+
+    keywords = ["MUST NOT", "SHALL NOT", "SHOULD NOT", "MUST", "SHALL", "SHOULD", "MAY"]
+    text_upper = text.upper()
+
+    for keyword in keywords:
+        if keyword in text_upper:
+            return keyword
+
+    return None
+
 def validate_requirements(requirements: List[Requirement], rules: Dict[str, Any]) -> List[ValidationIssue]:
     """Validate requirements against rules"""
     issues = []
@@ -907,6 +945,7 @@ def validate_requirements(requirements: List[Requirement], rules: Dict[str, Any]
     must_have_scenarios = req_rules.get("must_have_scenarios", True)
     require_gwt = req_rules.get("require_given_when_then", True)
     require_rfc2119 = req_rules.get("require_rfc2119_keywords", True)
+    allowed_keywords = req_rules.get("allowed_keywords", None)
 
     if not requirements:
         issues.append(ValidationIssue(
@@ -917,16 +956,27 @@ def validate_requirements(requirements: List[Requirement], rules: Dict[str, Any]
         return issues
 
     for req in requirements:
+        # Extract RFC 2119 keyword
+        keyword = extract_rfc2119_keyword(req.statement) if req.statement else None
+
         # Check for RFC 2119 keywords in statement
-        if require_rfc2119 and req.statement:
-            has_keyword = any(kw in req.statement.upper() for kw in ["MUST", "SHALL", "SHOULD", "MAY"])
-            if not has_keyword:
-                issues.append(ValidationIssue(
-                    severity=Severity.WARNING,
-                    rule="requirements.missing_rfc2119",
-                    message=f"Requirement '{req.name}' missing RFC 2119 keyword (MUST/SHALL/SHOULD/MAY)",
-                    line_number=req.line_number
-                ))
+        if require_rfc2119 and not keyword:
+            issues.append(ValidationIssue(
+                severity=Severity.WARNING,
+                rule="requirements.missing_rfc2119",
+                message=f"Requirement '{req.name}' missing RFC 2119 keyword (MUST/SHALL/SHOULD/MAY)",
+                line_number=req.line_number
+            ))
+
+        # Check if keyword is allowed in current profile
+        if allowed_keywords and keyword and keyword not in allowed_keywords:
+            # In strict mode, disallowed keywords are INFO level (not errors)
+            issues.append(ValidationIssue(
+                severity=Severity.INFO,
+                rule="requirements.keyword_not_in_profile",
+                message=f"Requirement '{req.name}' uses '{keyword}' which is not in allowed keywords for this profile: {', '.join(allowed_keywords)}",
+                line_number=req.line_number
+            ))
 
         # Check for scenarios
         if must_have_scenarios and not req.scenarios:
@@ -1075,6 +1125,682 @@ def validate_spec(
 # =============================================================================
 
 console = Console()
+
+class OutputFormatter:
+    """Base class for output formatters"""
+
+    def __init__(self, config: OutputConfig):
+        self.config = config
+        self.console = Console() if config.use_color else Console(no_color=True)
+
+    def format_list(self, specs_data: List[Dict], spec_dir: Path) -> None:
+        """Format list command output"""
+        raise NotImplementedError
+
+    def format_validate(self, results: List[ValidationResult]) -> None:
+        """Format validate command output"""
+        raise NotImplementedError
+
+    def format_stats(self, stats_data: Dict) -> None:
+        """Format stats command output"""
+        raise NotImplementedError
+
+    def format_coverage(self, coverage_data: Dict) -> None:
+        """Format coverage command output"""
+        raise NotImplementedError
+
+class CompactFormatter(OutputFormatter):
+    """Compact output with tables and minimal summaries"""
+
+    def format_list(self, specs_data: List[Dict], spec_dir: Path) -> None:
+        """Compact table of specs"""
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Spec")
+        table.add_column("Domain")
+        table.add_column("Status")
+        table.add_column("Reqs", justify="right")
+        table.add_column("Scenarios", justify="right")
+
+        for spec in specs_data:
+            domain = spec.get("domain") or "-"
+            status = spec.get("status") or "-"
+            req_count = str(spec.get("requirement_count", 0))
+            scenario_count = str(spec.get("scenario_count", 0))
+
+            table.add_row(
+                spec["title"],
+                domain,
+                status,
+                req_count,
+                scenario_count
+            )
+
+        self.console.print(table)
+
+        # Summary
+        total_reqs = sum(spec.get("requirement_count", 0) for spec in specs_data)
+        total_scenarios = sum(spec.get("scenario_count", 0) for spec in specs_data)
+        avg_scenarios = (total_scenarios / total_reqs) if total_reqs > 0 else 0
+
+        self.console.print(f"\nTotal: {len(specs_data)} spec(s), {total_reqs} requirements, {total_scenarios} scenarios (avg {avg_scenarios:.1f}/req)")
+
+    def format_validate(self, results: List[ValidationResult]) -> None:
+        """Compact validation output"""
+        total_errors = 0
+        total_warnings = 0
+        total_info = 0
+
+        for result in results:
+            spec_name = Path(result.spec_file).parent.name
+
+            # Create status indicator
+            if result.has_errors():
+                status = "[red]✗ FAILED[/red]"
+            elif result.has_warnings():
+                status = "[yellow]⚠ WARNINGS[/yellow]"
+            else:
+                status = "[green]✓ PASSED[/green]"
+
+            # Print spec header
+            self.console.print(f"{status} {spec_name}", style="bold")
+
+            # Print issues if any
+            if result.issues:
+                for issue in result.issues:
+                    severity_color = {
+                        Severity.ERROR: "red",
+                        Severity.WARNING: "yellow",
+                        Severity.INFO: "blue",
+                    }[issue.severity]
+
+                    location = f":{issue.line_number}" if issue.line_number else ""
+                    self.console.print(
+                        f"  [{severity_color}]{issue.severity.value}[/{severity_color}] "
+                        f"{issue.message} {location}",
+                        style="dim"
+                    )
+
+            total_errors += result.error_count()
+            total_warnings += result.warning_count()
+            total_info += result.info_count()
+
+        # Print summary
+        self.console.print("=" * 60)
+        self.console.print(f"Validated {len(results)} spec(s)", style="bold")
+
+        if total_errors > 0:
+            self.console.print(f"  [red]✗ {total_errors} error(s)[/red]")
+        if total_warnings > 0:
+            self.console.print(f"  [yellow]⚠ {total_warnings} warning(s)[/yellow]")
+        if total_info > 0:
+            self.console.print(f"  [blue]ℹ {total_info} info[/blue]")
+
+        if total_errors == 0 and total_warnings == 0:
+            self.console.print(f"  [green]✓ All specs passed[/green]")
+
+    def format_stats(self, stats_data: Dict) -> None:
+        """Compact stats output"""
+        from rich.table import Table
+
+        # Summary table
+        table = Table(show_header=True, header_style="bold", title="Spec Statistics")
+        table.add_column("Metric")
+        table.add_column("Value", justify="right")
+
+        table.add_row("Total Specs", str(stats_data.get("total_specs", 0)))
+        table.add_row("Total Requirements", str(stats_data.get("total_requirements", 0)))
+        table.add_row("Total Scenarios", str(stats_data.get("total_scenarios", 0)))
+
+        if stats_data.get("total_specs", 0) > 0:
+            avg_reqs = stats_data.get("total_requirements", 0) / stats_data["total_specs"]
+            table.add_row("Avg Reqs/Spec", f"{avg_reqs:.1f}")
+
+        if stats_data.get("total_requirements", 0) > 0:
+            avg_scenarios = stats_data.get("total_scenarios", 0) / stats_data["total_requirements"]
+            table.add_row("Avg Scenarios/Req", f"{avg_scenarios:.1f}")
+
+        self.console.print(table)
+
+        # Quality metrics table
+        quality = stats_data.get("quality_metrics", {})
+        if quality:
+            quality_table = Table(show_header=True, header_style="bold", title="Quality Metrics")
+            quality_table.add_column("Metric")
+            quality_table.add_column("Value", justify="right")
+
+            quality_table.add_row("Scenario Coverage", f"{quality.get('scenario_coverage_percent', 0):.1f}%")
+            quality_table.add_row("Avg Scenario Depth", f"{quality.get('avg_scenario_depth', 0):.1f}")
+            quality_table.add_row("MUST/SHALL Coverage", f"{quality.get('must_coverage_percent', 0):.1f}%")
+
+            self.console.print()
+            self.console.print(quality_table)
+
+        # Requirement types table
+        req_types = stats_data.get("requirement_types", {})
+        if req_types:
+            types_table = Table(show_header=True, header_style="bold", title="Requirement Distribution")
+            types_table.add_column("Type")
+            types_table.add_column("Count", justify="right")
+
+            types_table.add_row("MUST", str(req_types.get("MUST", 0)))
+            types_table.add_row("SHALL", str(req_types.get("SHALL", 0)))
+            types_table.add_row("SHOULD", str(req_types.get("SHOULD", 0)))
+            types_table.add_row("MAY", str(req_types.get("MAY", 0)))
+            if req_types.get("OTHER", 0) > 0:
+                types_table.add_row("OTHER", str(req_types.get("OTHER", 0)))
+
+            self.console.print()
+            self.console.print(types_table)
+
+    def format_coverage(self, coverage_data: Dict) -> None:
+        """Compact coverage output"""
+        from rich.table import Table
+
+        table = Table(show_header=True, header_style="bold", title="Reference Coverage")
+        table.add_column("Spec")
+        table.add_column("ADRs", justify="right")
+        table.add_column("Tests", justify="right")
+        table.add_column("Source", justify="right")
+        table.add_column("Total", justify="right")
+
+        for spec in coverage_data.get("specs", []):
+            refs = spec.get("references", {})
+            total = refs.get("adr", 0) + refs.get("test", 0) + refs.get("source", 0)
+
+            table.add_row(
+                spec["title"],
+                str(refs.get("adr", 0)),
+                str(refs.get("test", 0)),
+                str(refs.get("source", 0)),
+                str(total)
+            )
+
+        self.console.print(table)
+
+        # Summary
+        summary = coverage_data.get("summary", {})
+        self.console.print(f"\nTotal References: {summary.get('total_references', 0)}")
+
+class VerboseFormatter(OutputFormatter):
+    """Detailed output with guidance"""
+
+    def format_list(self, specs_data: List[Dict], spec_dir: Path) -> None:
+        """Verbose list with requirements"""
+        for spec in specs_data:
+            self.console.print(f"\n[bold]{spec['title']}[/bold]")
+            self.console.print(f"  Path: {spec['path']}")
+
+            if spec.get("domain"):
+                self.console.print(f"  Domain: {spec['domain']}")
+            if spec.get("version"):
+                self.console.print(f"  Version: {spec['version']}")
+            if spec.get("status"):
+                self.console.print(f"  Status: {spec['status']}")
+
+            if spec.get("requirements"):
+                total_scenarios = sum(req.get('scenario_count', 0) for req in spec['requirements'])
+                self.console.print(f"  Requirements ({len(spec['requirements'])}, {total_scenarios} scenarios):")
+                for req in spec["requirements"]:
+                    scenario_count = req.get('scenario_count', 0)
+                    scenario_str = f", {scenario_count} scenario{'s' if scenario_count != 1 else ''}" if scenario_count > 0 else ""
+                    self.console.print(f"    - {req['name']} (line {req['line']}{scenario_str})")
+
+        # Summary with totals
+        total_reqs = sum(len(spec.get('requirements', [])) for spec in specs_data)
+        total_scenarios = sum(spec.get('scenario_count', 0) for spec in specs_data)
+        self.console.print(f"\n[bold]Total: {len(specs_data)} spec(s), {total_reqs} requirements, {total_scenarios} scenarios[/bold]")
+
+    def format_validate(self, results: List[ValidationResult]) -> None:
+        """Verbose validation with details"""
+        # Use compact format first
+        compact = CompactFormatter(self.config)
+        compact.format_validate(results)
+
+        # Add detailed breakdown for each spec
+        self.console.print("\n[bold]Detailed Validation Report:[/bold]")
+
+        for result in results:
+            spec_name = Path(result.spec_file).parent.name
+
+            # Header with status indicator
+            if result.has_errors():
+                status_icon = "[red]✗[/red]"
+            elif result.has_warnings():
+                status_icon = "[yellow]⚠[/yellow]"
+            else:
+                status_icon = "[green]✓[/green]"
+
+            self.console.print(f"\n{status_icon} [bold]{spec_name}[/bold]")
+
+            # Metadata
+            if result.metadata:
+                self.console.print(f"  [dim]Title:[/dim] {result.metadata.title}")
+                if result.metadata.domain:
+                    self.console.print(f"  [dim]Domain:[/dim] {result.metadata.domain}")
+                if result.metadata.version:
+                    self.console.print(f"  [dim]Version:[/dim] {result.metadata.version}")
+                if result.metadata.status:
+                    self.console.print(f"  [dim]Status:[/dim] {result.metadata.status}")
+
+            # Statistics
+            req_count = len(result.requirements)
+            scenario_count = sum(len(req.scenarios) for req in result.requirements)
+            ref_count = len(result.references)
+
+            self.console.print(f"  [dim]Requirements:[/dim] {req_count}")
+            self.console.print(f"  [dim]Scenarios:[/dim] {scenario_count}")
+            self.console.print(f"  [dim]References:[/dim] {ref_count}")
+
+            # Reference breakdown
+            if result.references:
+                adr_count = sum(1 for ref in result.references if ref.ref_type == 'adr')
+                test_count = sum(1 for ref in result.references if ref.ref_type == 'test')
+                source_count = sum(1 for ref in result.references if ref.ref_type == 'source')
+                external_count = sum(1 for ref in result.references if ref.ref_type == 'external')
+
+                ref_parts = []
+                if adr_count > 0:
+                    ref_parts.append(f"{adr_count} ADR")
+                if test_count > 0:
+                    ref_parts.append(f"{test_count} test")
+                if source_count > 0:
+                    ref_parts.append(f"{source_count} source")
+                if external_count > 0:
+                    ref_parts.append(f"{external_count} external")
+
+                if ref_parts:
+                    self.console.print(f"    [dim]→ {', '.join(ref_parts)}[/dim]")
+
+            # Issues by severity
+            if result.issues:
+                errors = [i for i in result.issues if i.severity == Severity.ERROR]
+                warnings = [i for i in result.issues if i.severity == Severity.WARNING]
+                infos = [i for i in result.issues if i.severity == Severity.INFO]
+
+                if errors:
+                    self.console.print(f"\n  [red]Errors ({len(errors)}):[/red]")
+                    for issue in errors:
+                        location = f" (line {issue.line_number})" if issue.line_number else ""
+                        self.console.print(f"    • {issue.message}{location}")
+                        if issue.section:
+                            self.console.print(f"      [dim]Section: {issue.section}[/dim]")
+
+                if warnings:
+                    self.console.print(f"\n  [yellow]Warnings ({len(warnings)}):[/yellow]")
+                    for issue in warnings:
+                        location = f" (line {issue.line_number})" if issue.line_number else ""
+                        self.console.print(f"    • {issue.message}{location}")
+                        if issue.section:
+                            self.console.print(f"      [dim]Section: {issue.section}[/dim]")
+
+                if infos:
+                    self.console.print(f"\n  [blue]Info ({len(infos)}):[/blue]")
+                    for issue in infos:
+                        location = f" (line {issue.line_number})" if issue.line_number else ""
+                        self.console.print(f"    • {issue.message}{location}")
+            else:
+                self.console.print(f"  [green]✓ No issues found[/green]")
+
+            # Requirement completeness
+            if result.requirements:
+                reqs_with_scenarios = sum(1 for req in result.requirements if req.scenarios)
+                completeness = (reqs_with_scenarios / req_count * 100) if req_count > 0 else 0
+
+                if completeness == 100:
+                    self.console.print(f"  [green]✓ All requirements have scenarios ({completeness:.0f}%)[/green]")
+                elif completeness >= 80:
+                    self.console.print(f"  [yellow]⚠ Scenario completeness: {completeness:.0f}% ({reqs_with_scenarios}/{req_count})[/yellow]")
+                else:
+                    self.console.print(f"  [red]✗ Low scenario completeness: {completeness:.0f}% ({reqs_with_scenarios}/{req_count})[/red]")
+
+        # Add guidance if there are issues
+        has_issues = any(r.issues for r in results)
+        if has_issues and self.config.show_guidance:
+            generator = GuidanceGenerator()
+            guidance = generator.generate_validation_guidance(results)
+
+            if guidance:
+                self.console.print("\n[bold cyan]💡 Guidance:[/bold cyan]")
+                for g in guidance:
+                    self.console.print(f"\n[yellow]▸[/yellow] {g.message}")
+                    self.console.print(f"  [dim]→ {g.suggestion}[/dim]")
+                    if g.example:
+                        self.console.print(f"  [dim]Example:[/dim]")
+                        self.console.print(f"  [dim]{g.example}[/dim]")
+
+    def format_stats(self, stats_data: Dict) -> None:
+        """Verbose stats with per-spec breakdown"""
+        # Use compact format first
+        compact = CompactFormatter(self.config)
+        compact.format_stats(stats_data)
+
+        # Add per-spec details
+        if stats_data.get("specs"):
+            self.console.print("\n[bold]Per-Spec Breakdown:[/bold]")
+            for spec in stats_data["specs"]:
+                self.console.print(f"\n{spec['title']}:")
+                self.console.print(f"  Requirements: {spec.get('requirements', 0)}")
+                self.console.print(f"  Scenarios: {spec.get('scenarios', 0)}")
+                self.console.print(f"  Completeness: {spec.get('completeness_percent', 0):.1f}% ({spec.get('reqs_with_scenarios', 0)}/{spec.get('requirements', 0)} with scenarios)")
+
+                # Show requirement type distribution if available
+                req_types = spec.get("requirement_types", {})
+                if req_types and any(req_types.values()):
+                    type_str = ", ".join(f"{k}: {v}" for k, v in req_types.items() if v > 0)
+                    self.console.print(f"  Types: {type_str}")
+
+        # Add guidance if enabled
+        if self.config.show_guidance:
+            generator = GuidanceGenerator()
+            guidance = generator.generate_stats_guidance(stats_data)
+
+            if guidance:
+                self.console.print("\n[bold cyan]💡 Guidance:[/bold cyan]")
+                for g in guidance:
+                    self.console.print(f"\n[yellow]▸[/yellow] {g.message}")
+                    self.console.print(f"  [dim]→ {g.suggestion}[/dim]")
+                    if g.example:
+                        self.console.print(f"  [dim]Example: {g.example}[/dim]")
+
+    def format_coverage(self, coverage_data: Dict) -> None:
+        """Verbose coverage with missing references"""
+        # Use compact format first
+        compact = CompactFormatter(self.config)
+        compact.format_coverage(coverage_data)
+
+        # Show specs without coverage
+        self.console.print("\n[bold]Specs Without Coverage:[/bold]")
+        has_missing = False
+        for spec in coverage_data.get("specs", []):
+            refs = spec.get("references", {})
+            missing = []
+            if refs.get("adr", 0) == 0:
+                missing.append("ADRs")
+            if refs.get("test", 0) == 0:
+                missing.append("tests")
+            if refs.get("source", 0) == 0:
+                missing.append("source")
+
+            if missing:
+                has_missing = True
+                self.console.print(f"  {spec['title']}: missing {', '.join(missing)}")
+
+        if not has_missing:
+            self.console.print("  [green]All specs have full coverage![/green]")
+
+        # Show orphan files if detected
+        orphan_files = coverage_data.get("orphan_files", {})
+        if orphan_files and any(orphan_files.values()):
+            self.console.print("\n[bold yellow]⚠ Orphan Files Detected:[/bold yellow]")
+            self.console.print("[dim]Files not referenced by any spec:[/dim]")
+
+            for category, files in orphan_files.items():
+                if files:
+                    self.console.print(f"\n[bold]{category.capitalize()}:[/bold]")
+                    shown = files[:10]  # Show max 10
+                    for f in shown:
+                        self.console.print(f"  [dim]•[/dim] {f}")
+                    if len(files) > 10:
+                        self.console.print(f"  [dim]... and {len(files) - 10} more[/dim]")
+
+            self.console.print("\n[dim]Consider documenting these files in specs or removing them if obsolete.[/dim]")
+
+        # Add guidance if enabled
+        if self.config.show_guidance:
+            generator = GuidanceGenerator()
+            guidance = generator.generate_coverage_guidance(coverage_data)
+
+            if guidance:
+                self.console.print("\n[bold cyan]💡 Guidance:[/bold cyan]")
+                for g in guidance:
+                    self.console.print(f"\n[yellow]▸[/yellow] {g.message}")
+                    self.console.print(f"  [dim]→ {g.suggestion}[/dim]")
+                    if g.example:
+                        self.console.print(f"  [dim]Example: {g.example}[/dim]")
+
+class JSONFormatter(OutputFormatter):
+    """Machine-readable JSON output"""
+
+    def format_list(self, specs_data: List[Dict], spec_dir: Path) -> None:
+        """JSON list output"""
+        output = {
+            "spec_dir": str(spec_dir),
+            "count": len(specs_data),
+            "specs": specs_data
+        }
+        print(json.dumps(output, indent=2))
+
+    def format_validate(self, results: List[ValidationResult]) -> None:
+        """JSON validation output"""
+        output = {
+            "results": [r.to_dict() for r in results],
+            "summary": {
+                "total_specs": len(results),
+                "specs_with_errors": sum(1 for r in results if r.has_errors()),
+                "specs_with_warnings": sum(1 for r in results if r.has_warnings()),
+                "total_errors": sum(r.error_count() for r in results),
+                "total_warnings": sum(r.warning_count() for r in results),
+            }
+        }
+        print(json.dumps(output, indent=2))
+
+    def format_stats(self, stats_data: Dict) -> None:
+        """JSON stats output"""
+        print(json.dumps(stats_data, indent=2))
+
+    def format_coverage(self, coverage_data: Dict) -> None:
+        """JSON coverage output"""
+        print(json.dumps(coverage_data, indent=2))
+
+def create_formatter(config: OutputConfig) -> OutputFormatter:
+    """Factory function to create formatter based on config"""
+    if config.mode == OutputMode.JSON:
+        return JSONFormatter(config)
+    elif config.mode == OutputMode.VERBOSE:
+        return VerboseFormatter(config)
+    else:
+        return CompactFormatter(config)
+
+# =============================================================================
+# GUIDANCE SYSTEM
+# =============================================================================
+
+@dataclass
+class Guidance:
+    """Actionable guidance for fixing issues"""
+    issue_type: str
+    message: str
+    suggestion: str
+    example: Optional[str] = None
+
+class GuidanceGenerator:
+    """Generate actionable guidance based on validation results"""
+
+    def generate_validation_guidance(self, results: List[ValidationResult]) -> List[Guidance]:
+        """Generate guidance for validation issues"""
+        guidance = []
+        issue_counts = {}
+
+        # Collect and count issues
+        for result in results:
+            for issue in result.issues:
+                issue_counts[issue.rule] = issue_counts.get(issue.rule, 0) + 1
+
+        # Generate guidance for most common issues
+        if "metadata.missing" in issue_counts:
+            guidance.append(Guidance(
+                issue_type="metadata.missing",
+                message=f"{issue_counts['metadata.missing']} spec(s) missing required metadata",
+                suggestion="Add missing metadata fields to spec frontmatter (Domain, Version, Status, Date)",
+                example="---\nDomain: Your Domain\nVersion: 1.0.0\nStatus: Draft\nDate: 2026-02-09\n---"
+            ))
+
+        if "requirements.missing_rfc2119" in issue_counts:
+            guidance.append(Guidance(
+                issue_type="requirements.missing_rfc2119",
+                message=f"{issue_counts['requirements.missing_rfc2119']} requirement(s) missing RFC 2119 keywords",
+                suggestion="Add RFC 2119 keywords (MUST/SHALL/SHOULD/MAY) to requirement statements",
+                example="**Statement**: The system MUST validate user input before processing"
+            ))
+
+        if "requirements.missing_scenarios" in issue_counts:
+            guidance.append(Guidance(
+                issue_type="requirements.missing_scenarios",
+                message=f"{issue_counts['requirements.missing_scenarios']} requirement(s) without scenarios",
+                suggestion="Add test scenarios to requirements using Given-When-Then format",
+                example="**Scenarios**:\n- Scenario: Valid input\n  - Given: User provides valid data\n  - When: System validates input\n  - Then: Validation passes"
+            ))
+
+        if "sections.missing" in issue_counts:
+            guidance.append(Guidance(
+                issue_type="sections.missing",
+                message=f"{issue_counts['sections.missing']} spec(s) missing required sections",
+                suggestion="Add missing sections (Overview, RFC 2119 Keywords, Requirements)",
+                example="## Overview\n[Description]\n\n## RFC 2119 Keywords\n- MUST: ...\n\n## Requirements\n..."
+            ))
+
+        if "requirements.incomplete_gwt" in issue_counts:
+            guidance.append(Guidance(
+                issue_type="requirements.incomplete_gwt",
+                message=f"{issue_counts['requirements.incomplete_gwt']} scenario(s) with incomplete Given-When-Then",
+                suggestion="Ensure all scenarios have GIVEN, WHEN, and THEN steps"
+            ))
+
+        return guidance[:5]  # Limit to top 5 suggestions
+
+    def generate_coverage_guidance(self, coverage_data: Dict) -> List[Guidance]:
+        """Generate guidance for coverage gaps"""
+        guidance = []
+        specs = coverage_data.get("specs", [])
+
+        missing_adrs = [s["title"] for s in specs if s.get("references", {}).get("adr", 0) == 0]
+        missing_tests = [s["title"] for s in specs if s.get("references", {}).get("test", 0) == 0]
+        missing_source = [s["title"] for s in specs if s.get("references", {}).get("source", 0) == 0]
+
+        if missing_adrs:
+            guidance.append(Guidance(
+                issue_type="coverage.missing_adr",
+                message=f"{len(missing_adrs)} spec(s) without ADR references",
+                suggestion="Link architectural decisions in docs/adr/ using project-root-relative paths",
+                example="See [ADR-001: Architecture Decision](/docs/adr/0001-decision.md)"
+            ))
+
+        if missing_tests:
+            guidance.append(Guidance(
+                issue_type="coverage.missing_test",
+                message=f"{len(missing_tests)} spec(s) without test references",
+                suggestion="Link test files that verify requirements",
+                example="Verified by [Test Suite](/tests/test_feature.py)"
+            ))
+
+        if missing_source:
+            guidance.append(Guidance(
+                issue_type="coverage.missing_source",
+                message=f"{len(missing_source)} spec(s) without source code references",
+                suggestion="Link implementation files that fulfill requirements",
+                example="Implemented in [feature.py](/src/feature.py)"
+            ))
+
+        return guidance
+
+    def generate_stats_guidance(self, stats_data: Dict) -> List[Guidance]:
+        """Generate guidance for statistics"""
+        guidance = []
+
+        total_specs = stats_data.get("total_specs", 0)
+        total_requirements = stats_data.get("total_requirements", 0)
+        total_scenarios = stats_data.get("total_scenarios", 0)
+
+        if total_specs == 0:
+            return guidance
+
+        avg_scenarios_per_req = total_scenarios / total_requirements if total_requirements > 0 else 0
+
+        if avg_scenarios_per_req < 2.0:
+            guidance.append(Guidance(
+                issue_type="stats.low_scenario_coverage",
+                message=f"Low scenario coverage: {avg_scenarios_per_req:.1f} scenarios per requirement",
+                suggestion="Add more test scenarios to requirements (aim for 2-3 per requirement)",
+                example="Add edge cases, error cases, and happy path scenarios"
+            ))
+
+        if total_requirements == 0:
+            guidance.append(Guidance(
+                issue_type="stats.no_requirements",
+                message="No requirements found in specs",
+                suggestion="Add requirements sections with RFC 2119 statements"
+            ))
+
+        return guidance
+
+# =============================================================================
+# ORPHAN DETECTION
+# =============================================================================
+
+class OrphanDetector:
+    """Detect implementation files not referenced by any spec"""
+
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self.referenced_files = set()
+
+    def add_reference(self, ref: Reference):
+        """Track a referenced file"""
+        if ref.ref_type in ['source', 'test']:
+            # Normalize path
+            normalized = Path(ref.target).as_posix()
+            self.referenced_files.add(normalized)
+
+    def find_orphans(self, scan_paths: List[str]) -> Dict[str, List[str]]:
+        """Find files not referenced by specs"""
+        orphans = {"source": [], "test": [], "script": []}
+
+        # Common exclusion patterns
+        exclude_patterns = [
+            ".git", "__pycache__", "node_modules", ".pytest_cache",
+            ".mypy_cache", ".ruff_cache", "venv", ".venv", "dist", "build",
+            ".egg-info", ".DS_Store", "*.pyc", "*.pyo", ".tox", ".cache"
+        ]
+
+        for scan_path_str in scan_paths:
+            scan_path = self.project_root / scan_path_str
+            if not scan_path.exists():
+                continue
+
+            for file_path in scan_path.rglob("*"):
+                # Skip directories and excluded patterns
+                if file_path.is_dir():
+                    continue
+
+                if any(excl in str(file_path) for excl in exclude_patterns):
+                    continue
+
+                # Get relative path from project root
+                try:
+                    rel_path = file_path.relative_to(self.project_root)
+                    rel_path_str = "/" + rel_path.as_posix()
+                except ValueError:
+                    continue
+
+                # Check if referenced
+                if rel_path_str not in self.referenced_files:
+                    # Categorize by type
+                    if "test" in str(file_path).lower():
+                        if file_path.suffix in [".py", ".js", ".ts", ".go", ".rs"]:
+                            orphans["test"].append(rel_path_str)
+                    elif scan_path_str in ["local/bin", "script"]:
+                        if file_path.suffix in [".py", ".sh", ".bash", ""] and file_path.is_file():
+                            orphans["script"].append(rel_path_str)
+                    elif file_path.suffix in [".py", ".js", ".ts", ".go", ".rs", ".java", ".cpp", ".c", ".h"]:
+                        orphans["source"].append(rel_path_str)
+
+        # Sort and limit results
+        for category in orphans:
+            orphans[category] = sorted(orphans[category])[:20]  # Limit to 20 per category
+
+        return orphans
 
 def print_validation_results(results: List[ValidationResult], format_type: str = "terminal"):
     """Print validation results in specified format"""
@@ -1943,6 +2669,16 @@ def fzf_browser(spec_dir: Path, edit_mode: bool = False):
 
 def cmd_list(args):
     """List all specs with metadata and requirements"""
+    # Handle --full deprecation
+    if hasattr(args, 'full') and args.full:
+        console.print("[yellow]Warning:[/yellow] --full is deprecated, use -v/--verbose instead")
+        args.verbose = True
+
+    # Determine output mode
+    mode = OutputMode.JSON if args.json else \
+           OutputMode.VERBOSE if args.verbose else \
+           OutputMode.COMPACT
+
     # Try to find spec directory
     if args.dir == ".openspec":
         spec_dir = find_spec_dir()
@@ -1987,68 +2723,23 @@ def cmd_list(args):
             spec_info["requirements"] = [
                 {
                     "name": req.name,
-                    "line": req.line_number
+                    "line": req.line_number,
+                    "scenario_count": len(req.scenarios)
                 }
                 for req in requirements
             ]
             spec_info["requirement_count"] = len(requirements)
+            spec_info["scenario_count"] = sum(len(req.scenarios) for req in requirements)
         else:
             spec_info["requirement_count"] = 0
+            spec_info["scenario_count"] = 0
 
         specs_data.append(spec_info)
 
-    # Output based on format
-    if args.json:
-        # JSON output
-        output = {
-            "spec_dir": str(spec_dir),
-            "count": len(specs_data),
-            "specs": specs_data
-        }
-        print(json.dumps(output, indent=2))
-    elif args.full:
-        # Full detailed output
-        console.print(f"[bold]OpenSpec Files[/bold] [dim]({spec_dir})[/dim]\n")
-        for spec_info in specs_data:
-            console.print(f"[bold green]{spec_info['title']}[/bold green]")
-            console.print(f"  [dim]Path:[/dim]    {spec_info['path']}")
-
-            if "domain" in spec_info and spec_info["domain"]:
-                console.print(f"  [dim]Domain:[/dim]  {spec_info['domain']}")
-            if "version" in spec_info and spec_info["version"]:
-                console.print(f"  [dim]Version:[/dim] {spec_info['version']}")
-            if "status" in spec_info and spec_info["status"]:
-                console.print(f"  [dim]Status:[/dim]  {spec_info['status']}")
-
-            if "requirements" in spec_info and spec_info["requirements"]:
-                console.print(f"\n  [cyan]Requirements:[/cyan]")
-                for req in spec_info["requirements"]:
-                    line_info = f" [dim](line {req['line']})[/dim]" if req['line'] else ""
-                    console.print(f"    [yellow]•[/yellow] {req['name']}{line_info}")
-
-            console.print()
-    else:
-        # Short default output
-        console.print(f"[bold]OpenSpec Files[/bold] [dim]({spec_dir})[/dim]\n")
-        for spec_info in specs_data:
-            # Compact one-line format
-            title = spec_info['title']
-            path = spec_info['path']
-            version = spec_info.get('version', '')
-            status = spec_info.get('status', '')
-            req_count = spec_info['requirement_count']
-
-            # Format: Title | path | version | status | N reqs
-            line = f"[bold green]{title}[/bold green]"
-            line += f" [dim]│[/dim] {path}"
-            if version:
-                line += f" [dim]│[/dim] [cyan]v{version}[/cyan]"
-            if status:
-                status_color = "green" if status == "Implemented" else "yellow"
-                line += f" [dim]│[/dim] [{status_color}]{status}[/{status_color}]"
-            line += f" [dim]│[/dim] {req_count} req{'s' if req_count != 1 else ''}"
-
-            console.print(line)
+    # Format output using formatters
+    config = OutputConfig(mode=mode)
+    formatter = create_formatter(config)
+    formatter.format_list(specs_data, spec_dir)
 
 def cmd_status(args):
     """Show compact status overview"""
@@ -2309,13 +3000,33 @@ def cmd_validate(args):
         # Validate the temp file
         spec_path = Path(temp_file)
         project_root = Path.cwd()
+
+        # Determine profile for stdin validation
+        if args.strict and args.lenient:
+            console.print("[red]Error:[/red] Cannot use both --strict and --lenient")
+            sys.exit(2)
+
+        profile = "strict" if args.strict else \
+                  "lenient" if args.lenient else \
+                  None
+
+        # For stdin, we can't load rules from spec_dir, so use defaults with profile
         rules = DEFAULT_RULES.copy()
+        if profile and profile in PROFILE_OVERRIDES:
+            from copy import deepcopy
+            rules = deep_merge(deepcopy(DEFAULT_RULES), PROFILE_OVERRIDES[profile])
 
         result = validate_spec(spec_path, project_root, rules)
 
-        # Determine output format
-        output_format = "json" if args.json or (hasattr(args, 'format') and args.format == "json") else "terminal"
-        print_validation_results([result], output_format)
+        # Determine output mode
+        mode = OutputMode.JSON if args.json or (hasattr(args, 'format') and args.format == "json") else \
+               OutputMode.VERBOSE if args.verbose else \
+               OutputMode.COMPACT
+
+        # Format output
+        config = OutputConfig(mode=mode)
+        formatter = create_formatter(config)
+        formatter.format_validate([result])
 
         # Cleanup
         os.unlink(temp_file)
@@ -2347,8 +3058,14 @@ def cmd_validate(args):
 
     project_root = Path(args.project_folder).resolve()
 
-    # Load rules
-    profile = "strict" if args.strict else None
+    # Load rules with profile selection
+    if args.strict and args.lenient:
+        console.print("[red]Error:[/red] Cannot use both --strict and --lenient")
+        sys.exit(2)
+
+    profile = "strict" if args.strict else \
+              "lenient" if args.lenient else \
+              None
     rules = load_rules(spec_dir, profile)
 
     # Override fail_on_warning if specified
@@ -2385,11 +3102,15 @@ def cmd_validate(args):
         )
         results.append(result)
 
-    # Determine output format
-    output_format = "json" if args.json or args.format == "json" else "terminal"
+    # Determine output mode
+    mode = OutputMode.JSON if args.json or args.format == "json" else \
+           OutputMode.VERBOSE if args.verbose else \
+           OutputMode.COMPACT
 
-    # Print results
-    print_validation_results(results, output_format)
+    # Format output
+    config = OutputConfig(mode=mode)
+    formatter = create_formatter(config)
+    formatter.format_validate(results)
 
     # Exit code
     has_errors = any(r.has_errors() for r in results)
@@ -2405,6 +3126,11 @@ def cmd_validate(args):
 
 def cmd_stats(args):
     """Show statistics across specs"""
+    # Determine output mode
+    mode = OutputMode.JSON if args.json else \
+           OutputMode.VERBOSE if args.verbose else \
+           OutputMode.COMPACT
+
     # Try to find spec directory
     if args.dir == ".openspec":
         spec_dir = find_spec_dir()
@@ -2418,42 +3144,108 @@ def cmd_stats(args):
 
     spec_files = find_spec_files(spec_dir)
     if not spec_files:
-        console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        if not args.json:
+            console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        else:
+            print(json.dumps({"total_specs": 0, "total_requirements": 0, "total_scenarios": 0}))
         return
 
     rules = load_rules(spec_dir)
 
-    # Collect statistics
+    # Collect statistics with requirement type tracking
     total_requirements = 0
     total_scenarios = 0
     total_references = 0
+    total_reqs_with_scenarios = 0
+    requirement_types = {"MUST": 0, "SHALL": 0, "SHOULD": 0, "MAY": 0, "OTHER": 0}
     specs_by_status = {}
+    specs_data = []
 
     for spec_file in spec_files:
         result = validate_spec(spec_file, project_root, rules)
 
-        total_requirements += len(result.requirements)
+        req_count = len(result.requirements)
+        scenario_count = sum(len(req.scenarios) for req in result.requirements)
+        reqs_with_scenarios = sum(1 for req in result.requirements if req.scenarios)
+
+        # Count requirements by type
+        spec_req_types = {"MUST": 0, "SHALL": 0, "SHOULD": 0, "MAY": 0, "OTHER": 0}
         for req in result.requirements:
-            total_scenarios += len(req.scenarios)
+            keyword = extract_rfc2119_keyword(req.statement)
+            if keyword in ["MUST", "MUST NOT"]:
+                requirement_types["MUST"] += 1
+                spec_req_types["MUST"] += 1
+            elif keyword in ["SHALL", "SHALL NOT"]:
+                requirement_types["SHALL"] += 1
+                spec_req_types["SHALL"] += 1
+            elif keyword in ["SHOULD", "SHOULD NOT"]:
+                requirement_types["SHOULD"] += 1
+                spec_req_types["SHOULD"] += 1
+            elif keyword in ["MAY"]:
+                requirement_types["MAY"] += 1
+                spec_req_types["MAY"] += 1
+            else:
+                requirement_types["OTHER"] += 1
+                spec_req_types["OTHER"] += 1
+
+        total_requirements += req_count
+        total_scenarios += scenario_count
         total_references += len(result.references)
+        total_reqs_with_scenarios += reqs_with_scenarios
 
         if result.metadata:
             status = result.metadata.status or "Unknown"
             specs_by_status[status] = specs_by_status.get(status, 0) + 1
 
-    # Print statistics
-    console.print("\n[bold]OpenSpec Statistics[/bold]\n")
-    console.print(f"Total Specs: {len(spec_files)}")
-    console.print(f"Total Requirements: {total_requirements}")
-    console.print(f"Total Scenarios: {total_scenarios}")
-    console.print(f"Total References: {total_references}")
+        # Calculate completeness percentage for this spec
+        completeness_pct = (reqs_with_scenarios / req_count * 100) if req_count > 0 else 0
 
-    console.print("\n[bold]Specs by Status:[/bold]")
-    for status, count in sorted(specs_by_status.items()):
-        console.print(f"  {status}: {count}")
+        # Collect per-spec data for verbose mode
+        specs_data.append({
+            "title": result.metadata.title if result.metadata else spec_file.parent.name,
+            "requirements": req_count,
+            "scenarios": scenario_count,
+            "references": len(result.references),
+            "reqs_with_scenarios": reqs_with_scenarios,
+            "completeness_percent": completeness_pct,
+            "requirement_types": spec_req_types
+        })
+
+    # Calculate overall quality metrics
+    scenario_coverage_pct = (total_reqs_with_scenarios / total_requirements * 100) if total_requirements > 0 else 0
+    avg_scenario_depth = (total_scenarios / total_requirements) if total_requirements > 0 else 0
+    must_count = requirement_types.get("MUST", 0) + requirement_types.get("SHALL", 0)
+    must_coverage_pct = (must_count / total_requirements * 100) if total_requirements > 0 else 0
+
+    # Prepare stats data
+    stats_data = {
+        "total_specs": len(spec_files),
+        "total_requirements": total_requirements,
+        "total_scenarios": total_scenarios,
+        "total_references": total_references,
+        "specs_by_status": specs_by_status,
+        "requirement_types": requirement_types,
+        "quality_metrics": {
+            "scenario_coverage_percent": scenario_coverage_pct,
+            "avg_scenario_depth": avg_scenario_depth,
+            "must_coverage_percent": must_coverage_pct,
+            "total_reqs_with_scenarios": total_reqs_with_scenarios
+        },
+        "specs": specs_data
+    }
+
+    # Format output
+    config = OutputConfig(mode=mode)
+    formatter = create_formatter(config)
+    formatter.format_stats(stats_data)
 
 def cmd_coverage(args):
     """Show reference coverage for each spec"""
+    # Determine output mode
+    mode = OutputMode.JSON if args.json else \
+           OutputMode.VERBOSE if args.verbose else \
+           OutputMode.COMPACT
+
     # Try to find spec directory
     if args.dir == ".openspec":
         spec_dir = find_spec_dir()
@@ -2467,30 +3259,31 @@ def cmd_coverage(args):
 
     spec_files = find_spec_files(spec_dir)
     if not spec_files:
-        console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        if not args.json:
+            console.print(f"[yellow]No spec files found in {spec_dir}[/yellow]")
+        else:
+            print(json.dumps({"specs": [], "summary": {"total_references": 0}}))
         return
 
-    rules = load_rules(spec_dir)
+    # Load rules with strict profile if requested
+    profile = "strict" if args.strict else None
+    rules = load_rules(spec_dir, profile)
 
-    # Create coverage table
-    table = Table(title="Spec Reference Coverage", box=box.ROUNDED)
-    table.add_column("Spec", style="cyan", no_wrap=True)
-    table.add_column("Status", style="yellow")
-    table.add_column("ADRs", justify="center")
-    table.add_column("Tests", justify="center")
-    table.add_column("Source", justify="center")
-    table.add_column("External", justify="center")
-    table.add_column("Total Refs", justify="right")
-
-    # Collect coverage data
-    coverage_data = []
+    # Collect coverage data and track references for orphan detection
+    orphan_detector = OrphanDetector(project_root)
+    specs_coverage = []
     total_with_adrs = 0
     total_with_tests = 0
     total_with_source = 0
+    total_references = 0
 
     for spec_file in spec_files:
         result = validate_spec(spec_file, project_root, rules)
         spec_name = spec_file.parent.name
+
+        # Track all references for orphan detection
+        for ref in result.references:
+            orphan_detector.add_reference(ref)
 
         # Count references by type
         adr_refs = sum(1 for ref in result.references if ref.ref_type == 'adr')
@@ -2507,53 +3300,67 @@ def cmd_coverage(args):
         if source_refs > 0:
             total_with_source += 1
 
-        # Format cells with color
-        adr_cell = f"[green]{adr_refs}[/green]" if adr_refs > 0 else f"[dim]{adr_refs}[/dim]"
-        test_cell = f"[green]{test_refs}[/green]" if test_refs > 0 else f"[dim]{test_refs}[/dim]"
-        source_cell = f"[green]{source_refs}[/green]" if source_refs > 0 else f"[dim]{source_refs}[/dim]"
-        external_cell = f"[blue]{external_refs}[/blue]" if external_refs > 0 else f"[dim]{external_refs}[/dim]"
+        total_references += total_refs
 
         status = result.metadata.status if result.metadata else "Unknown"
 
-        table.add_row(
-            spec_name,
-            status,
-            adr_cell,
-            test_cell,
-            source_cell,
-            external_cell,
-            str(total_refs)
-        )
-
-        coverage_data.append({
-            "name": spec_name,
-            "adr_refs": adr_refs,
-            "test_refs": test_refs,
-            "source_refs": source_refs,
-            "total_refs": total_refs
+        specs_coverage.append({
+            "title": spec_name,
+            "status": status,
+            "references": {
+                "adr": adr_refs,
+                "test": test_refs,
+                "source": source_refs,
+                "external": external_refs,
+                "total": total_refs
+            }
         })
 
-    console.print("\n")
-    console.print(table)
-
-    # Print coverage summary
-    total_specs = len(spec_files)
-    console.print(f"\n[bold]Coverage Summary:[/bold]")
-    console.print(f"  Specs with ADR references: {total_with_adrs}/{total_specs} ({100*total_with_adrs//total_specs if total_specs > 0 else 0}%)")
-    console.print(f"  Specs with test references: {total_with_tests}/{total_specs} ({100*total_with_tests//total_specs if total_specs > 0 else 0}%)")
-    console.print(f"  Specs with source references: {total_with_source}/{total_specs} ({100*total_with_source//total_specs if total_specs > 0 else 0}%)")
-
-    # List specs without coverage
+    # Find orphan files in verbose mode
+    orphan_files = {}
     if args.verbose:
-        console.print(f"\n[bold]Specs without test coverage:[/bold]")
-        for data in coverage_data:
-            if data["test_refs"] == 0:
-                console.print(f"  [yellow]• {data['name']}[/yellow]")
+        scan_paths = ["local/bin", "script", "tests", "src"]
+        orphan_files = orphan_detector.find_orphans(scan_paths)
 
-        console.print(f"\n[bold]Specs without ADR references:[/bold]")
-        for data in coverage_data:
-            if data["adr_refs"] == 0:
-                console.print(f"  [yellow]• {data['name']}[/yellow]")
+    # Prepare coverage data
+    total_specs = len(spec_files)
+    coverage_data = {
+        "specs": specs_coverage,
+        "summary": {
+            "total_specs": total_specs,
+            "total_references": total_references,
+            "specs_with_adrs": total_with_adrs,
+            "specs_with_tests": total_with_tests,
+            "specs_with_source": total_with_source,
+            "adr_coverage_percent": (100 * total_with_adrs // total_specs) if total_specs > 0 else 0,
+            "test_coverage_percent": (100 * total_with_tests // total_specs) if total_specs > 0 else 0,
+            "source_coverage_percent": (100 * total_with_source // total_specs) if total_specs > 0 else 0
+        },
+        "orphan_files": orphan_files if args.verbose else {}
+    }
+
+    # Format output
+    config = OutputConfig(mode=mode)
+    formatter = create_formatter(config)
+    formatter.format_coverage(coverage_data)
+
+    # Exit with error if --fail-on-warning and there are coverage warnings
+    if args.fail_on_warning:
+        has_warnings = False
+
+        # Check if any specs are missing coverage
+        for spec in coverage_data["specs"]:
+            refs = spec.get("references", {})
+            if refs.get("adr", 0) == 0 or refs.get("test", 0) == 0 or refs.get("source", 0) == 0:
+                has_warnings = True
+                break
+
+        # Check if there are orphan files
+        if orphan_files and any(orphan_files.values()):
+            has_warnings = True
+
+        if has_warnings:
+            sys.exit(1)
 
 def cmd_rules_show(args):
     """Show active rules"""
@@ -2691,10 +3498,18 @@ Common Options (available on most commands):
   --project-folder PATH     Project root for resolving references (default: .)
   --raw                     Use raw mode (bat syntax highlighting instead of glow)
   --edit                    Open selected file in $EDITOR (browse only)
-  --strict                  Use strict validation profile (validate only)
-  --fail-on-warning         Exit code 2 on warnings (validate only)
-  --json                    JSON output format (validate only)
-  -v, --verbose             Verbose output (coverage only)
+
+Output Modes:
+  -v, --verbose             Detailed output with guidance and breakdowns
+  --json                    Machine-readable JSON output (list, validate, stats, coverage)
+
+Validation Profiles:
+  --strict                  Strict validation (only MUST/SHALL requirements)
+  --lenient                 Lenient validation (minimal checks)
+  (default)                 Standard validation (MUST/SHALL/SHOULD/MAY)
+
+Exit Codes:
+  --fail-on-warning         Exit code 1 on warnings (validate, coverage)
 
 Examples:
   # View specs
@@ -2706,32 +3521,40 @@ Examples:
   openspec browse --dir custom-specs      Browse custom directory
 
   # List and status
-  openspec list                           List all specs with details
+  openspec list                           List all specs (compact table)
+  openspec list -v                        List with requirements detail
+  openspec list --json                    JSON output for scripting
   openspec status                         Compact status overview
-  openspec list --dir /path/specs         List from specific directory
 
   # Create and edit
   openspec template                       Show OpenSpec template
   openspec new authentication             Create new delta spec in changes/
-  openspec new user-profile               Creates changes/<timestamp>/specs/user-profile/
 
   # Validation
-  openspec validate                       Validate all specs
-  openspec validate shortcuts             Validate specific spec
+  openspec validate                       Validate all specs (standard mode)
+  openspec validate --strict              Strict validation (MUST/SHALL only)
+  openspec validate --lenient             Lenient validation (minimal checks)
+  openspec validate -v                    Verbose with guidance suggestions
+  openspec validate --fail-on-warning     Exit 1 on warnings
   cat file.md | openspec validate         Validate from stdin
-  openspec validate --strict              Use strict validation
-  openspec validate --project-folder ~/   Custom project root
 
   # Analysis
-  openspec coverage                       Show reference coverage report
+  openspec stats                          Statistics summary
+  openspec stats -v                       Per-spec breakdown with completeness
+  openspec stats --json                   JSON output with quality metrics
+
+  openspec coverage                       Reference coverage report
+  openspec coverage -v                    Show missing coverage + orphan files
+  openspec coverage --strict              Only check MUST requirements
+  openspec coverage --fail-on-warning     Exit 1 on coverage gaps
+
   openspec check-links                    Validate all reference links
-  openspec stats                          Show statistics
   openspec rules show                     Show active rules
 
-  # Advanced
-  openspec validate --fail-on-warning     Exit code 2 on warnings
-  openspec validate --json                JSON output
-  openspec coverage -v                    Show specs without coverage
+  # Output Modes (work with list, validate, stats, coverage)
+  (default)                               Compact tables and summaries
+  -v, --verbose                           Detailed breakdowns with guidance
+  --json                                  Machine-readable JSON
         """
     )
 
@@ -2750,7 +3573,8 @@ Examples:
     list_parser = subparsers.add_parser("list", help="List all specs with metadata")
     list_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     list_parser.add_argument("--project-folder", default=".", help="Project root directory (default: current)")
-    list_parser.add_argument("--full", action="store_true", help="Show full details including requirements")
+    list_parser.add_argument("--full", action="store_true", help="Show full details including requirements (deprecated: use -v)")
+    list_parser.add_argument("-v", "--verbose", action="store_true", help="Show full details including requirements")
     list_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     # status command
@@ -2778,7 +3602,9 @@ Examples:
     validate_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     validate_parser.add_argument("--project-folder", default=".", help="Project root for resolving references")
     validate_parser.add_argument("--strict", action="store_true", help="Use strict validation profile")
+    validate_parser.add_argument("--lenient", action="store_true", help="Use lenient validation profile")
     validate_parser.add_argument("--fail-on-warning", action="store_true", help="Exit with code 2 on warnings")
+    validate_parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed validation output")
     validate_parser.add_argument("--json", action="store_true", help="JSON output format")
     validate_parser.add_argument("--format", choices=["terminal", "json"], help="Output format (deprecated: use --json)")
 
@@ -2786,12 +3612,17 @@ Examples:
     stats_parser = subparsers.add_parser("stats", help="Show statistics across specs")
     stats_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     stats_parser.add_argument("--project-folder", default=".", help="Project root directory")
+    stats_parser.add_argument("-v", "--verbose", action="store_true", help="Show per-spec breakdown")
+    stats_parser.add_argument("--json", action="store_true", help="JSON output format")
 
     # coverage command
     coverage_parser = subparsers.add_parser("coverage", help="Show reference coverage report")
     coverage_parser.add_argument("--dir", default=".openspec", help="Spec directory (default: .openspec)")
     coverage_parser.add_argument("--project-folder", default=".", help="Project root directory")
     coverage_parser.add_argument("--verbose", "-v", action="store_true", help="Show specs without coverage")
+    coverage_parser.add_argument("--strict", action="store_true", help="Only check MUST requirements")
+    coverage_parser.add_argument("--fail-on-warning", action="store_true", help="Exit code 1 on coverage warnings")
+    coverage_parser.add_argument("--json", action="store_true", help="JSON output format")
 
     # check-links command
     check_links_parser = subparsers.add_parser("check-links", help="Validate all reference links")
