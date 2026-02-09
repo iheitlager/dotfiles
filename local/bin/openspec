@@ -545,6 +545,9 @@ def find_all_spec_files(
                                 relative_path=str(spec_file.relative_to(spec_dir))
                             ))
 
+    # Sort by path to ensure consistent ordering (001, 002, 003, etc.)
+    spec_files.sort(key=lambda sf: str(sf.path))
+
     return spec_files
 
 def find_spec_by_name(spec_dir: Path, name: str) -> Optional[Path]:
