@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# aliases - Display shell aliases for various topics
+# Usage: aliases [topic]
+# Dynamically discovers all bash_aliases files in dotfiles
+
+set -euo pipefail
+
+# Color codes
+BOLD='\033[1m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+# Configuration
+DOTFILES="${HOME}/.dotfiles"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles"
+CACHE_FILE="${CACHE_DIR}/aliases.cache"
+
+# Associative arrays for topics
+declare -A TOPIC_PATHS
+declare -a TOPICS
+
+discover_aliases() {
+    # Discover all bash_aliases files in dotfiles directory
+    while IFS= read -r filepath; do
+        # Extract relative path from dotfiles root
+        local relpath="${filepath#$DOTFILES/}"
+        # Extract directory name as topic (parent directory)
+        local topic
+        if [[ "$relpath" == */* ]]; then
+            # For paths like "bash/bash_aliases" or "config/ghostty/bash_aliases"
+            local dir=$(dirname "$relpath")
+            # Use basename of directory for topic name, unless it's 'config'
+            if [[ "$dir" == config/* ]]; then
+                # For config/app/bash_aliases -> app
+                topic=$(basename "$dir")
+            else
+                # For bash/bash_aliases -> bash
+                topic=$(basename "$dir")
+            fi
+        else
+            # For bash_aliases in root (shouldn't happen, but handle it)
+            topic="general"
+        fi
+
+        TOPIC_PATHS["$topic"]="$relpath"
+    done < <(find "$DOTFILES" -type f -name "bash_aliases" 2>/dev/null | sort)
+
+    # Build sorted topics array
+    TOPICS=($(printf '%s\n' "${!TOPIC_PATHS[@]}" | sort))
+}
+
+load_aliases_from_cache() {
+    # Load topics from cache if valid
+    if [[ ! -f "$CACHE_FILE" ]]; then
+        return 1
+    fi
+
+    # Check if cache is stale (older than any bash_aliases file)
+    local cache_mtime=$(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0)
+    local newest_file_mtime=0
+
+    while IFS= read -r file; do
+        local file_mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+        if (( file_mtime > newest_file_mtime )); then
+            newest_file_mtime=$file_mtime
+        fi
+    done < <(find "$DOTFILES" -type f -name "bash_aliases" 2>/dev/null)
+
+    if (( cache_mtime < newest_file_mtime )); then
+        return 1
+    fi
+
+    # Load from cache
+    while IFS='=' read -r topic path; do
+        TOPIC_PATHS["$topic"]="$path"
+    done < "$CACHE_FILE"
+
+    TOPICS=($(printf '%s\n' "${!TOPIC_PATHS[@]}" | sort))
+    return 0
+}
+
+save_aliases_to_cache() {
+    # Save discovered topics to cache
+    mkdir -p "$CACHE_DIR"
+    : > "$CACHE_FILE"
+
+    for topic in "${!TOPIC_PATHS[@]}"; do
+        echo "${topic}=${TOPIC_PATHS[$topic]}" >> "$CACHE_FILE"
+    done
+}
+
+init_aliases() {
+    # Try to load from cache first, fall back to discovery
+    if ! load_aliases_from_cache; then
+        discover_aliases
+        save_aliases_to_cache
+    fi
+}
+
+show_header() {
+    local topic=$1
+    echo -e "\n${BOLD}${CYAN}═══════════════════════════════════════════════════════════${RESET}"
+    echo -e "${BOLD}${CYAN}  $(echo "$topic" | tr '[:lower:]' '[:upper:]') ALIASES${RESET}"
+    echo -e "${BOLD}${CYAN}═══════════════════════════════════════════════════════════${RESET}\n"
+}
+
+extract_aliases() {
+    local file=$1
+    local alias_count=0
+    local function_count=0
+
+    # Parse bash_aliases file for alias definitions and functions
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+
+        # Match: alias name=value (with or without quotes)
+        # Handles: alias x='cmd', alias x="cmd", alias x=cmd
+        if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([a-zA-Z0-9_-]+)=(.+)$ ]]; then
+            local alias_name="${BASH_REMATCH[1]}"
+            local alias_cmd="${BASH_REMATCH[2]}"
+
+            # Handle quoted values (single or double quotes)
+            if [[ "$alias_cmd" =~ ^\'(.*)\'([[:space:]]*#.*)?$ ]] || [[ "$alias_cmd" =~ ^\"(.*)\"([[:space:]]*#.*)?$ ]]; then
+                # Quoted: extract content between quotes
+                alias_cmd="${BASH_REMATCH[1]}"
+            elif [[ "$alias_cmd" =~ ^([^#]+)([[:space:]]+#.*)?$ ]]; then
+                # Unquoted: take up to comment (or everything if no comment)
+                alias_cmd="${BASH_REMATCH[1]}"
+                # Trim trailing whitespace
+                alias_cmd="${alias_cmd%%[[:space:]]}"
+            fi
+
+            printf "  ${GREEN}%-20s${RESET} %s\n" "$alias_name" "$alias_cmd"
+            alias_count=$((alias_count + 1))
+        # Match: function name() or name()
+        elif [[ "$line" =~ ^[[:space:]]*(function[[:space:]]+)?([a-zA-Z0-9_-]+)[[:space:]]*\(\) ]]; then
+            local func_name="${BASH_REMATCH[2]}"
+            printf "  ${GREEN}%-20s${RESET} ${DIM}(function)${RESET}\n" "$func_name"
+            function_count=$((function_count + 1))
+        fi
+    done < "$file"
+
+    # Show count summary
+    if (( alias_count > 0 || function_count > 0 )); then
+        echo -e "\n${DIM}  Total: $alias_count aliases, $function_count functions${RESET}"
+    else
+        echo -e "${DIM}  (no aliases or functions found)${RESET}"
+    fi
+}
+
+show_aliases() {
+    local topic=$1
+
+    if [[ -z "${TOPIC_PATHS[$topic]:-}" ]]; then
+        echo -e "${YELLOW}Error: Unknown topic '${topic}'${RESET}" >&2
+        return 1
+    fi
+
+    local aliases_file="${DOTFILES}/${TOPIC_PATHS[$topic]}"
+
+    if [[ -f "$aliases_file" ]]; then
+        show_header "$topic"
+        extract_aliases "$aliases_file"
+    else
+        echo -e "${YELLOW}Warning: No aliases found for topic '${topic}' at ${aliases_file}${RESET}" >&2
+    fi
+}
+
+print_usage() {
+    local HELP="cat"
+    if command -v bat >/dev/null 2>&1; then
+        HELP="bat --plain --language=help"
+    fi
+
+    $HELP << EOF
+Usage: aliases [TOPIC] [OPTIONS]
+
+Display shell aliases for various topics. Automatically discovers
+bash_aliases files in ~/.dotfiles modules.
+
+TOPICS:$(
+    if [[ ${#TOPICS[@]} -gt 0 ]]; then
+        for topic in "${TOPICS[@]}"; do
+            local path="${TOPIC_PATHS[$topic]}"
+            printf "\n    %-12s %s" "$topic" "($path)"
+        done
+    else
+        echo "
+    (none found - bash_aliases files should exist in module directories)"
+    fi
+)
+
+OPTIONS:
+    --refresh         Force refresh cache and rescan dotfiles
+    -h, --help        Show this help message
+
+EXAMPLES:
+    aliases                 # Show all aliases
+    aliases bash            # Show bash aliases only
+    aliases --refresh       # Rescan dotfiles for new aliases
+    al                      # Short alias for aliases
+
+ABOUT:
+    Extracts and displays alias definitions and function names from
+    bash_aliases files across all dotfiles topics. Caches discovered
+    topics for fast access.
+
+EOF
+}
+
+main() {
+    # Initialize topics (from cache or discovery)
+    init_aliases
+
+    # Check if we have any topics
+    if [[ ${#TOPICS[@]} -eq 0 ]]; then
+        echo -e "${YELLOW}No aliases found in ${DOTFILES}${RESET}" >&2
+        echo "Expected to find 'bash_aliases' files in module directories." >&2
+        exit 1
+    fi
+
+    local topic="${1:-all}"
+
+    case "$topic" in
+        -h|--help|help)
+            print_usage
+            exit 0
+            ;;
+        --refresh)
+            # Force refresh cache
+            discover_aliases
+            save_aliases_to_cache
+            echo -e "${GREEN}Cache refreshed. Found ${#TOPICS[@]} topics.${RESET}"
+            exit 0
+            ;;
+        all)
+            for t in "${TOPICS[@]}"; do
+                show_aliases "$t"
+            done
+            ;;
+        *)
+            # Check if topic exists
+            if [[ -n "${TOPIC_PATHS[$topic]:-}" ]]; then
+                show_aliases "$topic"
+            else
+                echo -e "${YELLOW}Unknown topic: ${topic}${RESET}" >&2
+                echo ""
+                print_usage
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+main "$@"
