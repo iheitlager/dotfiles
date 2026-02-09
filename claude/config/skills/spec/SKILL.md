@@ -270,6 +270,241 @@ When the user wants to edit a spec:
 4. **Maintain structure**: Keep RFC 2119 keywords and scenario format
 5. **Update version**: If requirements change significantly, bump version
 
+## Linking Requirements to Implementation Code
+
+OpenSpec supports **implementation traceability**—linking requirements to actual code. This enables tracking which requirements are implemented, finding code for requirements, and measuring coverage.
+
+### Why Code References Matter
+
+1. **Traceability**: Engineers can quickly locate implementation code
+2. **Coverage Tracking**: `openspec coverage` command counts references
+3. **Maintenance**: Know what code to update when requirements change
+4. **Verification**: Code reviewers can verify requirements are implemented
+5. **Documentation**: New contributors understand the architecture
+
+### Method 1: Inline Implementation References
+
+Add an **Implementation:** section to each requirement showing where it's implemented in code.
+
+**Format:**
+```markdown
+### Requirement: Feature Name
+
+The system MUST provide [capability].
+
+**Implementation:**
+- `path/to/file.ext` - Brief description of what this file does
+- `path/to/file.ext::function_name` - Specific function implementation
+- `path/to/file.ext::function_name()` (lines 42-58) - With line numbers
+- `path/to/script` (lines 10-25) - Shell script section
+
+#### Scenario: Happy Path
+...
+```
+
+**Example from dotfiles specs:**
+```markdown
+### Requirement: Topic-Based Organization
+
+The system MUST organize dotfiles into topic directories.
+
+**Implementation:**
+- `bash/bashrc.symlink` - Sources bash_aliases and bash_completion from all topics
+- `bash/bash_profile.symlink` - Sources bash_env from all topics
+- `local/bin/dot::list` (lines 82-94) - Lists topics with install.sh scripts
+- `local/bin/dot::status` (lines 96-243) - Shows topic features (I=install, B=brew, etc.)
+- `script/bootstrap::run_installers()` (lines 318-333) - Executes install.sh for each topic
+```
+
+**Syntax Rules:**
+- Use **relative paths** from project root
+- Format: `file::function` or `file::function()` for functions
+- Format: `(lines X-Y)` for precise location (optional)
+- Add brief description after `-` explaining what it does
+- Group related files with bullet points
+
+### Method 2: Metadata Section
+
+Add a **Metadata** section at the end of the spec (after References, before License) with structured categories and **markdown links**.
+
+**Why Markdown Links?**
+The `openspec coverage` command parses markdown links in the format `[text](path)` to count:
+- Source code references
+- Test file references
+- Internal documentation links
+
+**Structure:**
+```markdown
+## Metadata
+
+This section provides project-specific links for tracking and traceability.
+
+### Implementation Files
+
+**Category Name:**
+- [path/to/file.ext](path/to/file.ext) - Description
+
+**Another Category:**
+- [path/to/other.ext](path/to/other.ext) - Description
+
+### Test Coverage
+
+**Unit Tests:**
+- [tests/unit/test_feature.py](tests/unit/test_feature.py) - Feature unit tests
+
+**Integration Tests:**
+- [tests/integration/test_workflow.sh](tests/integration/test_workflow.sh) - End-to-end tests
+
+**Manual Testing:**
+- Test procedure 1: Steps to verify requirement
+- Test procedure 2: Steps to verify edge cases
+
+### Related Specifications
+
+- [001-core-system](../001-core-system/spec.md) - Core system specification
+- [002-related-feature](../002-related-feature/spec.md) - Related feature
+
+---
+
+**License:** Apache-2.0
+**Copyright:** 2026 Author
+```
+
+**Example from spec 001:**
+```markdown
+## Metadata
+
+This section provides project-specific links for tracking and traceability.
+
+### Implementation Files
+
+**Bootstrap Process:**
+- [script/bootstrap](script/bootstrap) - Main bootstrap script with 8-step installation
+
+**Package Management:**
+- [local/bin/dot](local/bin/dot) - Homebrew package manager, topic installer
+- [homebrew/brew_install.sh](homebrew/brew_install.sh) - Homebrew installation
+
+**Shell Integration:**
+- [bash/bash_profile.symlink](bash/bash_profile.symlink) - Login shell init
+- [bash/bashrc.symlink](bash/bashrc.symlink) - Interactive shell init
+
+### Test Coverage
+
+**Manual Testing:**
+- Bootstrap idempotency: Run `script/bootstrap` twice, verify no errors
+- Topic discovery: Add new topic with bash_aliases, verify auto-discovery
+
+### Related Specifications
+
+- [002-dotfiles-caching](../002-dotfiles-caching/spec.md) - Caching system
+- [003-shortcuts-system](../003-shortcuts-system/spec.md) - Shortcuts
+```
+
+### Which Method to Use?
+
+**Use Inline Implementation** when:
+- Requirement maps to specific functions/files
+- You want direct traceability at requirement level
+- Code is well-organized and easy to reference
+
+**Use Metadata Section** when:
+- You want a consolidated reference list
+- Multiple requirements share the same files
+- You want to track test coverage separately
+- You want structured categories for clarity
+
+**Use Both** when:
+- Inline for specific requirement-to-code mapping
+- Metadata for comprehensive file list and test coverage
+
+### Coverage Tracking
+
+The `openspec coverage` command parses markdown links:
+
+```bash
+openspec coverage
+
+# Output:
+Spec                     Source  Tests  Docs  Total Refs
+001-dotfiles-core          5       0      2      14
+002-dotfiles-caching       4       1      1       9
+003-shortcuts-system       1       0      2      11
+```
+
+**What counts:**
+- **Source**: Links to `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.sh`, `.bash`, files in `bin/`, `script/`
+- **Tests**: Links to files in `tests/`, `test/`, `spec/` directories
+- **Docs**: Links to `.md` files (specs, ADRs, README)
+
+### Best Practices
+
+**DO:**
+- ✅ Use relative paths from project root
+- ✅ Use markdown link format: `[text](path)`
+- ✅ Group files by category in Metadata section
+- ✅ Include line numbers for large files
+- ✅ Update references when code moves
+- ✅ Link to tests for each requirement
+
+**DON'T:**
+- ❌ Use absolute paths (`/Users/name/project/file.py`)
+- ❌ Link to external URLs for internal code
+- ❌ Forget to update links when refactoring
+- ❌ Include implementation details in requirement text (use Implementation section)
+
+### Example: Adding Traceability to Existing Spec
+
+**Before:**
+```markdown
+### Requirement: User Authentication
+
+The system MUST authenticate users via OAuth.
+
+#### Scenario: Successful Login
+- GIVEN a valid OAuth token
+- WHEN user attempts login
+- THEN grant access to protected resources
+```
+
+**After:**
+```markdown
+### Requirement: User Authentication
+
+The system MUST authenticate users via OAuth.
+
+**Implementation:**
+- `src/auth/oauth.py::OAuthHandler` (lines 45-120) - OAuth flow implementation
+- `src/auth/session.py::create_session()` (lines 23-35) - Session creation
+- `src/middleware/auth.py::require_auth` (lines 10-18) - Auth middleware decorator
+
+#### Scenario: Successful Login
+- GIVEN a valid OAuth token
+- WHEN user attempts login
+- THEN grant access to protected resources
+```
+
+**And at end of spec:**
+```markdown
+## Metadata
+
+### Implementation Files
+
+**Authentication:**
+- [src/auth/oauth.py](src/auth/oauth.py) - OAuth provider integration
+- [src/auth/session.py](src/auth/session.py) - Session management
+- [src/middleware/auth.py](src/middleware/auth.py) - Auth middleware
+
+### Test Coverage
+
+**Unit Tests:**
+- [tests/unit/test_oauth.py](tests/unit/test_oauth.py) - OAuth handler tests
+- [tests/unit/test_session.py](tests/unit/test_session.py) - Session tests
+
+**Integration Tests:**
+- [tests/integration/test_auth_flow.py](tests/integration/test_auth_flow.py) - End-to-end auth
+```
+
 ## Creating Proposals for Changes
 
 When the user wants to propose changes to existing specs or add new features, use the proposal workflow:
