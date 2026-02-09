@@ -420,22 +420,32 @@ This section provides project-specific links for tracking and traceability.
 
 ### Coverage Tracking
 
-The `openspec coverage` command parses markdown links:
+The `openspec coverage` command parses markdown links to categorize and count references:
 
 ```bash
 openspec coverage
 
 # Output:
-Spec                     Source  Tests  Docs  Total Refs
-001-dotfiles-core          5       0      2      14
-002-dotfiles-caching       4       1      1       9
-003-shortcuts-system       1       0      2      11
+                      Reference Coverage
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━┳━━━━━━━━┳━━━━━━━┓
+┃ Spec                       ┃ ADRs ┃ Tests ┃ Source ┃ Total ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━╇━━━━━━━━╇━━━━━━━┩
+│ 001-dotfiles-core          │    0 │     0 │      5 │     5 │
+│ 002-dotfiles-caching       │    0 │     0 │      4 │     4 │
+│ 003-shortcuts-system       │    0 │     0 │      1 │     1 │
+└────────────────────────────┴──────┴───────┴────────┴───────┘
 ```
 
-**What counts:**
-- **Source**: Links to `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.sh`, `.bash`, files in `bin/`, `script/`
-- **Tests**: Links to files in `tests/`, `test/`, `spec/` directories
-- **Docs**: Links to `.md` files (specs, ADRs, README)
+**Reference Categorization (from actual code):**
+- **ADRs**: Links containing `/adr/` or starting with `adr/` (Architectural Decision Records)
+- **Tests**: Links containing `/test` or starting with `test` (test files, spec directories)
+- **Source**: Links to source code files:
+  - Extensions: `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.sh`, `.bash`, `.symlink`
+  - Paths: `script/`, `/bin/`, `bin/`, `/brew_install`
+- **External**: Links starting with `http://`, `https://`, `ftp://` (not counted in table)
+- **Internal**: Other links like `.md` files, internal docs (not counted in table)
+
+**Note**: Only ADRs, Tests, and Source appear in the coverage table. External and internal links are parsed but not displayed.
 
 ### Best Practices
 
