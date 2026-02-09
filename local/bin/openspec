@@ -271,7 +271,7 @@ PROFILE_OVERRIDES = {
                 "required": ["Overview", "RFC 2119 Keywords", "Requirements"],
             },
             "requirements": {
-                "allowed_keywords": ["MUST", "SHALL"],
+                "allowed_keywords": ["MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT"],
             },
         },
         "reporting": {
@@ -281,7 +281,7 @@ PROFILE_OVERRIDES = {
     "standard": {
         "validation": {
             "requirements": {
-                "allowed_keywords": ["MUST", "SHALL", "SHOULD", "MAY"],
+                "allowed_keywords": ["MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", "OPTIONAL"],
             },
         },
     },
