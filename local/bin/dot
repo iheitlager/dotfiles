@@ -261,6 +261,12 @@ if [[ $# -gt 0 ]]; then
                     echo "   Removed: shortcuts.cache"
                 fi
 
+                # Remove aliases cache
+                if [[ -f "$cache_dir/aliases.cache" ]]; then
+                    rm -f "$cache_dir/aliases.cache"
+                    echo "   Removed: aliases.cache"
+                fi
+
                 echo "✅ Cache invalidated. Restart your shell to regenerate."
             else
                 echo "ℹ️  No cache directory found at: $cache_dir"
