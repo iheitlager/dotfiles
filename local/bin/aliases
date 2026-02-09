@@ -156,7 +156,7 @@ extract_aliases() {
     done < "$file"
 
     # Display regular aliases
-    if [[ ${#regular_aliases[@]} -gt 0 ]]; then
+    if [[ -n "${!regular_aliases[*]}" ]]; then
         echo -e "${BOLD}  Aliases:${RESET}"
         for alias_name in $(printf '%s\n' "${!regular_aliases[@]}" | sort); do
             printf "    ${GREEN}%-20s${RESET} %s\n" "$alias_name" "${regular_aliases[$alias_name]}"
@@ -165,7 +165,7 @@ extract_aliases() {
     fi
 
     # Display aliases to functions
-    if [[ ${#function_aliases[@]} -gt 0 ]]; then
+    if [[ -n "${!function_aliases[*]}" ]]; then
         echo -e "${BOLD}  Aliases to Functions:${RESET}"
         for alias_name in $(printf '%s\n' "${!function_aliases[@]}" | sort); do
             local target="${function_aliases[$alias_name]}"
@@ -182,7 +182,7 @@ extract_aliases() {
     fi
 
     # Display functions
-    if [[ ${#functions[@]} -gt 0 ]]; then
+    if [[ -n "${!functions[*]}" ]]; then
         echo -e "${BOLD}  Functions:${RESET}"
         for func_name in $(printf '%s\n' "${!functions[@]}" | sort); do
             # Categorize function
@@ -198,11 +198,13 @@ extract_aliases() {
     fi
 
     # Show count summary
-    local total_aliases=$((${#regular_aliases[@]} + ${#function_aliases[@]}))
-    local total_functions=${#functions[@]}
+    local regular_count=${#regular_aliases[@]}
+    local function_alias_count=${#function_aliases[@]}
+    local functions_count=${#functions[@]}
+    local total_aliases=$((regular_count + function_alias_count))
 
-    if (( total_aliases > 0 || total_functions > 0 )); then
-        echo -e "${DIM}  Total: $total_aliases aliases ($((${#function_aliases[@]})) to functions), $total_functions functions${RESET}"
+    if (( total_aliases > 0 || functions_count > 0 )); then
+        echo -e "${DIM}  Total: $total_aliases aliases ($function_alias_count to functions), $functions_count functions${RESET}"
     else
         echo -e "${DIM}  (no aliases or functions found)${RESET}"
     fi
