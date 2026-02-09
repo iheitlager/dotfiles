@@ -2,7 +2,7 @@
 
 **Domain:** Developer Productivity / Documentation
 **Version:** 1.0.0
-**Status:** Proposed
+**Status:** Implemented
 **Date:** 2026-02-09
 **Owner:** Ilja Heitlager
 
