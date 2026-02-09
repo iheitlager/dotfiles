@@ -83,7 +83,7 @@ function deactivate {
 alias unv='deactivate'
 
 # Virtual environment activation function with caching
-venv_activate() {
+__venv_activate() {
     local CACHE_DIR="$XDG_STATE_HOME/python"
     local CACHE_FILE="$CACHE_DIR/venv_latest"
     mkdir -p "$CACHE_DIR" 2>/dev/null
@@ -180,8 +180,8 @@ venv_activate() {
 }
 
 # Create aliases
-alias v='venv_activate'
-alias venv='venv_activate'
+alias v='__venv_activate'
+alias venv='__venv_activate'
 # the local magic
 #alias venv='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
 #alias v='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
