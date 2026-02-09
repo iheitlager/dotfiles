@@ -1341,23 +1341,35 @@ class VerboseFormatter(OutputFormatter):
     def format_list(self, specs_data: List[Dict], spec_dir: Path) -> None:
         """Verbose list with requirements"""
         for spec in specs_data:
-            self.console.print(f"\n[bold]{spec['title']}[/bold]")
-            self.console.print(f"  Path: {spec['path']}")
+            self.console.print(f"\n[bold cyan]{spec['title']}[/bold cyan]")
+            self.console.print(f"  [dim]Path:[/dim] [cyan]{spec['path']}[/cyan]")
 
             if spec.get("domain"):
-                self.console.print(f"  Domain: {spec['domain']}")
+                self.console.print(f"  [dim]Domain:[/dim] {spec['domain']}")
             if spec.get("version"):
-                self.console.print(f"  Version: {spec['version']}")
+                self.console.print(f"  [dim]Version:[/dim] {spec['version']}")
             if spec.get("status"):
-                self.console.print(f"  Status: {spec['status']}")
+                status = spec['status']
+                # Color status based on value
+                if status == "Implemented":
+                    status_colored = f"[green]{status}[/green]"
+                elif status == "Proposed":
+                    status_colored = f"[yellow]{status}[/yellow]"
+                elif status == "Draft":
+                    status_colored = f"[dim]{status}[/dim]"
+                elif status == "Deprecated":
+                    status_colored = f"[red]{status}[/red]"
+                else:
+                    status_colored = status
+                self.console.print(f"  [dim]Status:[/dim] {status_colored}")
 
             if spec.get("requirements"):
                 total_scenarios = sum(req.get('scenario_count', 0) for req in spec['requirements'])
-                self.console.print(f"  Requirements ({len(spec['requirements'])}, {total_scenarios} scenarios):")
+                self.console.print(f"  [bold]Requirements[/bold] [dim]({len(spec['requirements'])}, {total_scenarios} scenarios):[/dim]")
                 for req in spec["requirements"]:
                     scenario_count = req.get('scenario_count', 0)
                     scenario_str = f", {scenario_count} scenario{'s' if scenario_count != 1 else ''}" if scenario_count > 0 else ""
-                    self.console.print(f"    - {req['name']} (line {req['line']}{scenario_str})")
+                    self.console.print(f"    [green]•[/green] {req['name']} [dim](line {req['line']}{scenario_str})[/dim]")
 
         # Summary with totals
         total_reqs = sum(len(spec.get('requirements', [])) for spec in specs_data)
