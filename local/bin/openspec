@@ -1161,21 +1161,30 @@ class CompactFormatter(OutputFormatter):
 
         table = Table(show_header=True, header_style="bold")
         table.add_column("Spec")
-        table.add_column("Domain")
         table.add_column("Status")
         table.add_column("Reqs", justify="right")
         table.add_column("Scenarios", justify="right")
 
         for spec in specs_data:
-            domain = spec.get("domain") or "-"
             status = spec.get("status") or "-"
             req_count = str(spec.get("requirement_count", 0))
             scenario_count = str(spec.get("scenario_count", 0))
 
+            # Color status based on value
+            if status == "Implemented":
+                status_colored = f"[green]{status}[/green]"
+            elif status == "Proposed":
+                status_colored = f"[yellow]{status}[/yellow]"
+            elif status == "Draft":
+                status_colored = f"[dim]{status}[/dim]"
+            elif status == "Deprecated":
+                status_colored = f"[red]{status}[/red]"
+            else:
+                status_colored = status
+
             table.add_row(
                 spec["title"],
-                domain,
-                status,
+                status_colored,
                 req_count,
                 scenario_count
             )
