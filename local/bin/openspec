@@ -397,7 +397,15 @@ def find_spec_dir(start_dir: Path = None, explicit_name: str = None) -> Optional
     if start_dir is None:
         start_dir = Path.cwd()
 
-    # First, check if we're in a git repository
+    # First check: Are we already IN a spec directory?
+    # This handles the case where validate.py is run from within .openspec/
+    current = start_dir.resolve()
+    if current.name in candidates:
+        # Verify this is actually a spec directory by checking for specs/ subdirectory
+        if (current / "specs").is_dir() or (current / "template.md").exists():
+            return current
+
+    # Second check: Are we in a git repository?
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
@@ -416,8 +424,7 @@ def find_spec_dir(start_dir: Path = None, explicit_name: str = None) -> Optional
     except FileNotFoundError:
         pass  # git not available
 
-    # Check current directory and parents
-    current = start_dir.resolve()
+    # Third check: Search current directory and parents
     for _ in range(10):  # Limit upward search to 10 levels
         for candidate in candidates:
             spec_dir = current / candidate
