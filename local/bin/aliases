@@ -112,45 +112,97 @@ show_header() {
 
 extract_aliases() {
     local file=$1
-    local alias_count=0
-    local function_count=0
 
-    # Parse bash_aliases file for alias definitions and functions
+    # Arrays to store different types
+    declare -A functions
+    declare -A regular_aliases
+    declare -A function_aliases
+
+    # First pass: collect all functions
     while IFS= read -r line; do
-        # Skip comments and empty lines
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$line" ]] && continue
 
-        # Match: alias name=value (with or without quotes)
-        # Handles: alias x='cmd', alias x="cmd", alias x=cmd
+        if [[ "$line" =~ ^[[:space:]]*(function[[:space:]]+)?([a-zA-Z0-9_-]+)[[:space:]]*\(\) ]]; then
+            local func_name="${BASH_REMATCH[2]}"
+            functions["$func_name"]=1
+        fi
+    done < "$file"
+
+    # Second pass: collect aliases and categorize
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" ]] && continue
+
         if [[ "$line" =~ ^[[:space:]]*alias[[:space:]]+([a-zA-Z0-9_-]+)=(.+)$ ]]; then
             local alias_name="${BASH_REMATCH[1]}"
             local alias_cmd="${BASH_REMATCH[2]}"
 
-            # Handle quoted values (single or double quotes)
+            # Handle quoted values
             if [[ "$alias_cmd" =~ ^\'(.*)\'([[:space:]]*#.*)?$ ]] || [[ "$alias_cmd" =~ ^\"(.*)\"([[:space:]]*#.*)?$ ]]; then
-                # Quoted: extract content between quotes
                 alias_cmd="${BASH_REMATCH[1]}"
             elif [[ "$alias_cmd" =~ ^([^#]+)([[:space:]]+#.*)?$ ]]; then
-                # Unquoted: take up to comment (or everything if no comment)
                 alias_cmd="${BASH_REMATCH[1]}"
-                # Trim trailing whitespace
                 alias_cmd="${alias_cmd%%[[:space:]]}"
             fi
 
-            printf "  ${GREEN}%-20s${RESET} %s\n" "$alias_name" "$alias_cmd"
-            alias_count=$((alias_count + 1))
-        # Match: function name() or name()
-        elif [[ "$line" =~ ^[[:space:]]*(function[[:space:]]+)?([a-zA-Z0-9_-]+)[[:space:]]*\(\) ]]; then
-            local func_name="${BASH_REMATCH[2]}"
-            printf "  ${GREEN}%-20s${RESET} ${DIM}(function)${RESET}\n" "$func_name"
-            function_count=$((function_count + 1))
+            # Check if alias points to a function
+            if [[ -n "${functions[$alias_cmd]:-}" ]]; then
+                function_aliases["$alias_name"]="$alias_cmd"
+            else
+                regular_aliases["$alias_name"]="$alias_cmd"
+            fi
         fi
     done < "$file"
 
+    # Display regular aliases
+    if [[ ${#regular_aliases[@]} -gt 0 ]]; then
+        echo -e "${BOLD}  Aliases:${RESET}"
+        for alias_name in $(printf '%s\n' "${!regular_aliases[@]}" | sort); do
+            printf "    ${GREEN}%-20s${RESET} %s\n" "$alias_name" "${regular_aliases[$alias_name]}"
+        done
+        echo ""
+    fi
+
+    # Display aliases to functions
+    if [[ ${#function_aliases[@]} -gt 0 ]]; then
+        echo -e "${BOLD}  Aliases to Functions:${RESET}"
+        for alias_name in $(printf '%s\n' "${!function_aliases[@]}" | sort); do
+            local target="${function_aliases[$alias_name]}"
+            # Determine function type and print with appropriate color
+            if [[ "$target" =~ ^__ ]]; then
+                printf "    ${GREEN}%-20s${RESET} %s ${CYAN}(dunder function)${RESET}\n" "$alias_name" "$target"
+            elif [[ "$target" =~ ^_ ]]; then
+                printf "    ${GREEN}%-20s${RESET} %s ${CYAN}(private function)${RESET}\n" "$alias_name" "$target"
+            else
+                printf "    ${GREEN}%-20s${RESET} %s ${DIM}(function)${RESET}\n" "$alias_name" "$target"
+            fi
+        done
+        echo ""
+    fi
+
+    # Display functions
+    if [[ ${#functions[@]} -gt 0 ]]; then
+        echo -e "${BOLD}  Functions:${RESET}"
+        for func_name in $(printf '%s\n' "${!functions[@]}" | sort); do
+            # Categorize function
+            if [[ "$func_name" =~ ^__ ]]; then
+                printf "    ${GREEN}%-20s${RESET} ${CYAN}(dunder/special)${RESET}\n" "$func_name"
+            elif [[ "$func_name" =~ ^_ ]]; then
+                printf "    ${GREEN}%-20s${RESET} ${CYAN}(private)${RESET}\n" "$func_name"
+            else
+                printf "    ${GREEN}%-20s${RESET} ${DIM}(public)${RESET}\n" "$func_name"
+            fi
+        done
+        echo ""
+    fi
+
     # Show count summary
-    if (( alias_count > 0 || function_count > 0 )); then
-        echo -e "\n${DIM}  Total: $alias_count aliases, $function_count functions${RESET}"
+    local total_aliases=$((${#regular_aliases[@]} + ${#function_aliases[@]}))
+    local total_functions=${#functions[@]}
+
+    if (( total_aliases > 0 || total_functions > 0 )); then
+        echo -e "${DIM}  Total: $total_aliases aliases ($((${#function_aliases[@]})) to functions), $total_functions functions${RESET}"
     else
         echo -e "${DIM}  (no aliases or functions found)${RESET}"
     fi
