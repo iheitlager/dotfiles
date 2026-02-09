@@ -22,6 +22,15 @@ help() {
         else
             shortcuts "$@"
         fi
+    elif [ "$1" = "aliases" ]; then
+        # Handle "help aliases" specially
+        shift
+        # If no args, show help; otherwise pass through
+        if [ $# -eq 0 ]; then
+            aliases --help
+        else
+            aliases "$@"
+        fi
     else
         # Format command help
         "$@" --help 2>&1 | bat --plain --language=help
@@ -53,6 +62,7 @@ alias e='env | sort | bat --plain --language=bash' # make sure env is always sor
 alias reload='source ~/.bashrc && echo "Reloaded ~/.bashrc"'
 alias r='reload'
 alias sc='shortcuts'
+alias al='aliases'
 
 alias ls='eza --color=always --group-directories-first'
 alias ll='eza -la --color=always --group-directories-first --git --header'
