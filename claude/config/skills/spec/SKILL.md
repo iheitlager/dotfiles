@@ -16,53 +16,60 @@ OpenSpec uses two types of specifications to track system evolution:
 
 ### Main Specs (`.openspec/specs/`)
 
-**Source of truth** for the current system's implemented features.
+**Source of truth** describing your system's **current behavior** ("what is").
 
 - Located in `.openspec/specs/NNN-name/spec.md`
-- Document what the system **actually does NOW**
-- `## ADDED Requirements` = Requirements that are **currently active/implemented** in the system
+- Use standard section headers: `## Requirements`
+- Document what the system actually does NOW
 - These are the permanent record of system capabilities
 
-**Example**: If you have a spec with Status: Implemented showing "ADDED Requirements", those requirements describe features that exist in the current version.
+**Key Point**: Main specs use `## Requirements` (NOT lifecycle markers like ADDED/MODIFIED/REMOVED).
 
 ### Delta Specs (`.openspec/changes/`)
 
-**Proposed modifications** stored temporarily (not yet in system).
+**Proposed modifications** describing **what's changing** relative to the current specs.
 
-- Located in `.openspec/changes/`
+- Located in `.openspec/changes/[change-name]/specs/`
+- Use lifecycle marker headers: `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`
 - Document changes being planned or developed
-- `## ADDED Requirements` = **Brand new** requirements being proposed (not yet implemented)
-- `## MODIFIED Requirements` = Changes to existing requirements
+- Self-contained within change folders for parallel work
+
+**Lifecycle Markers:**
+- `## ADDED Requirements` = Brand new requirements being proposed
+- `## MODIFIED Requirements` = Changes to existing requirements (note previous value)
 - `## REMOVED Requirements` = Features being deprecated
-- `## RENAMED Requirements` = Requirement name changes
+- `## RENAMED Requirements` = Requirement name changes (if supported)
 
-**Workflow**: Delta specs are created for new features → implemented → then "intelligently merged" into main specs using lifecycle markers.
+**Workflow**: Delta specs are created for new features → implemented → archived → merged into main specs (lifecycle markers removed during merge).
 
-### What "ADDED Requirements" Really Means
+### The Critical Distinction
 
-The meaning depends on context:
-
-| Context | Meaning |
-|---------|---------|
-| **Main Spec** | "These requirements are currently active/implemented in the system" |
-| **Delta Spec** | "These are brand new requirements we're proposing to add" |
-
-**In main specs** (what we typically work with), `## ADDED Requirements` is a lifecycle marker indicating these requirements were added to the system and are now part of its permanent specification. It's NOT about future changes—it's about documenting the current state.
+| Aspect | Main Specs | Delta Specs |
+|--------|-----------|-------------|
+| **Location** | `.openspec/specs/` | `.openspec/changes/[change-name]/specs/` |
+| **Purpose** | Document current state | Document proposed changes |
+| **Section Header** | `## Requirements` | `## ADDED Requirements`, etc. |
+| **Lifecycle Markers** | ❌ Not used | ✅ Required |
+| **Represents** | "What is" | "What's changing" |
 
 ### Why This Matters
 
-When creating or validating specs:
+**When creating specs:**
+1. **Main specs** (finalized) → use `## Requirements`
+2. **Delta specs** (proposals) → use `## ADDED Requirements`, `## MODIFIED Requirements`, etc.
 
-1. **Main specs** document existing systems → use `## ADDED Requirements` for all current features
-2. **Delta specs** propose changes → use `## ADDED` for new features, `## MODIFIED` for changes, `## REMOVED` for deprecations
-3. The OpenSpec validator requires `## ADDED Requirements` as a section header (not just `## Requirements`)
-4. This format enables OpenSpec's merge tools to track specification evolution over time
+**When merging changes:**
+- ADDED sections get appended to main spec's Requirements
+- MODIFIED sections replace corresponding requirements
+- REMOVED sections delete requirements
+- Lifecycle markers are stripped during merge
 
-**Sources**:
+This distinction prevents confusion about what's current versus what's proposed.
+
+**Official Sources**:
+- [OpenSpec Concepts](https://github.com/Fission-AI/OpenSpec/blob/main/docs/concepts.md)
 - [OpenSpec Repository](https://github.com/Fission-AI/OpenSpec)
-- [OpenSpec Specification Format](https://thedocs.io/openspec/concepts/spec-format/)
 - [OpenSpec Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md)
-- [OpenSpec Deep Dive Guide](https://redreamality.com/garden/notes/openspec-guide/)
 
 ## When to Use This Skill
 
@@ -206,7 +213,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "S
 
 ---
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: [Requirement Name]
 
@@ -362,13 +369,13 @@ When the user asks to validate a spec, check for required sections and proper st
 
 ### Required Sections
 
-Every OpenSpec MUST include:
+Every main spec MUST include:
 
 1. **Title** - `# [System Name] Specification`
 2. **Frontmatter** - Domain, Version, Status, Date (Owner is recommended)
 3. **Overview** - Brief description
 4. **RFC 2119 Keywords** - Standard compliance statement
-5. **ADDED Requirements** - At least one requirement (note: must use "ADDED", not just "Requirements")
+5. **Requirements** - At least one requirement (note: use "Requirements", NOT "ADDED Requirements" in main specs)
 
 ### Validation Checklist
 
@@ -381,7 +388,7 @@ Run through this checklist and report findings:
 ✅ Has Philosophy subsection (recommended)
 ✅ Has Key Capabilities subsection (recommended)
 ✅ Has RFC 2119 Keywords section
-✅ Has ADDED Requirements section (not just "Requirements")
+✅ Has Requirements section (NOT "ADDED Requirements" for main specs)
 ✅ Has at least one Requirement
 ✅ Each requirement has at least one Scenario
 ✅ Scenarios use proper Given-When-Then format
@@ -401,7 +408,7 @@ Claude: I'll validate the dotfiles caching spec...
 ✅ Frontmatter: All fields present (Domain, Version, Status, Date)
 ✅ Overview: Present with Philosophy and Key Capabilities
 ✅ RFC 2119 Keywords: Present
-✅ ADDED Requirements: 4 requirements found
+✅ Requirements: 4 requirements found
 ✅ Scenarios: All requirements have scenarios
 ✅ Given-When-Then: Proper format used
 ✅ RFC 2119 Keywords: Used correctly (MUST, SHALL)
@@ -416,7 +423,7 @@ Summary: Spec is valid! No issues found.
 Report these if found:
 
 ❌ **Missing RFC 2119 section**: Required for standards compliance
-❌ **Wrong section header**: Using "## Requirements" instead of "## ADDED Requirements"
+❌ **Wrong section header**: Using "## ADDED Requirements" in main specs (should be "## Requirements")
 ❌ **Vague scenarios**: Missing GIVEN/WHEN/THEN or too abstract
 ❌ **No requirements**: Spec must have at least one requirement
 ❌ **Missing frontmatter**: Need Domain, Version, Status, Date (Owner recommended)
@@ -437,7 +444,7 @@ When the user asks to format a spec, restructure it to match the template.
 5. **Preserve content**: Keep all existing text, just reorganize
 6. **Fix formatting**: Ensure proper markdown structure
 
-### Standard Section Order
+### Standard Section Order (Main Specs)
 
 ```markdown
 1. Title (# System Name Specification)
@@ -447,7 +454,7 @@ When the user asks to format a spec, restructure it to match the template.
    - Philosophy (subsection)
    - Key Capabilities (subsection)
 4. RFC 2119 Keywords (standard boilerplate)
-5. ADDED Requirements
+5. Requirements
    - Multiple requirements
    - Each with scenarios
 6. Current Implementation (optional)
@@ -458,6 +465,8 @@ When the user asks to format a spec, restructure it to match the template.
 11. Internal Documentation
 12. License/Copyright
 ```
+
+**Note**: For delta specs in `.openspec/changes/`, use lifecycle markers: `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`
 
 ### Formatting Example
 
@@ -470,7 +479,7 @@ Changes made:
 - Moved Overview before RFC 2119 section
 - Added missing Philosophy subsection
 - Added Key Capabilities subsection
-- Reorganized requirements into ADDED Requirements section
+- Reorganized requirements into Requirements section
 - Added RFC 2119 Keywords section (was missing)
 - Added References section
 - Added license/copyright footer
