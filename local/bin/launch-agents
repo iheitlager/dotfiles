@@ -372,9 +372,9 @@ ensure_gitignore_agents() {
 }
 
 setup_shared_state() {
-    mkdir -p "$SHARED_CONTEXT/tasks/pending"
-    mkdir -p "$SHARED_CONTEXT/tasks/active"
-    mkdir -p "$SHARED_CONTEXT/tasks/done"
+    mkdir -p "$SHARED_CONTEXT/jobs/pending"
+    mkdir -p "$SHARED_CONTEXT/jobs/active"
+    mkdir -p "$SHARED_CONTEXT/jobs/done"
     mkdir -p "$SHARED_CONTEXT/agents"
 
     if [[ ! -f "$SHARED_CONTEXT/events.log" ]]; then
@@ -1060,8 +1060,8 @@ cmd_clean() {
                 echo -e "${GREEN}✓ Shared state removed${NC}"
             else
                 # Only remove if tasks are all done (no pending/active)
-                local pending=$(ls -1 "$SHARED_CONTEXT/tasks/pending" 2>/dev/null | wc -l | tr -d ' ')
-                local active=$(ls -1 "$SHARED_CONTEXT/tasks/active" 2>/dev/null | wc -l | tr -d ' ')
+                local pending=$(ls -1 "$SHARED_CONTEXT/jobs/pending" 2>/dev/null | wc -l | tr -d ' ')
+                local active=$(ls -1 "$SHARED_CONTEXT/jobs/active" 2>/dev/null | wc -l | tr -d ' ')
                 if [[ "$pending" -eq 0 ]] && [[ "$active" -eq 0 ]]; then
                     rm -rf "$SHARED_CONTEXT"
                     echo -e "${GREEN}✓ Shared state removed${NC}"
@@ -1114,9 +1114,9 @@ cmd_info() {
 
     # Tasks
     echo -e "${BOLD}Tasks:${NC}"
-    local pending=$(ls -1 "$SHARED_CONTEXT/tasks/pending" 2>/dev/null | wc -l | tr -d ' ')
-    local active=$(ls -1 "$SHARED_CONTEXT/tasks/active" 2>/dev/null | wc -l | tr -d ' ')
-    local done=$(ls -1 "$SHARED_CONTEXT/tasks/done" 2>/dev/null | wc -l | tr -d ' ')
+    local pending=$(ls -1 "$SHARED_CONTEXT/jobs/pending" 2>/dev/null | wc -l | tr -d ' ')
+    local active=$(ls -1 "$SHARED_CONTEXT/jobs/active" 2>/dev/null | wc -l | tr -d ' ')
+    local done=$(ls -1 "$SHARED_CONTEXT/jobs/done" 2>/dev/null | wc -l | tr -d ' ')
     echo "  Pending: $pending"
     echo "  Active:  $active"
     echo "  Done:    $done"
@@ -1124,7 +1124,7 @@ cmd_info() {
     if [[ "$active" -gt 0 ]]; then
         echo ""
         echo -e "${BOLD}Active Tasks:${NC}"
-        for f in "$SHARED_CONTEXT/tasks/active"/*.yaml; do
+        for f in "$SHARED_CONTEXT/jobs/active"/*.yaml; do
             [[ -f "$f" ]] || continue
             local id=$(basename "$f" .yaml)
             local title=$(grep "^title:" "$f" | cut -d: -f2- | xargs)
