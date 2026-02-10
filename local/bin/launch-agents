@@ -116,8 +116,6 @@ Options:
     -n COUNT           Number of agents: 2, 3, 4, or 6 (default: 2)
     -d, --daemon       Run task-watcher daemon (monitors queue, notifies agents)
     -o, --classic      Use classic multi-pane layout (all agents in one window)
-    -r                 Shortcut for 'restart'
-    -a                 Shortcut for 'attach'
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
     -v, --verbose      Print commands being executed
@@ -145,7 +143,6 @@ Examples:
     launch-agents                   Smart default: start or attach
     launch-agents -n 4 start        Start 4 agents
     launch-agents -d start          Start with task-watcher daemon
-    launch-agents -r                Restart session
     launch-agents workspace         Simple workspace (claude + shell)
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
@@ -1180,14 +1177,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--daemon)
             DAEMON_MODE=true
-            shift
-            ;;
-        -r)
-            COMMAND="restart"
-            shift
-            ;;
-        -a)
-            COMMAND="attach"
             shift
             ;;
         -h|--help)
