@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.7.0
+# Version: 0.8.0
 #
 # Changelog:
+# 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-o
 # 0.7.0 Default to sonnet, --opus flag enables opus-based distribution
 # 0.6.0 Added --daemon/-d flag for task-watcher integration
 # 0.5.2 Improved resilience: smart defaults, restart command, better session handling
@@ -33,7 +34,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_version() {
-    local version=$(sed -n '3p' "$0" | sed 's/.*Version: \([0-9.]*\).*/\1/')
+    local version=$(grep -m1 '^# Version:' "$0" | sed 's/.*Version: //')
     echo -e "${BOLD}launch-agents${NC} version ${GREEN}$version${NC}"
 }
 
@@ -81,6 +82,7 @@ VERBOSE=false
 EQUAL_DISTRIBUTION=false
 DAEMON_MODE=false
 OPUS_MODE=false
+CLASSIC_MODE=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
@@ -111,22 +113,28 @@ Commands:
     info            Show status of agents, models, and tasks
 
 Options:
-    -n COUNT        Number of agents: 2, 3, 4, or 6 (default: 2)
-    -d, --daemon    Run task-watcher daemon (monitors queue, notifies agents)
-    -r              Shortcut for 'restart'
-    -a              Shortcut for 'attach'
-    --opus          Use opus-based model distribution (default: all sonnet)
-    --equal         For n=6, use equal distribution (Option 5) instead of default
-    -v, --verbose   Print commands being executed
-    --force         Force restart or clean (skips prompts)
-    --yolo          Skip permission prompts (Claude agents only)
-    -h, --help      Show this help message
+    -n COUNT           Number of agents: 2, 3, 4, or 6 (default: 2)
+    -d, --daemon       Run task-watcher daemon (monitors queue, notifies agents)
+    -o, --classic      Use classic multi-pane layout (all agents in one window)
+    -r                 Shortcut for 'restart'
+    -a                 Shortcut for 'attach'
+    --opus             Use opus-based model distribution (default: all sonnet)
+    --equal            For n=6, use equal distribution (Option 5) instead of default
+    -v, --verbose      Print commands being executed
+    --force            Force restart or clean (skips prompts)
+    --yolo             Skip permission prompts (Claude agents only)
+    -h, --help         Show this help message
 
-Layouts:
-    2 agents        agent-1 │ agent-2
-    3 agents        agent-1 │ agent-2 / agent-3
-    4 agents        agent-1 / agent-3 │ agent-2 / agent-4
-    6 agents        agent-1 / agent-2 │ agent-3 / agent-4 │ agent-5 / agent-6
+Layouts (default):
+    2 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  daemon
+    3 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  agent-3 [claude│shell]  daemon
+    4 agents        agent-1..4 [claude│shell each]  daemon
+
+Layouts (--classic / -o):
+    2 agents        agents: agent-1 │ agent-2   +  shell-1  shell-2
+    3 agents        agents: agent-1 │ agent-2 / agent-3   +  shell-1..3
+    4 agents        agents: agent-1 / agent-3 │ agent-2 / agent-4   +  shell-1..4
+    6 agents        agents: agent-1/2 │ agent-3/4 │ agent-5/6   +  shell-1..6
 
 Clients & Models:
     claude          sonnet (default), opus with --opus flag
@@ -497,16 +505,17 @@ tail -30 $SHARED_CONTEXT/events.log  # Direct file access (alternative)
 Signal another agent via tmux:
 \`\`\`bash
 # IMPORTANT: Must be TWO separate commands - first types text, second submits
-tmux send-keys -t $SESSION:agents.N "Message here" Enter
-tmux send-keys -t $SESSION:agents.N Enter
+# Each agent is in its own window: $SESSION:agent-N.1 (left/claude pane)
+tmux send-keys -t $SESSION:agent-N.1 "Message here" Enter
+tmux send-keys -t $SESSION:agent-N.1 Enter
 \`\`\`
 
 Alternative (if the agent appears stuck in idle/Enchanting state):
 \`\`\`bash
 # Send Escape first to break idle state, then message with separate Enter
-tmux send-keys -t $SESSION:agents.N Escape
-tmux send-keys -t $SESSION:agents.N "Message here" Enter
-tmux send-keys -t $SESSION:agents.N Enter
+tmux send-keys -t $SESSION:agent-N.1 Escape
+tmux send-keys -t $SESSION:agent-N.1 "Message here" Enter
+tmux send-keys -t $SESSION:agent-N.1 Enter
 \`\`\`
 
 Close the swarm:
@@ -517,7 +526,7 @@ If the customer types shut down, gracefully wind down:
 launch-agents stop
 \`\`\`
 
-Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (it is 1-based)
+Pane mapping: each agent has its own window $SESSION:agent-N, claude is pane 1 (left), shell is pane 2 (right)
 
 ## Git Workflow
 
@@ -546,13 +555,98 @@ cat ~/.dotfiles/docs/agent-system.md
 EOF
 }
 
-create_tmux_layout() {
+_start_agent_pane() {
+    # Helper: configure and start an agent in the given tmux target pane
+    local target=$1  # e.g. "$SESSION:agent-1.1"
+    local agent=$2
+    local client=$3
+    local model=$4
+
+    tmux send-keys -t "$target" "export AGENT_ID=agent-$agent" C-m
+    tmux send-keys -t "$target" "export AGENT_CLIENT=$client" C-m
+    tmux send-keys -t "$target" "export AGENT_MODEL=$model" C-m
+
+    if [[ -f "$WORKTREE_ROOT/agent-$agent/.venv/bin/activate" ]]; then
+        tmux send-keys -t "$target" "source .venv/bin/activate" C-m
+    fi
+
+    case $client in
+        claude)
+            tmux send-keys -t "$target" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
+            tmux send-keys -t "$target" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
+            tmux send-keys -t "$target" "clear" C-m
+            debug "tmux send-keys -t $target 'claude --model $model ...' C-m"
+            tmux send-keys -t "$target" "claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+            ;;
+        copilot)
+            tmux send-keys -t "$target" "export COPILOT_MODEL=$model" C-m
+            sleep 0.1
+            debug "tmux send-keys -t $target 'copilot' C-m"
+            tmux send-keys -t "$target" "copilot" C-m
+            ;;
+        gemini)
+            tmux send-keys -t "$target" "export GEMINI_MODEL=$model" C-m
+            sleep 0.1
+            debug "tmux send-keys -t $target 'gemini' C-m"
+            tmux send-keys -t "$target" "gemini" C-m
+            ;;
+    esac
+}
+
+create_tmux_layout_new() {
+    # New default layout: one window per agent, each split left (claude) | right (shell)
+    # Plus a daemon window at the end.
     local count=$1
 
-    echo -e "${BLUE}Creating tmux layout for $count agents...${NC}"
+    echo -e "${BLUE}Creating per-agent tmux layout for $count agents...${NC}"
+
+    # Create session with first agent's window
+    tmux new-session -d -s "$SESSION" -n "agent-1" -c "$WORKTREE_ROOT/agent-1"
+
+    for i in $(seq 1 $count); do
+        local client=$(get_client $i $count)
+        local model=$(get_model $i $count)
+        local win="agent-$i"
+
+        if [[ $i -gt 1 ]]; then
+            tmux new-window -t "$SESSION" -n "$win" -c "$WORKTREE_ROOT/agent-$i"
+            sleep 0.2
+        fi
+
+        # Split: left = claude (pane 1), right = shell (pane 2)
+        tmux split-window -h -t "$SESSION:$win" -c "$WORKTREE_ROOT/agent-$i"
+        tmux select-layout -t "$SESSION:$win" even-horizontal
+
+        # Left pane: start agent
+        _start_agent_pane "$SESSION:$win.1" $i $client $model
+
+        # Right pane: activate venv if present
+        if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
+            tmux send-keys -t "$SESSION:$win.2" "source .venv/bin/activate" C-m
+        fi
+    done
+
+    # Always add daemon window (starts swarm-daemon only if -d flag)
+    tmux new-window -t "$SESSION" -n "daemon" -c "$REPO_ROOT"
+    sleep 0.2
+    if [[ "$DAEMON_MODE" == true ]]; then
+        tmux send-keys -t "$SESSION:daemon" "swarm-daemon daemon" C-m
+        echo -e "${GREEN}✓ Swarm daemon started${NC}"
+    fi
+
+    tmux select-window -t "$SESSION:agent-1"
+    tmux select-pane -t "$SESSION:agent-1.1"
+
+    echo -e "${GREEN}✓ Tmux session created${NC}"
+}
+
+create_tmux_layout_classic() {
+    # Classic layout: all agents in a single 'agents' window, separate shell-N windows
+    local count=$1
+
+    echo -e "${BLUE}Creating classic tmux layout for $count agents...${NC}"
     debug "tmux new-session -d -s $SESSION -n agents -c $WORKTREE_ROOT/agent-1"
 
-    local model1=$(get_model 1 $count)
     tmux new-session -d -s "$SESSION" -n "agents" -c "$WORKTREE_ROOT/agent-1"
 
     case $count in
@@ -575,10 +669,8 @@ create_tmux_layout() {
         6)
             # Create 2x3 grid: 1 | 3 | 5
             #                  2 | 4 | 6
-            # First create 3 columns with explicit sizing (1-based pane index)
             tmux split-window -h -t "$SESSION:agents" -l 66% -c "$WORKTREE_ROOT/agent-3"
             tmux split-window -h -t "$SESSION:agents" -l 50% -c "$WORKTREE_ROOT/agent-5"
-            # Split each column vertically for the bottom row
             tmux split-window -v -t "$SESSION:agents.1" -c "$WORKTREE_ROOT/agent-2"
             tmux split-window -v -t "$SESSION:agents.3" -c "$WORKTREE_ROOT/agent-4"
             tmux split-window -v -t "$SESSION:agents.5" -c "$WORKTREE_ROOT/agent-6"
@@ -589,44 +681,8 @@ create_tmux_layout() {
         local pane=$i
         local client=$(get_client $i $count)
         local model=$(get_model $i $count)
-        
-        debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_ID=agent-$i' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_ID=agent-$i" C-m
-        debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_CLIENT=$client' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_CLIENT=$client" C-m
-        debug "tmux send-keys -t $SESSION:agents.$pane 'export AGENT_MODEL=$model' C-m"
-        tmux send-keys -t "$SESSION:agents.$pane" "export AGENT_MODEL=$model" C-m
-        
-        if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
-            debug "tmux send-keys -t $SESSION:agents.$pane 'source .venv/bin/activate' C-m"
-            tmux send-keys -t "$SESSION:agents.$pane" "source .venv/bin/activate" C-m
-        fi
-        
-        # Start the appropriate agent based on client
-        case $client in
-            claude)
-                tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_SKIP_PERMISSION_PROMPTS=true" C-m
-                tmux send-keys -t "$SESSION:agents.$pane" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
-                tmux send-keys -t "$SESSION:agents.$pane" "clear" C-m
-                # Inject AGENTS.md via --append-system-prompt (CLAUDE.md is auto-read for project info)
-                debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
-                tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
-                # debug "tmux send-keys -t $SESSION:agents.$pane 'claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS' C-m"
-                # tmux send-keys -t "$SESSION:agents.$pane" "claude --model $model --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
-                ;;
-            copilot)
-                tmux send-keys -t "$SESSION:agents.$pane" "export COPILOT_MODEL=$model" C-m
-                sleep 0.1
-                debug "tmux send-keys -t $SESSION:agents.$pane 'copilot' C-m"
-                tmux send-keys -t "$SESSION:agents.$pane" "copilot" C-m
-                ;;
-            gemini)
-                tmux send-keys -t "$SESSION:agents.$pane" "export GEMINI_MODEL=$model" C-m
-                sleep 0.1
-                debug "tmux send-keys -t $SESSION:agents.$pane 'gemini' C-m"
-                tmux send-keys -t "$SESSION:agents.$pane" "gemini" C-m
-                ;;
-        esac
+
+        _start_agent_pane "$SESSION:agents.$pane" $i $client $model
     done
 
     for i in $(seq 1 $count); do
@@ -650,6 +706,14 @@ create_tmux_layout() {
     tmux select-pane -t "$SESSION:agents.1"
 
     echo -e "${GREEN}✓ Tmux session created${NC}"
+}
+
+create_tmux_layout() {
+    if [[ "$CLASSIC_MODE" == true ]]; then
+        create_tmux_layout_classic "$@"
+    else
+        create_tmux_layout_new "$@"
+    fi
 }
 
 cmd_workspace() {
@@ -802,9 +866,16 @@ cmd_start() {
     echo "Project:      $REPO_NAME"
     echo "Agents:       $AGENT_COUNT"
     echo ""
-    echo "Navigation:"
-    echo "  Ctrl-b 1        Agents window"
-    echo "  Ctrl-b 2-$((AGENT_COUNT+1))      Shell windows"
+    if [[ "$CLASSIC_MODE" == true ]]; then
+        echo "Navigation (classic):"
+        echo "  Ctrl-b 1        Agents window"
+        echo "  Ctrl-b 2-$((AGENT_COUNT+1))      Shell windows"
+    else
+        echo "Navigation:"
+        echo "  Ctrl-b 1-$AGENT_COUNT      Agent windows (claude│shell)"
+        echo "  Ctrl-b $((AGENT_COUNT+1))         Daemon window"
+        echo "  Alt ←→          Switch pane within window"
+    fi
     echo "  Alt ↑↓←→        Switch pane"
     echo "  Ctrl-b z        Zoom pane"
     echo "  Ctrl-b d        Detach"
@@ -1085,6 +1156,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --equal)
             EQUAL_DISTRIBUTION=true
+            shift
+            ;;
+        -o|--classic)
+            CLASSIC_MODE=true
             shift
             ;;
         --opus)
