@@ -207,7 +207,7 @@ Commands:
     stop            Kill tmux session
     restart         Stop and restart the session
     attach          Attach to existing session
-    workspace       Simple workspace: claude (opus) left, shell right
+    workspace       Simple workspace: claude left, shell right
     clean           Remove worktrees (if branches merged and clean)
     info            Show status of agents, models, and jobs
 
@@ -457,9 +457,9 @@ mv ~/.local/state/agent-context/<project>/jobs/pending/job-XXX.yaml \
 All significant events append to `events.log`:
 
 ```
-2025-01-20T10:00:00Z | agent-1 | CLAIMED | job-001 | Design async interfaces
-2025-01-20T10:45:00Z | agent-1 | DONE | job-001 | Created interface specs
-2025-01-20T10:46:00Z | agent-3 | CLAIMED | job-002 | Update data models
+2025-01-20T10:00:00Z | agent-1 | JOB_CLAIMED | job-001 | Design async interfaces
+2025-01-20T10:45:00Z | agent-1 | JOB_COMPLETED | job-001 | Created interface specs
+2025-01-20T10:46:00Z | agent-3 | JOB_CLAIMED | job-002 | Update data models
 ```
 
 Agents can tail this to stay aware of swarm activity:
@@ -473,11 +473,13 @@ tail -30 ~/.local/state/agent-context/<project>/events.log
 For urgent coordination, agents can signal each other via tmux:
 
 ```bash
-tmux send-keys -t claude-<project>:agents.N "Message here" Enter
-tmux send-keys -t claude-<project>:agents.N Enter  # Extra enter for visibility
-```
+# New default layout: each agent has its own window (agent-N), pane 1 = claude
+tmux send-keys -t claude-<project>:agent-N.1 "Message here" Enter
+tmux send-keys -t claude-<project>:agent-N.1 Enter  # Extra enter for visibility
 
-Pane mapping: agent-1=1, agent-2=2, agent-3=3, agent-4=4, agent-5=5, agent-6=6 (1-based)
+# Classic layout (--classic/-o): all agents in one "agents" window, 1-based panes
+tmux send-keys -t claude-<project>:agents.N "Message here" Enter
+```
 
 ### Swarm Daemon
 
@@ -757,9 +759,9 @@ Only one event requires broadcasting to other agents:
 **After `/merge`**: Main has changed, other agents need to rebase.
 
 ```bash
-# Signal sent to all agents in swarm
-tmux send-keys -t "$SESSION:agents.$pane" \
-  "[sync] main updated via PR #$PR - run: git fetch && git rebase origin/main"
+# Signal sent to all agents in swarm (new default layout)
+tmux send-keys -t "$SESSION:agent-$N.1" \
+  "[sync] main updated via PR #$PR - run: git fetch && git rebase origin/main" Enter
 ```
 
 Other coordination (job claimed, job completed, new job) is handled by:
@@ -868,7 +870,7 @@ Extend the shared state directory with project skills:
 
 ```
 ~/.local/state/agent-context/<project>/
-├── tasks/
+├── jobs/
 ├── events.log
 └── skills/                       # Project-specific skills
     ├── api-patterns/

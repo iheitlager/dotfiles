@@ -7,10 +7,12 @@
 alias law='launch-agents workspace'
 alias la2='launch-agents -n 2 --daemon start'
 alias la3='launch-agents -n 3 start'
-alias la4='launch-agents -n 4 start'
-alias la6='launch-agents -n 6 start'
+alias la4='launch-agents -n 4 --classic start'
+alias la6='launch-agents -n 6 --classic start'
 alias las='launch-agents stop'
-alias lac='launch-agents --force clean'
+alias lac='launch-agents clean'
+alias lacc='launch-agents --force clean'
+
 
 
 # Send message to Claude agent pane

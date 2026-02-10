@@ -293,7 +293,7 @@ Additionally, for each agent N, a separate `shell-N` window is created.
 - GIVEN an agent is started
 - THEN its `AGENTS.md` SHALL contain:
   - Agent identity (ID, client, model, worktree path, shared state path)
-  - Task queue instructions using `swarm-job` commands
+  - Job queue instructions using `swarm-job` commands
   - Polling instructions (check every 30-60s when idle)
   - Capability matching guidance (model tier)
   - Peer communication via tmux send-keys (using new window addressing)
@@ -382,6 +382,8 @@ result: null
 - THEN the tool SHALL score all pending jobs using the agent's model tier
 - AND atomically move the best-scoring job from `pending/` to `active/` using `flock`
 - AND update `claimed_by` and `claimed_at` in the YAML file
+- AND append a `JOB_CLAIMED` line to `events.log`
+- AND call `swarm-daemon hook JOB_CLAIMED <job-id> --issue N --title "..."` in the background
 - WHEN two agents try to claim the same job simultaneously
 - THEN only one SHALL succeed; the other SHALL get a "being claimed" message
 
@@ -399,7 +401,8 @@ result: null
 - GIVEN `swarm-job complete <job-id>` is run
 - THEN the job YAML SHALL be moved from `active/` to `done/`
 - AND `completed_at` and `result` SHALL be set
-- AND the event SHALL be logged to `events.log`
+- AND a `JOB_COMPLETED` line SHALL be appended to `events.log`
+- AND `swarm-daemon hook JOB_COMPLETED <job-id>` SHALL be called in the background
 
 #### Scenario: Atomic Issue Take (take)
 
@@ -442,15 +445,18 @@ result: null
 #### Scenario: Phase 2 Events (Job Lifecycle)
 
 - GIVEN `swarm-job claim` succeeds
-- THEN `JOB_CLAIMED <job-id> --issue N --title "..."` SHALL be emitted
+- THEN `JOB_CLAIMED <job-id> --issue N --title "..."` SHALL be emitted automatically by `swarm-job`
 - AND `job-metrics.yaml` SHALL record the new active job
 
-- GIVEN a PR is created for a job
-- THEN `JOB_PR_READY <job-id> <pr-number>` SHALL be emitted
+- GIVEN `swarm-job complete` is run
+- THEN `JOB_COMPLETED <job-id>` SHALL be emitted automatically by `swarm-job`
+
+- GIVEN a PR is created for a job (after using `/pr` skill)
+- THEN the agent SHALL manually call `swarm-daemon hook JOB_PR_READY <job-id> <pr-number>`
 - AND the job's `state` SHALL change to `pr_ready`
 
-- GIVEN a PR is merged
-- THEN `JOB_PR_MERGED <job-id>` SHALL be emitted
+- GIVEN a PR is merged (after using `/merge` skill)
+- THEN the agent SHALL manually call `swarm-daemon hook JOB_PR_MERGED <job-id>`
 - AND time-to-PR and total-time metrics SHALL be calculated and stored
 
 #### Scenario: Phase 3 Events (Semantic Activity)
@@ -594,8 +600,8 @@ logging:
   - Project name
   - Session status (running/stopped) and attach command
   - Per-agent: worktree exists, current branch, uncommitted changes
-  - Task queue counts: pending, active, done
-  - Active task details (id, title, claimed_by)
+  - Job queue counts: pending, active, done
+  - Active job details (id, title, claimed_by)
   - Recent events (last 5 from events.log)
   - Path summary (worktrees, shared state)
 
@@ -612,7 +618,7 @@ logging:
 - GIVEN `launch-agents clean --force`
 - THEN it SHALL kill all related processes (tmux, claude, gemini, copilot)
 - AND remove ALL worktrees regardless of merge status
-- AND remove shared state if no pending/active tasks remain
+- AND remove shared state if no pending/active jobs remain
 
 ---
 
