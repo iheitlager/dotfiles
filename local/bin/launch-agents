@@ -422,45 +422,45 @@ Users may talk to you directly. When receiving a request:
 
 2. Decide:
    - Small task + you match capability → do it directly
-   - Large task → break into subtasks, create task files
-   - Wrong capability tier → create task for better-suited agent
+   - Large task → break into subtasks, create job files
+   - Wrong capability tier → create a job for a better-suited agent
 
-## Task Queue
+## Job Queue
 
-Use \`swarm-job\` for all task operations:
+Use \`swarm-job\` for all job operations:
 
 \`\`\`bash
-# List all tasks (pending/active/done)
+# List all jobs (pending/active/done)
 swarm-job list
 
-# List only pending tasks with scores
+# List only pending jobs with scores
 swarm-job list pending
 
-# Claim best matching task for your model tier
+# Claim best matching job for your model tier
 swarm-job claim
 
-# Claim specific task
-swarm-job claim task-XXX
+# Claim specific job
+swarm-job claim job-1737372800-12345
 
-# Complete a task
-swarm-job complete task-XXX
-swarm-job complete task-XXX -r "merged to main"
+# Complete a job
+swarm-job complete job-1737372800-12345
+swarm-job complete job-1737372800-12345 -r "merged to main"
 
-# Create a new task for others
-swarm-job new "Task title" -p high -c complex
+# Create a new job for others
+swarm-job new "Job title" -p high -c complex
 \`\`\`
 
 ## Polling
 
-Check for new tasks periodically. When idle:
+Check for new jobs periodically. When idle:
 \`\`\`bash
 # Check every 30-60 seconds when not busy
 swarm-job list pending
 \`\`\`
 
 The swarm-daemon will also send notifications via tmux when:
-- New tasks are available for your tier
-- Tasks you depend on are completed (unblocked)
+- New jobs are available for your tier
+- Jobs you depend on are completed (unblocked)
 
 ## Capability Matching
 
@@ -469,12 +469,12 @@ Your model tier: $model
 - sonnet (tier 2): moderate tasks, standard features
 - haiku (tier 1): simple tasks, docs, formatting
 
-Claim tasks at or below your tier. Higher-tier agents can help clear simpler tasks.
+Claim jobs at or below your tier. Higher-tier agents can help clear simpler jobs.
 
-## Task File Format
+## Job File Format
 
 \`\`\`yaml
-id: task-XXX
+id: job-1737372800-12345
 created: <ISO timestamp>
 created_by: agent-$agent
 priority: low | medium | high | urgent
@@ -489,6 +489,8 @@ claimed_at: null
 completed_at: null
 result: null
 \`\`\`
+
+Job files live in \`$SHARED_CONTEXT/jobs/pending/\`, \`jobs/active/\`, and \`jobs/done/\`.
 
 ## Peer Communication
 
@@ -517,7 +519,7 @@ tmux send-keys -t $SESSION:agent-N.1 Enter
 
 Close the swarm:
 If the customer types shut down, gracefully wind down:
-1. Finish current task
+1. Finish current job
 2. Exit process (shutdown logged automatically)
 \`\`\`bash
 launch-agents stop
@@ -529,19 +531,34 @@ Pane mapping: each agent has its own window $SESSION:agent-N, claude is pane 1 (
 
 You work on branch: agent-$agent
 
-For each task:
-1. Ensure branch is up to date: git pull --rebase origin main
-2. Make changes, commit with clear messages
-3. Create PR when complete: gh pr create
-4. Mark job complete: swarm-job complete <job-id> (events logged automatically)
+For each job:
+1. Ensure branch is up to date: \`git fetch && git rebase origin/main\`
+2. Create a feature branch: \`git checkout -b feat/my-feature\`
+3. Make changes and commit with clear messages
+4. Create PR: use \`/pr\` skill, then signal the swarm:
+   \`\`\`bash
+   swarm-daemon hook JOB_PR_READY <job-id> <pr-number>
+   \`\`\`
+5. After merge: use \`/merge\` skill, then signal the swarm:
+   \`\`\`bash
+   swarm-daemon hook JOB_PR_MERGED <job-id>
+   \`\`\`
+6. Mark job complete: \`swarm-job complete <job-id>\`
+
+Note: Tool use events (Read, Edit, Write, Bash, etc.) are emitted automatically
+by the Claude Code hooks in \`~/.dotfiles/claude/config/settings.json\` — no
+manual calls needed for those.
+
+IMPORTANT: Never create PRs or push \`agent-N\` branches. Always work on a
+feature branch (\`feat/\`, \`fix/\`, \`refactor/\`, etc.) branched from \`agent-$agent\`.
 
 ## Principles
 
 - No hierarchy — all agents are peers
-- Match task complexity to your capability
-- One active task at a time
+- Match job complexity to your capability
+- One active job at a time
 - Signal completion clearly
-- Help clear simple tasks if queue is empty
+- Help clear simple jobs if queue is empty
 
 ## Documentation
 

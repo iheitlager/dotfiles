@@ -178,7 +178,7 @@ Manage the swarm job queue.
 /swarm create <title> Create new job for the swarm
 ```
 
-See also: `swarm-job` CLI and `swarm-watcher` daemon.
+See also: `swarm-job` CLI and `swarm-daemon` for monitoring.
 
 ---
 

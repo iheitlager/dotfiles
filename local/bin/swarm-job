@@ -338,7 +338,9 @@ cmd_claim() {
         fi
 
         local title=$(yaml_get "$active_file" "title")
-        echo "$timestamp | $AGENT_ID | CLAIMED | $job_id | $title" >> "$EVENTS_LOG"
+        local issue_num=$(yaml_get "$active_file" "title" | grep -oP '#\K[0-9]+' | head -1)
+        echo "$timestamp | $AGENT_ID | JOB_CLAIMED | $job_id | $title" >> "$EVENTS_LOG"
+        swarm-daemon hook JOB_CLAIMED "$job_id" --issue "${issue_num:-0}" --title "$title" 2>/dev/null &
 
         echo -e "${GREEN}✓${NC} Claimed: $job_id"
         echo -e "  Title: $title"
@@ -422,7 +424,8 @@ cmd_complete() {
         sed -i "s/^result:.*/result: $result/" "$done_file"
     fi
 
-    echo "$timestamp | ${claimed_by:-$AGENT_ID} | COMPLETED | $job_id | $title" >> "$EVENTS_LOG"
+    echo "$timestamp | ${claimed_by:-$AGENT_ID} | JOB_COMPLETED | $job_id | $title" >> "$EVENTS_LOG"
+    swarm-daemon hook JOB_COMPLETED "$job_id" 2>/dev/null &
 
     echo -e "${GREEN}✓${NC} Completed: $job_id"
     echo -e "  Title: $title"
@@ -671,7 +674,8 @@ completed_at: null
 result: null
 EOF
 
-        echo "$timestamp | ${AGENT_ID:-user} | TAKE | $job_id | Issue #$issue_num - $title" >> "$EVENTS_LOG"
+        echo "$timestamp | ${AGENT_ID:-user} | JOB_CLAIMED | $job_id | Issue #$issue_num - $title" >> "$EVENTS_LOG"
+        swarm-daemon hook JOB_CLAIMED "$job_id" --issue "$issue_num" --title "$title (#$issue_num)" 2>/dev/null &
 
         echo -e "${GREEN}✓ Took issue #$issue_num${NC}"
         echo ""

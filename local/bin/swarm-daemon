@@ -860,16 +860,10 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
         # Simplified model: track each tool use as REQUEST instead of tool-specific events
         "REQUEST", "REQUEST_START", "REQUEST_END",
 
-        # Note: Original Phase 1 design (AGENT_WORK_START, AGENT_WORK_STOP, AGENT_HEARTBEAT)
-        # was replaced by the AGENT_STARTUP + REQUEST model for more granular tracking.
-        # See issue #10 for history.
-
-        # Phase 2: Job lifecycle (ACTIVE - Enabled in Phase B of #14)
-        # Handlers exist (lines 936-1001), skills updated to emit events
+        # Phase 2: Job lifecycle (ACTIVE - emitted by swarm-job and skills)
         "JOB_CLAIMED", "JOB_PR_READY", "JOB_PR_MERGED", "JOB_COMPLETED",
 
-        # Phase 3: Semantic events (ACTIVE - Enabled in Phase C of #14)
-        # Handlers exist (lines 1003-1042), tool-specific emission enabled in swarm-hook
+        # Phase 3: Semantic events (ACTIVE - emitted automatically by swarm-hook)
 
         # Task tracking
         "TASK_CREATED", "TASK_STARTED", "TASK_COMPLETED", "TASK_BLOCKED",
@@ -904,31 +898,7 @@ def handle_hook(context: SwarmContext, event_type: str, args: List[str]):
     current_job = job_metrics.get_job_by_agent(agent_id)
 
     # Phase 1 events
-    # Note: AGENT_WORK_START/STOP/HEARTBEAT are deprecated (original Phase 1 design)
-    # Kept for backward compatibility but never emitted by current swarm-hook
-    # Current model uses AGENT_STARTUP (one-time) + REQUEST (per-tool)
-    if event_type == "AGENT_WORK_START":
-        state_manager.update_agent(
-            agent_id,
-            status="working",
-            started_at=now,
-            last_heartbeat=now
-        )
-    elif event_type == "AGENT_WORK_STOP":
-        state_manager.update_agent(
-            agent_id,
-            status="idle",
-            last_stopped=now,
-            last_heartbeat=now
-        )
-    elif event_type == "AGENT_HEARTBEAT":
-        state_manager.update_agent(
-            agent_id,
-            last_heartbeat=now
-        )
-
-    # New simplified events
-    elif event_type == "AGENT_STARTUP":
+    if event_type == "AGENT_STARTUP":
         state_manager.update_agent(
             agent_id,
             status="working",
