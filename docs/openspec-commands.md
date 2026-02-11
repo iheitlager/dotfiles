@@ -49,6 +49,8 @@ openspec list
 │ 002-dotfiles-caching       │ Impl   │ 1.0.0   │  4   │
 │ 003-shortcuts-system       │ Impl   │ 1.0.0   │  8   │
 │ 004-openspec-specification │ Impl   │ 1.0.0   │ 13   │
+│ 005-aliases-system         │ Impl   │ 1.0.0   │  7   │
+│ 006-agent-swarm-system     │ Impl   │ 1.0.0   │ 15   │
 ╰────────────────────────────┴────────┴─────────┴──────╯
 
 # Verbose
@@ -60,6 +62,8 @@ openspec list -v
 │ 002-dotfiles-caching       │ Impl   │ 1.0.0   │  4   │ Ilja Heitlager │ 2026-02-07 │ 12.8 KB  │ Performance  │
 │ 003-shortcuts-system       │ Impl   │ 1.0.0   │  8   │ Ilja Heitlager │ 2026-02-07 │ 18.5 KB  │ Productivity │
 │ 004-openspec-specification │ Impl   │ 1.0.0   │ 13   │ Ilja Heitlager │ 2026-02-08 │ 28.1 KB  │ Specification│
+│ 005-aliases-system         │ Impl   │ 1.0.0   │  7   │ Ilja Heitlager │ 2026-02-09 │ 15.3 KB  │ Productivity │
+│ 006-agent-swarm-system     │ Impl   │ 1.0.0   │ 15   │ Ilja Heitlager │ 2026-02-10 │ 32.7 KB  │ Tooling      │
 ╰────────────────────────────┴────────┴─────────┴──────┴────────────────┴────────────┴──────────┴──────────────╯
 
 # JSON
@@ -72,12 +76,38 @@ openspec list --json
       "status": "Implemented",
       "version": "1.0.0",
       "requirements": 9,
-      "scenarios": 27,
+      "scenarios": 33,
       "owner": "Ilja Heitlager",
       "date": "2026-02-07",
       "domain": "Personal Development Environment",
       "file_path": ".openspec/specs/001-dotfiles-core/spec.md",
       "file_size": 46234
+    },
+    {
+      "id": "002-dotfiles-caching",
+      "name": "Dotfiles Caching System Specification",
+      "status": "Implemented",
+      "version": "1.0.0",
+      "requirements": 4,
+      "scenarios": 14,
+      "owner": "Ilja Heitlager",
+      "date": "2026-02-07",
+      "domain": "Personal Development Environment / Performance Optimization",
+      "file_path": ".openspec/specs/002-dotfiles-caching/spec.md",
+      "file_size": 13107
+    },
+    {
+      "id": "005-aliases-system",
+      "name": "Aliases Documentation System Specification",
+      "status": "Implemented",
+      "version": "1.0.0",
+      "requirements": 7,
+      "scenarios": 17,
+      "owner": "Ilja Heitlager",
+      "date": "2026-02-09",
+      "domain": "Developer Productivity / Documentation",
+      "file_path": ".openspec/specs/005-aliases-system/spec.md",
+      "file_size": 15669
     }
   ]
 }
@@ -165,11 +195,11 @@ Validated 4 spec(s) in STRICT mode
 openspec validate --json
 {
   "summary": {
-    "total_specs": 4,
-    "passed": 3,
-    "failed": 1,
-    "errors": 2,
-    "warnings": 4,
+    "total_specs": 6,
+    "passed": 6,
+    "failed": 0,
+    "errors": 0,
+    "warnings": 0,
     "info": 0
   },
   "specs": [
@@ -221,15 +251,15 @@ openspec stats
 ╭─────────────────────────────────────────╮
 │          OpenSpec Statistics            │
 ├─────────────────────────────────────────┤
-│ Total Specifications:  4                │
-│ Total Requirements:    34               │
-│ Total Scenarios:       87               │
+│ Total Specifications:  6                │
+│ Total Requirements:    56               │
+│ Total Scenarios:       173              │
 │                                         │
-│ Avg Reqs/Spec:        8.5               │
-│ Avg Scenarios/Req:    2.6               │
+│ Avg Reqs/Spec:        9.3               │
+│ Avg Scenarios/Req:    3.1               │
 │                                         │
 │ Implementation Status:                  │
-│   Implemented:        4 (100%)          │
+│   Implemented:        6 (100%)          │
 │   In Progress:        0 (0%)            │
 │   Proposed:           0 (0%)            │
 ╰─────────────────────────────────────────╯
@@ -242,43 +272,53 @@ openspec stats -v
 
 Summary
 ─────────────────────────────────────────
-  Specifications:       4
-  Requirements:        34 (MUST: 28, SHOULD: 5, MAY: 1)
-  Scenarios:           87
-  Avg Completeness:    97.3%
+  Specifications:       6
+  Requirements:        56 (MUST: 48, SHOULD: 7, MAY: 1)
+  Scenarios:           173
+  Avg Completeness:    98.2%
 
 Per-Spec Breakdown
 ─────────────────────────────────────────
   001-dotfiles-core
     Requirements:       9 (MUST: 8, SHOULD: 1)
-    Scenarios:         27 (3.0 per req)
+    Scenarios:         33 (3.7 per req)
     Completeness:     100% (all reqs have scenarios)
 
   002-dotfiles-caching
     Requirements:       4 (MUST: 4)
-    Scenarios:         12 (3.0 per req)
+    Scenarios:         14 (3.5 per req)
     Completeness:     100%
 
   003-shortcuts-system
     Requirements:       8 (MUST: 6, SHOULD: 2)
-    Scenarios:         21 (2.6 per req)
-    Completeness:      95% (1 req missing scenario)
+    Scenarios:         19 (2.4 per req)
+    Completeness:      100%
 
   004-openspec-specification
     Requirements:      13 (MUST: 10, SHOULD: 2, MAY: 1)
-    Scenarios:         27 (2.1 per req)
-    Completeness:      92% (1 req missing scenario)
+    Scenarios:         37 (2.8 per req)
+    Completeness:     100%
+
+  005-aliases-system
+    Requirements:       7 (MUST: 5, SHOULD: 2)
+    Scenarios:         17 (2.4 per req)
+    Completeness:     100%
+
+  006-agent-swarm-system
+    Requirements:      15 (MUST: 15)
+    Scenarios:         53 (3.5 per req)
+    Completeness:     100%
 
 Quality Metrics (Individual)
 ─────────────────────────────────────────
-  Scenario Coverage:     97.1% (33/34 reqs have scenarios)
-  Avg Scenario Depth:    2.6 scenarios per requirement
+  Scenario Coverage:     98.2% (55/56 reqs have scenarios)
+  Avg Scenario Depth:    3.1 scenarios per requirement
   MUST Coverage:        100% (all MUST reqs have scenarios)
-  SHOULD Coverage:       80% (4/5 SHOULD reqs have scenarios)
+  SHOULD Coverage:      100% (all SHOULD reqs have scenarios)
 
 Implementation Status
 ─────────────────────────────────────────
-  Implemented:      4 (100%)
+  Implemented:      6 (100%)
   In Progress:      0 (0%)
   Proposed:         0 (0%)
   Deprecated:       0 (0%)
@@ -287,31 +327,42 @@ Implementation Status
 openspec stats --json
 {
   "summary": {
-    "total_specs": 4,
-    "total_requirements": 34,
-    "total_scenarios": 87,
-    "avg_requirements_per_spec": 8.5,
-    "avg_scenarios_per_requirement": 2.6
+    "total_specs": 6,
+    "total_requirements": 56,
+    "total_scenarios": 173,
+    "avg_requirements_per_spec": 9.3,
+    "avg_scenarios_per_requirement": 3.1
   },
   "requirement_distribution": {
-    "MUST": 28,
-    "SHOULD": 5,
+    "MUST": 48,
+    "SHOULD": 7,
     "MAY": 1
   },
   "quality_metrics": {
-    "scenario_coverage_percent": 97.1,
-    "avg_scenario_depth": 2.6,
+    "scenario_coverage_percent": 98.2,
+    "avg_scenario_depth": 3.1,
     "must_coverage_percent": 100.0,
-    "should_coverage_percent": 80.0
+    "should_coverage_percent": 100.0
   },
   "specs": [
     {
       "id": "001-dotfiles-core",
       "requirements": 9,
-      "scenarios": 27,
+      "scenarios": 33,
       "requirement_distribution": {
         "MUST": 8,
         "SHOULD": 1,
+        "MAY": 0
+      },
+      "completeness_percent": 100.0
+    },
+    {
+      "id": "006-agent-swarm-system",
+      "requirements": 15,
+      "scenarios": 53,
+      "requirement_distribution": {
+        "MUST": 15,
+        "SHOULD": 0,
         "MAY": 0
       },
       "completeness_percent": 100.0
@@ -357,12 +408,14 @@ openspec coverage
 │ 002-dotfiles-caching       │ Impl   │  0   │   0   │   4    │    1     │   9   │
 │ 003-shortcuts-system       │ Impl   │  0   │   0   │   1    │    1     │  11   │
 │ 004-openspec-specification │ Impl   │  0   │   0   │   3    │    1     │  12   │
+│ 005-aliases-system         │ Impl   │  0   │   0   │   2    │    1     │   8   │
+│ 006-agent-swarm-system     │ Impl   │  0   │   0   │   4    │    1     │  12   │
 ╰────────────────────────────┴────────┴──────┴───────┴────────┴──────────┴───────╯
 
 Coverage Summary:
-  Specs with ADR references:     0/4 (0%)
-  Specs with test references:    0/4 (0%)
-  Specs with source references:  4/4 (100%)
+  Specs with ADR references:     0/6 (0%)
+  Specs with test references:    0/6 (0%)
+  Specs with source references:  6/6 (100%)
 
 Guidance:
   ⚠ No specs have ADR references - consider documenting architectural decisions
@@ -378,6 +431,8 @@ openspec coverage -v
 │ 002-dotfiles-caching       │ Impl   │  0   │   0   │   4    │    1     │   9   │
 │ 003-shortcuts-system       │ Impl   │  0   │   0   │   1    │    1     │  11   │
 │ 004-openspec-specification │ Impl   │  0   │   0   │   3    │    1     │  12   │
+│ 005-aliases-system         │ Impl   │  0   │   0   │   2    │    1     │   8   │
+│ 006-agent-swarm-system     │ Impl   │  0   │   0   │   4    │    1     │  12   │
 ╰────────────────────────────┴────────┴──────┴───────┴────────┴──────────┴───────╯
 
 Detailed Coverage - 001-dotfiles-core (9 requirements):
@@ -428,20 +483,25 @@ openspec coverage --strict
 │ Spec                       │ Status │ ADRs │ Tests │ Source │ External │ Total │
 ├────────────────────────────┼────────┼──────┼───────┼────────┼──────────┼───────┤
 │ 001-dotfiles-core          │ Impl   │  0   │   0   │   5    │    1     │  14   │
+│ 002-dotfiles-caching       │ Impl   │  0   │   0   │   4    │    1     │   9   │
+│ 003-shortcuts-system       │ Impl   │  0   │   0   │   1    │    1     │  11   │
+│ 004-openspec-specification │ Impl   │  0   │   0   │   3    │    1     │  12   │
+│ 005-aliases-system         │ Impl   │  0   │   0   │   2    │    1     │   8   │
+│ 006-agent-swarm-system     │ Impl   │  0   │   0   │   4    │    1     │  12   │
 ╰────────────────────────────┴────────┴──────┴───────┴────────┴──────────┴───────╯
 
-STRICT MODE: Only checking MUST requirements (28/34 total)
-  ✓ All 28 MUST requirements have source references (100%)
-  ⚠ 5 SHOULD requirements ignored in strict mode
+STRICT MODE: Only checking MUST requirements (48/56 total)
+  ✓ All 48 MUST requirements have source references (100%)
+  ⚠ 8 SHOULD/MAY requirements ignored in strict mode
 
 # JSON
 openspec coverage --json
 {
   "summary": {
-    "total_specs": 4,
+    "total_specs": 6,
     "specs_with_adr": 0,
     "specs_with_tests": 0,
-    "specs_with_source": 4,
+    "specs_with_source": 6,
     "adr_percent": 0,
     "test_percent": 0,
     "source_percent": 100
