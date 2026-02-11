@@ -422,7 +422,7 @@ if ! sudo -v; then
 fi
 
 # start with brew itself
-source $DOTFILES/homebrew/brew_install.sh 2>&1 || exit 1
+source "$DOTFILES/homebrew/brew_install.sh" 2>&1 || exit 1
 
 # now process all topical brew packages
 for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
