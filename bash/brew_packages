@@ -10,5 +10,14 @@ PATH=/usr/local/bin:$PATH
 
 brew install bash-completion@2 || brew upgrade bash-completion@2
 brew install zoxide || brew upgrade zoxide
+brew install jless || brew upgrade jless
+brew install flock || brew upgrade flock
+brew install htop || brew upgrade htop
+
+packages=(fd jq yq delta fzf bat eza rg tldr glow)
+for pkg in "${packages[@]}"; do
+    brew install "$pkg" || brew upgrade "$pkg"
+done
+
 
 export PATH=$TMPPATH
