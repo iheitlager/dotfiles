@@ -1,0 +1,31 @@
+# Claude Team Job File Template
+# This is the YAML format for coordination jobs
+# Jobs flow: pending/ -> claimed/ -> done/
+
+id: job-001
+created: 2026-02-05T14:30:00Z
+created_by: main-agent-1
+project: backend
+priority: normal  # normal, high, urgent
+description: |
+  Implement user authentication endpoint
+  - Add POST /api/auth/login
+  - Add JWT token generation
+  - Add comprehensive tests
+
+acceptance_criteria: |
+  - All tests pass
+  - No linting errors
+  - PR created with clear description
+  - Test coverage >80%
+
+claimed_by: null
+claimed_at: null
+completed_at: null
+result: null
+
+# Fields updated during lifecycle:
+# - claimed_by: Agent ID who claimed this job
+# - claimed_at: ISO timestamp when claimed
+# - completed_at: ISO timestamp when marked complete
+# - result: Completion message (e.g., "PR #42 created")

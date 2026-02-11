@@ -20,20 +20,18 @@ usage() {
     cat <<EOF
 ${BLUE}Claude Team Container${NC} - Multi-repo, multi-agent team workspace
 
-${YELLOW}Usage:${NC} claude-team [OPTIONS] MODE [PROJECT]
+${YELLOW}Usage:${NC} claude-team [OPTIONS] MODE
 
 ${YELLOW}Modes:${NC}
-    workstation     Single workspace (team-config + shell)
-    agent           Multi-agent mode with worktrees (default: 2 agents)
+    run             Start full agent session (2 main + 1 per project + coord)
     shell           Just a shell in the container
+    stop            Stop running container gracefully
     build           Build the container image
     validate        Validate workspace structure
     init            Initialize workspace (generate Makefile)
 
 ${YELLOW}Options:${NC}
     -w, --workspace PATH    Workspace directory (default: current dir or \$CLAUDE_TEAM_WORKSPACE)
-    -n, --agents N          Number of agents: 2 or 4 (default: 2)
-    -p, --project NAME      Project to work on (required for agent mode)
     -t, --team-config DIR   Team config directory name (default: auto-detect)
     -f, --firewall          Enable firewall in container
     --yolo                  Skip permission prompts in Claude
@@ -45,20 +43,21 @@ ${YELLOW}Options:${NC}
 ${YELLOW}Environment Variables:${NC}
     CLAUDE_TEAM_WORKSPACE   Default workspace path
     CLAUDE_TEAM_IMAGE       Container image name (default: claudeteam:latest)
+    ANTHROPIC_API_KEY       Read from .env file in workspace (passed to container)
 
 ${YELLOW}Quick Start:${NC}
     1. mkdir ~/wc/myproject && cd ~/wc/myproject
     2. git clone <team-settings-repo>    # Must have claude/config/CLAUDE.md
     3. git clone <project-repo-1>
     4. git clone <project-repo-2>
-    5. claude-team init                  # Generates Makefile
-    6. make workstation                  # Or: make run PROJECT=<name>
+    5. echo "ANTHROPIC_API_KEY=sk-..." > .env
+    6. claude-team init                  # Generates Makefile
+    7. make run                          # Start full agent session
 
 ${YELLOW}Examples:${NC}
     claude-team init                       # Initialize workspace with Makefile
-    claude-team workstation                # Start workstation in current workspace
-    claude-team agent -p FRANK             # Start 2 agents on FRANK project
-    claude-team agent -p FRANK -n 4        # Start 4 agents on FRANK project
+    claude-team run                        # Start full agent session
+    claude-team shell                      # Start shell-only container
     claude-team validate                   # Check workspace structure
 
 EOF
@@ -103,7 +102,7 @@ init_workspace() {
     local workspace="$1"
     local team_config="$2"
     local makefile="$workspace/Makefile"
-    local template="${DOTFILES:-$HOME/.dotfiles}/local/lib/claude-team-makefile-template"
+    local template="${DOTFILES:-$HOME/.dotfiles}/containers/claude-team/lib/makefile-template"
 
     # Check if Makefile already exists
     if [[ -f "$makefile" ]]; then
@@ -136,13 +135,12 @@ init_workspace() {
     log "✓ Created: $makefile"
     log ""
     log "Available commands:"
-    log "  make workstation    - Start team config workspace"
-    log "  make run PROJECT=X  - Start 2 agents on project X"
-    log "  make run4 PROJECT=X - Start 4 agents on project X"
+    log "  make run            - Start agent session (auto-detects projects)"
     log "  make shell          - Start shell container"
     log "  make validate       - Validate workspace"
     log "  make info           - Show workspace info"
     log ""
+    log "Team config: $team_config"
     log "Projects detected: ${projects:-none}"
 }
 
@@ -233,7 +231,7 @@ validate_workspace() {
 # Build container image
 build_container() {
     local containerfile_dir="${DOTFILES:-$HOME/.dotfiles}/containers/claude-team"
-    
+
     if [[ ! -f "$containerfile_dir/Containerfile" ]]; then
         error "Containerfile not found at $containerfile_dir/Containerfile"
     fi
@@ -243,21 +241,85 @@ build_container() {
     log "✓ Build complete"
 }
 
+# Stop running container gracefully
+stop_container() {
+    local container_name="claude-team-${USER_NAME}"
+
+    log "Looking for container: $container_name"
+
+    # Check if container is running
+    if ! podman ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        warn "No running container found: $container_name"
+
+        # Check if there are any claude-team containers
+        local all_containers=$(podman ps -a --format '{{.Names}}' | grep "^claude-team-" || true)
+        if [[ -n "$all_containers" ]]; then
+            log "Found stopped containers:"
+            echo "$all_containers" | while read -r name; do
+                log "  - $name"
+            done
+            log ""
+            log "To remove stopped containers:"
+            log "  podman rm $all_containers"
+        fi
+        return 0
+    fi
+
+    log "Stopping container: $container_name"
+
+    # Send SIGTERM for graceful shutdown
+    log "  Sending SIGTERM (graceful shutdown)..."
+    podman stop --time 10 "$container_name"
+
+    log "✓ Container stopped successfully"
+    log ""
+    log "The container will be automatically removed (--rm flag)"
+}
+
+# Load environment from .env file
+load_env_file() {
+    local workspace="$1"
+    local env_file="$workspace/.env"
+
+    if [[ -f "$env_file" ]]; then
+        debug "Loading environment from $env_file"
+        # Export variables from .env (ignore comments and empty lines)
+        while IFS='=' read -r key value; do
+            # Skip comments and empty lines
+            [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+            # Remove quotes from value
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
+            # Export variable
+            export "$key=$value"
+        done < <(grep -v '^#' "$env_file" | grep -v '^$')
+
+        if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+            log "✓ Loaded ANTHROPIC_API_KEY from .env"
+        fi
+    else
+        debug "No .env file found in workspace"
+    fi
+}
+
 # Main run function
 run_container() {
     local mode="$1"
     local workspace="$2"
-    local project="$3"
-    local agents="$4"
-    local team_config="$5"
-    local firewall="$6"
-    local yolo="$7"
+    local team_config="$3"
+    local firewall="$4"
+    local yolo="$5"
+
+    # Load .env file
+    load_env_file "$workspace"
 
     # Ensure credential directory exists
     mkdir -p "$HOME/.claude-credentials/$USER_NAME"
 
     # Build container name
-    local container_name="claude-${mode}-${project:-team}-${USER_NAME}"
+    local container_name="claude-team-${USER_NAME}"
 
     # Check if container already running
     if podman ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
@@ -277,6 +339,11 @@ run_container() {
         -e "CLAUDE_TEAM_CONFIG=$team_config"
     )
 
+    # Pass ANTHROPIC_API_KEY if available
+    if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+        podman_args+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+    fi
+
     # Optional: firewall capability
     if [[ -n "$firewall" ]]; then
         podman_args+=(--cap-add=NET_ADMIN)
@@ -288,8 +355,8 @@ run_container() {
         podman_args+=(-e "CLAUDE_YOLO=1")
     fi
 
-    # Add image and entrypoint args
-    podman_args+=("$CONTAINER_IMAGE" "$mode" "$project" "$agents")
+    # Add image and mode
+    podman_args+=("$CONTAINER_IMAGE" "$mode")
 
     if [[ -n "$DRY_RUN" ]]; then
         log "Would run:"
@@ -304,8 +371,6 @@ run_container() {
 # Parse arguments
 WORKSPACE="${CLAUDE_TEAM_WORKSPACE:-$(pwd)}"
 MODE=""
-PROJECT=""
-AGENTS=2
 TEAM_CONFIG=""
 FIREWALL=""
 YOLO=""
@@ -316,8 +381,6 @@ VERBOSE=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         -w|--workspace) WORKSPACE="$2"; shift 2 ;;
-        -n|--agents) AGENTS="$2"; shift 2 ;;
-        -p|--project) PROJECT="$2"; shift 2 ;;
         -t|--team-config) TEAM_CONFIG="$2"; shift 2 ;;
         -f|--firewall) FIREWALL=1; shift ;;
         --yolo) YOLO=1; shift ;;
@@ -325,12 +388,8 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=1; shift ;;
         -v|--verbose) VERBOSE=1; shift ;;
         -h|--help) usage; exit 0 ;;
-        workstation|agent|shell|build|validate|init)
+        run|shell|stop|build|validate|init)
             MODE="$1"; shift
-            # Next positional arg is project if not a flag
-            if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
-                PROJECT="$1"; shift
-            fi
             ;;
         *)
             error "Unknown option: $1\nRun 'claude-team --help' for usage."
@@ -339,7 +398,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Default mode
-MODE="${MODE:-workstation}"
+MODE="${MODE:-run}"
 
 # Resolve workspace to absolute path
 WORKSPACE="$(cd "$WORKSPACE" && pwd)"
@@ -347,6 +406,12 @@ WORKSPACE="$(cd "$WORKSPACE" && pwd)"
 # Handle build command
 if [[ "$MODE" == "build" ]]; then
     build_container
+    exit 0
+fi
+
+# Handle stop command
+if [[ "$MODE" == "stop" ]]; then
+    stop_container
     exit 0
 fi
 
@@ -376,16 +441,6 @@ if [[ -z "$TEAM_CONFIG" ]]; then
     debug "Auto-detected team config: $TEAM_CONFIG"
 fi
 
-# Validate project for agent mode
-if [[ "$MODE" == "agent" ]]; then
-    if [[ -z "$PROJECT" ]]; then
-        error "Project required for agent mode. Use: claude-team agent -p PROJECT_NAME\n\nAvailable projects:\n$(list_projects "$WORKSPACE" "$TEAM_CONFIG")"
-    fi
-    if [[ ! -d "$WORKSPACE/$PROJECT" ]]; then
-        error "Project not found: $PROJECT\n\nAvailable projects:\n$(list_projects "$WORKSPACE" "$TEAM_CONFIG")"
-    fi
-fi
-
 # Build first if requested
 if [[ -n "$BUILD_FIRST" ]]; then
     build_container
@@ -399,4 +454,4 @@ if ! podman image exists "$CONTAINER_IMAGE" 2>/dev/null; then
 fi
 
 # Run the container
-run_container "$MODE" "$WORKSPACE" "$PROJECT" "$AGENTS" "$TEAM_CONFIG" "$FIREWALL" "$YOLO"
+run_container "$MODE" "$WORKSPACE" "$TEAM_CONFIG" "$FIREWALL" "$YOLO"

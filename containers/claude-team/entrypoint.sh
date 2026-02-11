@@ -1,24 +1,44 @@
 #!/bin/bash
-# Claude Team Container - Entrypoint
-# Handles mode switching and tmux session setup
+# Claude Team Container - Entrypoint v2.0
+# Multi-agent architecture with coordination daemon
 set -e
 
-# Get user from environment or default
+# Get user and mode from environment
 USER_NAME="${CLAUDE_USER:-claude}"
-MODE="${1:-workstation}"
-PROJECT="${2:-}"
-AGENTS="${3:-2}"
+MODE="${1:-run}"
 TEAM_CONFIG="${CLAUDE_TEAM_CONFIG:-}"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 log() { echo -e "${GREEN}[entrypoint]${NC} $*"; }
 warn() { echo -e "${YELLOW}[entrypoint]${NC} $*"; }
 error() { echo -e "${RED}[entrypoint]${NC} $*" >&2; exit 1; }
+
+# Clear ephemeral coordination state
+clear_coordination_state() {
+    log "Clearing coordination state..."
+    rm -rf /tmp/claude-coordination
+    mkdir -p /tmp/claude-coordination/{agents,jobs/{pending,claimed,done}}
+    touch /tmp/claude-coordination/events.log
+}
+
+# Setup tmux configuration
+setup_tmux_config() {
+    log "Setting up tmux configuration..."
+    mkdir -p "$HOME/.config/tmux"
+
+    if [[ -f /opt/claude-team/lib/tmux.conf ]]; then
+        ln -sf /opt/claude-team/lib/tmux.conf "$HOME/.config/tmux/tmux.conf"
+        log "  ✓ tmux.conf"
+    else
+        warn "  ✗ tmux.conf not found at /opt/claude-team/lib/tmux.conf"
+    fi
+}
 
 # Setup ~/.claude symlinks from team config
 setup_claude_config() {
@@ -33,12 +53,12 @@ setup_claude_config() {
     fi
 
     if [[ -z "$TEAM_CONFIG" ]]; then
-        warn "No team config found, ~/.claude will be empty"
+        warn "No team config found, ~/.claude will be minimal"
         return
     fi
 
     local config_path="/workspace/$TEAM_CONFIG/claude/config"
-    
+
     if [[ ! -d "$config_path" ]]; then
         warn "Team config path not found: $config_path"
         return
@@ -46,40 +66,46 @@ setup_claude_config() {
 
     log "Setting up ~/.claude from $TEAM_CONFIG"
 
-    # Symlink main files
-    for file in CLAUDE.md settings.json; do
-        if [[ -f "$config_path/$file" ]]; then
-            ln -sf "$config_path/$file" "$HOME/.claude/$file"
-            log "  ✓ $file"
-        fi
-    done
+    # Symlink CLAUDE.md
+    if [[ -f "$config_path/CLAUDE.md" ]]; then
+        ln -sf "$config_path/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
+        log "  ✓ CLAUDE.md"
+    fi
 
     # Symlink directories
-    for dir in "$config_path"/*/; do
-        if [[ -d "$dir" ]]; then
-            local name=$(basename "$dir")
-            ln -sfn "$dir" "$HOME/.claude/$name"
-            log "  ✓ $name/"
+    for dir in commands skills templates agents; do
+        if [[ -d "$config_path/$dir" ]]; then
+            ln -sfn "$config_path/$dir" "$HOME/.claude/$dir"
+            log "  ✓ $dir/"
         fi
     done
+
+    # NOTE: settings.json will be created by settings_modifier.py
 }
 
-# Ensure state directories exist
-setup_state_dirs() {
-    mkdir -p "$XDG_STATE_HOME/agent-context"
-    if [[ -n "$PROJECT" ]]; then
-        mkdir -p "$XDG_STATE_HOME/agent-context/$PROJECT/jobs/pending"
-        mkdir -p "$XDG_STATE_HOME/agent-context/$PROJECT/jobs/active"
-        mkdir -p "$XDG_STATE_HOME/agent-context/$PROJECT/jobs/done"
-    fi
+# Detect all project repos in /workspace
+detect_projects() {
+    local projects=()
+    for dir in /workspace/*/; do
+        local name=$(basename "$dir")
+        # Skip team config and .worktrees
+        if [[ "$name" != "$TEAM_CONFIG" && "$name" != ".worktrees" ]]; then
+            # Check if it's a git repo (remove trailing slash for check)
+            local dir_clean="${dir%/}"
+            if [[ -d "$dir_clean/.git" ]]; then
+                projects+=("$name")
+            fi
+        fi
+    done
+    echo "${projects[@]}"
 }
 
-# Create worktree for an agent
+# Create worktree for a project
 create_worktree() {
     local project="$1"
     local agent_num="$2"
     local worktree_name="${USER_NAME}-a.${agent_num}"
-    local worktree_path="/workspace/worktrees/${project}/${worktree_name}"
+    local worktree_path="/workspace/.worktrees/${project}/${worktree_name}"
     local project_path="/workspace/${project}"
 
     if [[ ! -d "$project_path/.git" ]]; then
@@ -87,14 +113,16 @@ create_worktree() {
     fi
 
     if [[ ! -d "$worktree_path" ]]; then
-        log "Creating worktree: $worktree_name"
-        mkdir -p "/workspace/worktrees/${project}"
+        log "Creating worktree: ${project}/${worktree_name}"
+        mkdir -p "/workspace/.worktrees/${project}"
         cd "$project_path"
+
+        # Try to create or add existing worktree
         git worktree add "$worktree_path" -b "$worktree_name" 2>/dev/null || \
             git worktree add "$worktree_path" "$worktree_name" 2>/dev/null || \
-            git worktree add "$worktree_path" HEAD
+            git worktree add "$worktree_path" HEAD 2>/dev/null || true
     fi
-    
+
     echo "$worktree_path"
 }
 
@@ -107,97 +135,125 @@ claude_cmd() {
     echo "$cmd"
 }
 
-# Mode: workstation
-# Left pane: claude in team-config, Right pane: shell
-run_workstation() {
-    local team_path="/workspace/${TEAM_CONFIG}"
-    
-    if [[ ! -d "$team_path" ]]; then
-        team_path="/workspace"
-    fi
-
-    log "Starting workstation mode"
-    log "  Team config: $team_path"
-
-    exec tmux new-session -s "ws-${TEAM_CONFIG:-team}" \
-        "cd '$team_path' && $(claude_cmd); exec bash" \; \
-        split-window -h "cd /workspace && exec bash" \; \
-        select-pane -t 0
-}
-
-# Mode: agent
-# N panes, each with claude in a worktree
-run_agent() {
-    if [[ -z "$PROJECT" ]]; then
-        error "PROJECT is required for agent mode"
-    fi
-
-    if [[ ! -d "/workspace/$PROJECT" ]]; then
-        error "Project not found: /workspace/$PROJECT"
-    fi
-
-    log "Starting agent mode"
-    log "  Project: $PROJECT"
-    log "  Agents: $AGENTS"
+# Mode: run (full multi-agent session)
+run_multi_agent() {
+    log "Starting multi-agent session"
     log "  User: $USER_NAME"
+    log "  Team config: ${TEAM_CONFIG:-none}"
 
-    # Create worktrees
-    local worktrees=()
-    for i in $(seq 1 "$AGENTS"); do
-        worktrees+=("$(create_worktree "$PROJECT" "$i")")
-    done
+    # Detect all projects
+    local projects=($(detect_projects))
+
+    if [[ ${#projects[@]} -eq 0 ]]; then
+        warn "No projects detected in /workspace"
+        warn "Expected to find git repos (excluding $TEAM_CONFIG)"
+        warn "Listing /workspace contents:"
+        ls -la /workspace | head -20
+    else
+        log "  Projects detected (${#projects[@]}): ${projects[*]}"
+    fi
+
+    # Create worktrees for each project
+    local agent_num=1
+    declare -A worktree_map
+
+    if [[ ${#projects[@]} -gt 0 ]]; then
+        log "Creating worktrees..."
+        for project in "${projects[@]}"; do
+            local worktree=$(create_worktree "$project" "$agent_num")
+            worktree_map[$project]=$worktree
+            log "  ✓ $project → $worktree"
+            ((agent_num++))
+        done
+    fi
 
     # Build tmux session
-    local session="claude-${PROJECT}-${USER_NAME}"
-    local first_worktree="${worktrees[0]}"
-    local agent_id="${USER_NAME}-a.1"
+    local session="claude-team-${USER_NAME}"
+    export TMUX_SESSION="$session"
 
-    # Start first pane
-    tmux new-session -d -s "$session" -c "$first_worktree" \
-        "AGENT_ID=$agent_id $(claude_cmd); exec bash"
+    log "Building tmux session: $session"
 
-    # Add remaining panes
-    for i in $(seq 2 "$AGENTS"); do
-        local idx=$((i - 1))
-        local wt="${worktrees[$idx]}"
-        local aid="${USER_NAME}-a.${i}"
-        tmux split-window -t "$session" -c "$wt" \
-            "AGENT_ID=$aid $(claude_cmd); exec bash"
+    # Window 1: main (2 orchestrator agents + shell) - equal 1/3 splits
+    log "  Window: main (2 orchestrators + shell)"
+    tmux new-session -d -s "$session" -n "main" -c /workspace \
+        "AGENT_ID=main-agent-1 AGENT_ROLE=main $(claude_cmd) --append-system-prompt \"\$(python3 /opt/claude-team/lib/generate_agents_md.py main-agent-1)\"; exec bash"
+
+    tmux split-window -t "$session:main" -h -c /workspace \
+        "AGENT_ID=main-agent-2 AGENT_ROLE=main $(claude_cmd) --append-system-prompt \"\$(python3 /opt/claude-team/lib/generate_agents_md.py main-agent-2)\"; exec bash"
+
+    tmux split-window -t "$session:main" -h -c /workspace \
+        "exec bash"
+
+    tmux select-layout -t "$session:main" even-horizontal
+
+    # Windows 2-N: one per project (subagent in worktree)
+    agent_num=1
+    for project in "${projects[@]}"; do
+        local worktree="${worktree_map[$project]}"
+        local agent_id="${USER_NAME}-a.${agent_num}"
+
+        log "  Window: $project (subagent $agent_id)"
+
+        tmux new-window -t "$session" -n "$project" -c "$worktree" \
+            "AGENT_ID=$agent_id AGENT_ROLE=sub AGENT_PROJECT=$project $(claude_cmd) --append-system-prompt \"\$(python3 /opt/claude-team/lib/generate_agents_md.py $agent_id)\"; exec bash"
+
+        ((agent_num++))
     done
 
-    # Arrange layout
-    if [[ "$AGENTS" -eq 2 ]]; then
-        tmux select-layout -t "$session" even-horizontal
-    elif [[ "$AGENTS" -ge 4 ]]; then
-        tmux select-layout -t "$session" tiled
-    fi
+    # Final window: coordination daemon
+    log "  Window: coord (coordination daemon)"
+    tmux new-window -t "$session" -n "coord" \
+        "python3 /opt/claude-team/lib/coordination_daemon.py"
 
-    # Attach
+    # Select main window and attach
+    tmux select-window -t "$session:main"
+
+    log "✓ Session ready: $session"
+    log ""
+    log "Windows:"
+    log "  - main:  2 orchestrator agents + shell"
+    for project in "${projects[@]}"; do
+        log "  - $project:  subagent in worktree"
+    done
+    log "  - coord: coordination dashboard"
+    log ""
+
     exec tmux attach -t "$session"
 }
 
-# Mode: shell
+# Mode: shell (just a shell)
 run_shell() {
     log "Starting shell mode"
     cd /workspace
     exec bash
 }
 
-# Main
-setup_claude_config
-setup_state_dirs
+# Main entrypoint
+main() {
+    # Phase 1: Setup
+    clear_coordination_state
+    setup_tmux_config
+    setup_claude_config
 
-case "$MODE" in
-    workstation)
-        run_workstation
-        ;;
-    agent)
-        run_agent
-        ;;
-    shell)
-        run_shell
-        ;;
-    *)
-        error "Unknown mode: $MODE (use: workstation, agent, shell)"
-        ;;
-esac
+    # Phase 2: Modify settings.json (replace hooks)
+    if [[ -f /opt/claude-team/lib/settings_modifier.py ]]; then
+        log "Modifying settings.json..."
+        python3 /opt/claude-team/lib/settings_modifier.py
+    fi
+
+    # Phase 3: Run mode
+    case "$MODE" in
+        run)
+            run_multi_agent
+            ;;
+        shell)
+            run_shell
+            ;;
+        *)
+            error "Unknown mode: $MODE (use: run, shell)"
+            ;;
+    esac
+}
+
+# Execute main
+main
