@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "rich>=13.0.0",
+#   "pyyaml>=6.0",
+#   "jsonschema>=4.0.0",
+# ]
+# ///
+#
 # Copyright 2026 Ilja Heitlager
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -30,6 +39,12 @@ import sys
 import os
 import argparse
 from pathlib import Path
+
+# Add local/lib to path for importing arch modules
+SCRIPT_DIR = Path(__file__).parent
+LIB_DIR = SCRIPT_DIR.parent / "lib"
+if str(LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(LIB_DIR))
 
 VERSION = "0.1.0"
 
@@ -93,10 +108,46 @@ def cmd_list(args):
             print(f"   From: {Path.cwd()} (git root or walking up)", file=sys.stderr)
         return 1
 
-    print(f"📦 Architecture: {arch_dir}")
-    print("\n⚠️  Not yet implemented")
-    print("   This command will list all resources in the architecture model.")
-    return 0
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.path_resolver import PathResolver
+
+        # Load model
+        print(f"📦 Loading architecture from: {arch_dir}")
+        model = load_architecture(arch_dir)
+
+        # Build path resolver
+        resolver = PathResolver(model)
+
+        # Print summary
+        print(f"\n✅ Loaded successfully")
+        print(f"   Resources: {model.resource_count()}")
+        print(f"   Interfaces: {model.interface_count()}")
+        print(f"   Relationships: {len(model.relationships)}")
+        print(f"   Source files: {len(model._source_files)}")
+
+        # List root resources
+        if model.resources:
+            print(f"\n📦 Root Resources:")
+            for resource in model.resources:
+                abstract_flag = " [abstract]" if resource.abstract else ""
+                print(f"   - {resource.name} ({resource.id}){abstract_flag}")
+                print(f"     Type: {resource.type}")
+                if resource.interfaces:
+                    print(f"     Interfaces: {len(resource.interfaces)}")
+                if resource.children:
+                    print(f"     Children: {len(resource.children)}")
+
+        return 0
+
+    except LoadError as e:
+        print(f"\n❌ Load error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 def cmd_validate(args):
