@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# OSC 8 Hyperlink support for Ghostty terminal
+# Spec: https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
+# Ghostty docs: https://ghostty.org/docs/vt/external
+
+# Core hyperlink function - creates clickable terminal links using OSC 8
+# Usage: hyperlink "https://example.com" "Click here"
+# Usage: hyperlink "file:///path/to/file" "/path/to/file"
+hyperlink() {
+    local uri="$1"
+    local text="${2:-$uri}"  # Default to URI if no text provided
+    local id="${3:-}"        # Optional ID for multi-line links
+
+    if [[ -z "$uri" ]]; then
+        echo "Usage: hyperlink <uri> [text] [id]" >&2
+        return 1
+    fi
+
+    # Build params (currently only 'id' is supported)
+    local params=""
+    if [[ -n "$id" ]]; then
+        params="id=${id}"
+    fi
+
+    # OSC 8 format: ESC ] 8 ; params ; URI ESC \ text ESC ] 8 ; ; ESC \
+    printf '\e]8;%s;%s\e\\%s\e]8;;\e\\' "$params" "$uri" "$text"
+}
+
+# Create a file:// hyperlink with hostname validation
+# Usage: file_link "/path/to/file"
+# Usage: file_link "/path/to/file" "custom text"
+file_link() {
+    local filepath="$1"
+    local text="${2:-}"
+
+    if [[ -z "$filepath" ]]; then
+        echo "Usage: file_link <path> [text]" >&2
+        return 1
+    fi
+
+    # Resolve to absolute path
+    if [[ ! "$filepath" =~ ^/ ]]; then
+        filepath="$(realpath "$filepath" 2>/dev/null || echo "$PWD/$filepath")"
+    fi
+
+    # Get hostname for file:// URI (per spec)
+    local hostname
+    hostname="$(hostname 2>/dev/null || echo "localhost")"
+
+    # Build file:// URI with hostname
+    local uri="file://${hostname}${filepath}"
+
+    # Default text to basename if not provided
+    if [[ -z "$text" ]]; then
+        text="$(basename "$filepath")"
+    fi
+
+    hyperlink "$uri" "$text"
+}
+
+# Create a web hyperlink (http/https)
+# Usage: web_link "https://example.com"
+# Usage: web_link "https://example.com" "Example Site"
+web_link() {
+    local url="$1"
+    local text="${2:-$url}"
+
+    if [[ -z "$url" ]]; then
+        echo "Usage: web_link <url> [text]" >&2
+        return 1
+    fi
+
+    # Add https:// if no scheme provided
+    if [[ ! "$url" =~ ^https?:// ]]; then
+        url="https://${url}"
+    fi
+
+    hyperlink "$url" "$text"
+}
+
+# Create a GitHub commit link (if in a git repo)
+# Usage: git_commit_link "abc123"
+# Usage: git_commit_link "abc123" "feat: add feature"
+git_commit_link() {
+    local commit_hash="$1"
+    local text="${2:-$commit_hash}"
+
+    if [[ -z "$commit_hash" ]]; then
+        echo "Usage: git_commit_link <commit_hash> [text]" >&2
+        return 1
+    fi
+
+    # Get remote URL
+    local remote_url
+    remote_url="$(git config --get remote.origin.url 2>/dev/null)" || {
+        echo "Error: Not in a git repository or no origin remote" >&2
+        return 1
+    }
+
+    # Convert SSH URL to HTTPS
+    if [[ "$remote_url" =~ ^git@github\.com:(.+)\.git$ ]]; then
+        remote_url="https://github.com/${BASH_REMATCH[1]}"
+    elif [[ "$remote_url" =~ ^https://github\.com/(.+)\.git$ ]]; then
+        remote_url="https://github.com/${BASH_REMATCH[1]}"
+    else
+        echo "Error: Unsupported remote URL format: $remote_url" >&2
+        return 1
+    fi
+
+    local commit_url="${remote_url}/commit/${commit_hash}"
+    hyperlink "$commit_url" "$text"
+}
+
+# Create a GitHub issue link
+# Usage: github_issue 123
+# Usage: github_issue 123 "Bug: fix this"
+github_issue() {
+    local issue_number="$1"
+    local text="${2:-#${issue_number}}"
+
+    if [[ -z "$issue_number" ]]; then
+        echo "Usage: github_issue <issue_number> [text]" >&2
+        return 1
+    fi
+
+    # Get remote URL
+    local remote_url
+    remote_url="$(git config --get remote.origin.url 2>/dev/null)" || {
+        echo "Error: Not in a git repository or no origin remote" >&2
+        return 1
+    }
+
+    # Convert SSH URL to HTTPS
+    if [[ "$remote_url" =~ ^git@github\.com:(.+)\.git$ ]]; then
+        remote_url="https://github.com/${BASH_REMATCH[1]}"
+    elif [[ "$remote_url" =~ ^https://github\.com/(.+)\.git$ ]]; then
+        remote_url="https://github.com/${BASH_REMATCH[1]}"
+    else
+        echo "Error: Unsupported remote URL format: $remote_url" >&2
+        return 1
+    fi
+
+    local issue_url="${remote_url}/issues/${issue_number}"
+    hyperlink "$issue_url" "$text"
+}
+
+# Enhanced ls that shows file:// hyperlinks for files
+# Usage: lsl (or lsl path)
+lsl() {
+    local target="${1:-.}"
+    local hostname
+    hostname="$(hostname 2>/dev/null || echo "localhost")"
+
+    # Use eza if available, otherwise fall back to ls
+    if command -v eza >/dev/null 2>&1; then
+        # Get plain output to extract filenames reliably
+        local -a files
+        mapfile -t files < <(eza -1a "$target" 2>/dev/null)
+
+        # Display with colors and add hyperlinks after
+        eza -la --color=always --group-directories-first --git --header "$target"
+        echo
+        echo "📎 Clickable file links:"
+
+        for file in "${files[@]}"; do
+            # Skip . and ..
+            if [[ "$file" == "." || "$file" == ".." ]]; then
+                continue
+            fi
+
+            # Build absolute path
+            local filepath
+            if [[ "$target" == "." ]]; then
+                filepath="$PWD/$file"
+            else
+                filepath="$(cd "$target" && realpath "$file" 2>/dev/null || echo "$target/$file")"
+            fi
+
+            # Check if file/directory exists
+            if [[ -e "$filepath" ]]; then
+                local file_uri="file://${hostname}${filepath}"
+                printf "  "
+                hyperlink "$file_uri" "$file"
+                echo
+            fi
+        done
+    else
+        ls -lah "$target"
+    fi
+}
+
+# Print a clickable link (with newline)
+# Usage: print_link "https://example.com" "Example"
+print_link() {
+    hyperlink "$@"
+    echo
+}
+
+# Inline link (no newline) - useful in prompts
+# Usage: inline_link "https://example.com" "Example"
+inline_link() {
+    hyperlink "$@"
+}
+
+# Check if terminal supports OSC 8 hyperlinks
+# Returns 0 if supported, 1 if not
+supports_hyperlinks() {
+    # Check for Ghostty or other known supporting terminals
+    if [[ "$TERM_PROGRAM" == "ghostty" ]] ||
+       [[ "$VTE_VERSION" ]] ||
+       [[ "$TERM_PROGRAM" == "iTerm.app" ]] ||
+       [[ "$TERM_PROGRAM" == "WezTerm" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Wrapper that only creates hyperlinks if supported
+# Usage: smart_link "https://example.com" "Example"
+smart_link() {
+    if supports_hyperlinks; then
+        hyperlink "$@"
+    else
+        # Fall back to plain text
+        echo -n "${2:-$1}"
+    fi
+}

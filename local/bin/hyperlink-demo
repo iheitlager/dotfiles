@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Demo script for OSC 8 hyperlinks in Ghostty
+
+# Source the hyperlink functions directly
+if [[ -f "$HOME/.dotfiles/ghostty/bash_aliases" ]]; then
+    source "$HOME/.dotfiles/ghostty/bash_aliases"
+elif [[ -f "$HOME/.cache/dotfiles/bash_aliases.sh" ]]; then
+    source "$HOME/.cache/dotfiles/bash_aliases.sh"
+fi
+
+echo "=== OSC 8 Hyperlink Demo for Ghostty ==="
+echo
+
+# Check support
+if supports_hyperlinks; then
+    echo "✅ Your terminal supports OSC 8 hyperlinks!"
+else
+    echo "⚠️  Your terminal may not support OSC 8 hyperlinks"
+fi
+echo
+
+# Web links
+echo "📍 Web Links:"
+echo -n "  • "
+print_link "https://github.com" "GitHub"
+echo -n "  • "
+print_link "https://ghostty.org" "Ghostty Terminal"
+echo
+
+# File links
+echo "📁 File Links:"
+echo -n "  • "
+print_link "file://$(hostname)$HOME/.bashrc" "~/.bashrc"
+echo -n "  • "
+file_link "$HOME/.dotfiles" ".dotfiles directory"
+echo
+echo
+
+# Git links (if in a repo)
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    echo "🔗 Git Links (current repo):"
+    local_commit=$(git rev-parse HEAD 2>/dev/null)
+    if [[ -n "$local_commit" ]]; then
+        echo -n "  • Latest commit: "
+        git_commit_link "${local_commit:0:7}" "$(git log -1 --pretty=%s)"
+        echo
+    fi
+    echo
+fi
+
+# GitHub issue example
+echo "🐛 GitHub Issues:"
+echo "  • Link to issue: $(github_issue 1 'Issue #1' 2>/dev/null || echo '(requires git repo)')"
+echo
+
+# Manual hyperlink example
+echo "🛠️  Manual hyperlink:"
+echo -n "  • "
+hyperlink "https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda" "OSC 8 Spec"
+echo
+echo
+
+echo "💡 Try these functions:"
+echo "  • hyperlink <uri> <text> [id]"
+echo "  • file_link <path> [text]"
+echo "  • web_link <url> [text]"
+echo "  • git_commit_link <hash> [text]"
+echo "  • github_issue <number> [text]"
+echo "  • lsl [path] - ls with clickable file links"
+echo
