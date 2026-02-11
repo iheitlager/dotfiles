@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.8.0
+# Version: 0.8.1
 #
 # Changelog:
+# 0.8.1 Set Ghostty window title for workspace and swarm modes
 # 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-o
 # 0.7.0 Default to sonnet, --opus flag enables opus-based distribution
 # 0.6.0 Added --daemon/-d flag for task-watcher integration
@@ -831,6 +832,9 @@ cmd_workspace() {
     echo "  Ctrl-b d        Detach"
     echo ""
 
+    # Set Ghostty window title
+    printf '\e]0;workspace · %s\a' "$(basename "$PWD")"
+
     tmux attach -t "$ws_session"
 }
 
@@ -894,6 +898,9 @@ cmd_start() {
     echo "  Ctrl-b z        Zoom pane"
     echo "  Ctrl-b d        Detach"
     echo ""
+
+    # Set Ghostty window title
+    printf '\e]0;swarm · %s (%s agents)\a' "$REPO_NAME" "$AGENT_COUNT"
 
     tmux attach -t "$SESSION"
 }

@@ -210,6 +210,23 @@ inline_link() {
     hyperlink "$@"
 }
 
+# Set terminal window/tab title using OSC 0
+# Usage: set_title "my title"
+set_title() {
+    local title="${1:-}"
+    if [[ -z "$title" ]]; then
+        echo "Usage: set_title <title>" >&2
+        return 1
+    fi
+
+    if [[ -n "$TMUX" ]]; then
+        # Wrap in DCS passthrough for tmux
+        printf '\ePtmux;\e\e]0;%s\a\e\\' "$title"
+    else
+        printf '\e]0;%s\a' "$title"
+    fi
+}
+
 # Check if terminal supports OSC 8 hyperlinks
 # Returns 0 if supported, 1 if not
 supports_hyperlinks() {
