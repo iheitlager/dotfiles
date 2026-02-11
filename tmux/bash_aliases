@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# Tmux cleanup aliases
+alias tkill='tmux-cleanup'              # Interactive pane cleanup (kill panes)
+alias tkp='tmux-cleanup --kill-process' # Kill processes in panes (keep panes alive)
+alias tkw='tmux-cleanup --windows'      # Interactive window cleanup
+alias tks='tmux-cleanup --sessions'     # Interactive session cleanup
+
+# Quick tmux operations
+alias tls='tmux list-sessions'          # List all sessions
+alias tlw='tmux list-windows -a'        # List all windows
+alias tlp='tmux list-panes -a'          # List all panes
+alias tka='tmux kill-server'            # Kill all tmux (use with caution!)
+alias tattach='tmux attach -t'          # Attach to session
+alias tnew='tmux new -s'                # Create new session
