@@ -5,7 +5,7 @@
 # Ghostty shortcuts parser - reads from config file
 
 DOTFILES="${1:-$HOME/.dotfiles}"
-CONFIG_FILE="${DOTFILES}/config/ghostty/config"
+CONFIG_FILE="${DOTFILES}/ghostty/config/config"
 
 # Color codes
 GREEN='\033[32m'
