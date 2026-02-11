@@ -1,0 +1,256 @@
+# Dotfiles CLI Tools
+#
+# Command-line tools: dot, arch, spec
+# Each tool provides specific functionality for managing the dotfiles system.
+
+resources:
+  - id: dot-tool
+    name: Dot Command
+    type: cli-tool
+    technology: Bash
+    location: local/bin/dot
+    description: |
+      Swiss-army knife for dotfiles management.
+      Handles package installation, topic discovery, system status,
+      and dotfiles updates/editing.
+    interfaces:
+      - id: dot-cli
+        protocol: command-line
+        direction: request-response
+        description: Main CLI interface
+
+    children:
+      - id: dot-install
+        name: Package Installer
+        type: bash-function
+        location: local/bin/dot:install()
+        description: Installs brew packages from command line
+        interfaces:
+          - id: brew-install-cmd
+            protocol: command-line
+            direction: request-response
+            description: dot install <package>
+
+      - id: dot-list
+        name: Topic Lister
+        type: bash-function
+        location: local/bin/dot:list()
+        description: Lists all topics with install.sh scripts
+        interfaces:
+          - id: list-topics
+            protocol: command-line
+            direction: request-response
+            description: dot list
+
+      - id: dot-status
+        name: System Status
+        type: bash-function
+        location: local/bin/dot:status()
+        description: |
+          Shows status of all topics with flags:
+          I=install.sh, B=brew.txt, S=symlinks, A=aliases,
+          C=completions, F=functions, E=env vars
+        interfaces:
+          - id: show-status
+            protocol: command-line
+            direction: request-response
+            description: dot status
+
+      - id: dot-update
+        name: Dotfiles Updater
+        type: bash-function
+        location: local/bin/dot:update()
+        description: Pulls latest changes from git and re-bootstraps
+        interfaces:
+          - id: update-dotfiles
+            protocol: command-line
+            direction: request-response
+            description: dot update
+
+      - id: dot-edit
+        name: Dotfiles Editor
+        type: bash-function
+        location: local/bin/dot:edit()
+        description: Opens dotfiles repo in editor
+        interfaces:
+          - id: edit-dotfiles
+            protocol: command-line
+            direction: request-response
+            description: dot edit
+
+  - id: arch-tool
+    name: Arch Command
+    type: cli-tool
+    technology: Python 3.11+
+    location: local/bin/arch
+    description: |
+      Grounded C4 architecture modeling tool.
+      Models, validates, and visualizes software architecture
+      using concrete resources and progressive zoom.
+    dependencies:
+      - rich>=13.0.0
+      - pyyaml>=6.0
+      - jsonschema>=4.0.0
+    interfaces:
+      - id: arch-cli
+        protocol: command-line
+        direction: request-response
+        description: Main CLI interface
+
+    children:
+      - id: arch-list
+        name: Resource Lister
+        type: python-module
+        location: local/lib/arch/commands/list.py
+        description: Lists all architecture resources in tree format
+        interfaces:
+          - id: list-resources
+            protocol: command-line
+            direction: request-response
+            description: arch list [--type TYPE] [--tag TAG]
+
+      - id: arch-validate
+        name: Model Validator
+        type: python-module
+        location: local/lib/arch/commands/validate.py
+        description: |
+          Validates architecture model:
+          - Schema validation (JSON Schema Draft 07)
+          - Referential integrity checks
+          - Unique ID verification
+        interfaces:
+          - id: validate-model
+            protocol: command-line
+            direction: request-response
+            description: arch validate
+
+      - id: arch-diagram
+        name: Diagram Generator
+        type: python-module
+        location: local/lib/arch/commands/diagram.py
+        description: |
+          Generates diagrams from architecture model.
+          Supports Mermaid format with landscape, domain, service zoom levels.
+        interfaces:
+          - id: generate-diagram
+            protocol: command-line
+            direction: request-response
+            description: arch diagram [--format mermaid] [--zoom landscape|domain|service]
+
+      - id: arch-loader
+        name: Model Loader
+        type: python-module
+        location: local/lib/arch/loader.py
+        description: Loads and merges YAML fragments with schema validation
+        interfaces:
+          - id: load-yaml
+            protocol: python-api
+            direction: request-response
+            description: load_architecture(arch_dir)
+
+      - id: arch-path-resolver
+        name: Path Resolver
+        type: python-module
+        location: local/lib/arch/path_resolver.py
+        description: O(1) path lookups with resource/interface indexes
+        interfaces:
+          - id: resolve-path
+            protocol: python-api
+            direction: request-response
+            description: resolve(path) -> Resource | Interface
+
+  - id: spec-tool
+    name: Spec Command
+    type: cli-tool
+    technology: Bash + fzf
+    location: local/bin/spec
+    description: |
+      OpenSpec specification browser.
+      Interactive fzf interface for browsing and viewing
+      behavior-driven specifications.
+    interfaces:
+      - id: spec-cli
+        protocol: command-line
+        direction: request-response
+        description: Main CLI interface
+
+    children:
+      - id: spec-browser
+        name: Interactive Browser
+        type: bash-function
+        location: local/bin/spec:browse()
+        description: |
+          fzf-based interactive browser with:
+          - Requirement filtering and search
+          - Auto-scroll to selected requirement
+          - Preview with glow (or bat fallback)
+          - Toggle zoom (60% ↔ 80%)
+        interfaces:
+          - id: browse-specs
+            protocol: command-line
+            direction: request-response
+            description: spec [--raw]
+
+      - id: spec-lister
+        name: Spec Lister
+        type: bash-function
+        location: local/bin/spec:list()
+        description: Lists all specs with metadata and requirements
+        interfaces:
+          - id: list-specs
+            protocol: command-line
+            direction: request-response
+            description: spec list
+
+      - id: spec-status
+        name: Status Overview
+        type: bash-function
+        location: local/bin/spec:status()
+        description: Compact overview table of all specs
+        interfaces:
+          - id: show-status
+            protocol: command-line
+            direction: request-response
+            description: spec status
+
+# Relationships between tools
+relationships:
+  # dot tool uses XDG paths
+  - from: dot-tool.dot-status.show-status
+    to: xdg.data-home.data-read
+    description: Scans topics from $DOTFILES
+
+  - from: dot-tool.dot-update.update-dotfiles
+    to: bootstrap.bootstrap-script.bootstrap-entry
+    description: Runs bootstrap after git pull
+
+  # arch tool uses XDG paths
+  - from: arch-tool.arch-loader.load-yaml
+    to: xdg.config-home.config-read-write
+    description: Loads architecture from .openspec/architecture/
+
+  # spec tool uses XDG paths
+  - from: spec-tool.spec-browser.browse-specs
+    to: xdg.config-home.config-read-write
+    description: Reads specs from .openspec/specs/
+
+  # arch tool internal dependencies
+  - from: arch-tool.arch-list.list-resources
+    to: arch-tool.arch-loader.load-yaml
+    description: Loads model before listing
+
+  - from: arch-tool.arch-list.list-resources
+    to: arch-tool.arch-path-resolver.resolve-path
+    description: Uses path resolver for filtering
+
+  - from: arch-tool.arch-validate.validate-model
+    to: arch-tool.arch-loader.load-yaml
+    description: Loads model before validation
+
+  - from: arch-tool.arch-diagram.generate-diagram
+    to: arch-tool.arch-loader.load-yaml
+    description: Loads model before diagram generation
+
+  - from: arch-tool.arch-diagram.generate-diagram
+    to: arch-tool.arch-path-resolver.resolve-path
+    description: Resolves paths for relationship rendering
