@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
       "Read",
@@ -50,10 +53,6 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
-  "teammateMode": "tmux",
   "model": "opus",
   "hooks": {
     "SessionStart": [
@@ -79,6 +78,7 @@
       }
     ]
   },
+  "teammateMode": "tmux",
   "additionalDirectories": [
     ".",
     "~/.local/state/agent-context",
