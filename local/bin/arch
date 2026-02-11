@@ -152,8 +152,8 @@ def cmd_validate(args):
     try:
         from arch.loader import load_architecture, LoadError
         from arch.validator import ArchitectureValidator
+        from arch.commands.validate import render_validate
         from rich.console import Console
-        from rich.table import Table
 
         console = Console()
 
@@ -168,57 +168,8 @@ def cmd_validate(args):
         validator = ArchitectureValidator(model)
         result = validator.validate()
 
-        # Display results
-        if result.valid:
-            console.print("✅ [bold green]Validation passed[/bold green]")
-            console.print(f"   No errors found")
-
-            if result.warnings:
-                console.print(f"\n⚠️  [bold yellow]{len(result.warnings)} warning(s)[/bold yellow]")
-                for warning in result.warnings:
-                    console.print(f"   [yellow]•[/yellow] {warning.message}")
-                    if warning.path:
-                        console.print(f"     Path: {warning.path}")
-            return 0
-
-        else:
-            console.print(f"❌ [bold red]Validation failed[/bold red]")
-            console.print(f"   {len(result.errors)} error(s), {len(result.warnings)} warning(s)\n")
-
-            # Show errors in table
-            if result.errors:
-                table = Table(title="Errors", show_header=True, header_style="bold red")
-                table.add_column("Rule", style="cyan")
-                table.add_column("Message", style="white")
-                table.add_column("Path", style="yellow")
-
-                for error in result.errors:
-                    table.add_row(
-                        error.rule or "—",
-                        error.message,
-                        error.path or "—"
-                    )
-
-                console.print(table)
-
-            # Show warnings in table
-            if result.warnings:
-                console.print()
-                table = Table(title="Warnings", show_header=True, header_style="bold yellow")
-                table.add_column("Rule", style="cyan")
-                table.add_column("Message", style="white")
-                table.add_column("Path", style="yellow")
-
-                for warning in result.warnings:
-                    table.add_row(
-                        warning.rule or "—",
-                        warning.message,
-                        warning.path or "—"
-                    )
-
-                console.print(table)
-
-            return 1
+        # Render results and get exit code
+        return render_validate(model, result)
 
     except LoadError as e:
         print(f"\n❌ Load error: {e}", file=sys.stderr)
