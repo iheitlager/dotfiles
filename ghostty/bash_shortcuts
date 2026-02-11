@@ -5,7 +5,6 @@
 # Ghostty shortcuts parser - reads from config file
 
 DOTFILES="${1:-$HOME/.dotfiles}"
-CONFIG_FILE="${DOTFILES}/ghostty/config/config"
 
 # Color codes
 GREEN='\033[32m'
@@ -16,17 +15,13 @@ shortcut() {
     printf "  ${GREEN}%-25s${RESET} %s\n" "$1" "$2"
 }
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "${YELLOW}Ghostty config not found: ${CONFIG_FILE}${RESET}" >&2
-    exit 1
-fi
-
 echo "Global:"
 shortcut "Alt+Enter" "Toggle quick terminal (global hotkey)"
 
 echo ""
 echo "Window Management:"
 shortcut "Cmd+Shift+Enter" "New window"
+shortcut "Cmd+N" "New window"
 shortcut "Cmd+K" "Clear screen"
 
 echo ""
@@ -37,6 +32,7 @@ shortcut "Cmd+0" "Reset font size"
 
 echo ""
 echo "Tab Navigation:"
+shortcut "Cmd+T" "New tab"
 shortcut "Cmd+1...5" "Go to tab 1-5"
 
 echo ""
