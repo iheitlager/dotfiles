@@ -1125,6 +1125,60 @@ class SwarmDaemon:
                 except ValueError:
                     pass
 
+    def _is_foreground(self) -> bool:
+        """Returns True if running in a terminal (foreground mode)"""
+        return sys.stderr.isatty()
+
+    def _init_event_tail(self):
+        """Open events.log and seek to EOF for tail-follow behavior"""
+        if not self.context.events_log.exists():
+            self.context.events_log.touch()
+        self._event_file = open(self.context.events_log)
+        self._event_file.seek(0, 2)  # Seek to EOF
+
+    def _drain_new_events(self) -> int:
+        """Read all available new lines from events log and print them"""
+        count = 0
+        while True:
+            line = self._event_file.readline()
+            if not line:
+                break
+            self._print_event_line(line)
+            count += 1
+        return count
+
+    def _print_event_line(self, line: str):
+        """Format and print one event line with ANSI colors"""
+        # ANSI color codes
+        GREEN = '\033[0;32m'
+        YELLOW = '\033[0;33m'
+        RED = '\033[0;31m'
+        DIM = '\033[2m'
+        NC = '\033[0m'
+
+        parts = line.strip().split(" | ")
+        if len(parts) < 3:
+            return
+
+        timestamp = parts[0].split("T")[1][:8] if "T" in parts[0] else parts[0]
+        agent = parts[1]
+        event = parts[2]
+        data = " | ".join(parts[3:]) if len(parts) > 3 else ""
+
+        # Color by event type
+        if event in ("AGENT_STARTUP", "TEST_PASSED", "LINT_PASSED", "REQUEST_START"):
+            color = GREEN
+        elif event in ("AGENT_SHUTDOWN", "JOB_PR_READY"):
+            color = YELLOW
+        elif event in ("TEST_FAILED", "LINT_FAILED", "AGENT_ERROR"):
+            color = RED
+        elif event in ("REQUEST", "REQUEST_END"):
+            color = DIM
+        else:
+            color = NC
+
+        print(f"{DIM}{timestamp}{NC}  {color}{event:20}{NC}  {agent}  {data}")
+
     def run(self):
         """Main daemon loop"""
         log.info("swarm-daemon starting")
@@ -1135,11 +1189,41 @@ class SwarmDaemon:
         self.write_pid_file()
         self.event_logger.log_event("swarm-daemon", "STARTED", f"Poll interval: {self.poll_interval}s")
 
+        # Foreground mode: live event tail
+        foreground = self._is_foreground()
+        if foreground:
+            self._init_event_tail()
+            # Print agent count status line
+            agents = self.state_manager.get_all_agents()
+            working = self.state_manager.get_working_agents()
+            agent_details = ", ".join(
+                f"{aid}: {self.state_manager.get_agent(aid).get('status', 'unknown')}"
+                for aid in agents
+            )
+            if agent_details:
+                log.info(f"Agents: {len(agents)} registered ({agent_details})")
+            else:
+                log.info("Agents: 0 registered")
+
         try:
             loop_count = 0
+            last_event_time = time.time()
             while self.running:
                 # Check for stale agents (every loop)
                 self.check_for_stale_agents()
+
+                # Foreground: drain new events
+                if foreground:
+                    n = self._drain_new_events()
+                    if n > 0:
+                        last_event_time = time.time()
+
+                    # Heartbeat if no events for 30s
+                    if time.time() - last_event_time >= 30 and foreground:
+                        now_str = datetime.now().strftime("%H:%M:%S")
+                        working_count = len(self.state_manager.get_working_agents())
+                        print(f"\033[2m[{now_str}] -- no new events ({working_count} agent working) --\033[0m")
+                        last_event_time = time.time()
 
                 # Detect patterns (every 12 loops = ~1 minute)
                 if loop_count % 12 == 0:
@@ -1151,6 +1235,8 @@ class SwarmDaemon:
                 time.sleep(self.poll_interval)
 
         finally:
+            if foreground and hasattr(self, '_event_file'):
+                self._event_file.close()
             self.remove_pid_file()
             log.info("swarm-daemon stopped")
 
