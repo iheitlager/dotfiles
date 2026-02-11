@@ -111,32 +111,23 @@ def cmd_list(args):
     try:
         from arch.loader import load_architecture, LoadError
         from arch.path_resolver import PathResolver
+        from arch.commands.list import render_list
 
         # Load model
-        print(f"📦 Loading architecture from: {arch_dir}")
         model = load_architecture(arch_dir)
 
         # Build path resolver
         resolver = PathResolver(model)
 
-        # Print summary
-        print(f"\n✅ Loaded successfully")
-        print(f"   Resources: {model.resource_count()}")
-        print(f"   Interfaces: {model.interface_count()}")
-        print(f"   Relationships: {len(model.relationships)}")
-        print(f"   Source files: {len(model._source_files)}")
-
-        # List root resources
-        if model.resources:
-            print(f"\n📦 Root Resources:")
-            for resource in model.resources:
-                abstract_flag = " [abstract]" if resource.abstract else ""
-                print(f"   - {resource.name} ({resource.id}){abstract_flag}")
-                print(f"     Type: {resource.type}")
-                if resource.interfaces:
-                    print(f"     Interfaces: {len(resource.interfaces)}")
-                if resource.children:
-                    print(f"     Children: {len(resource.children)}")
+        # Render tree structure
+        render_list(
+            model,
+            resolver,
+            resource_type=getattr(args, 'type', None),
+            tag=getattr(args, 'tag', None),
+            query=getattr(args, 'query', None),
+            protocol=getattr(args, 'protocol', None),
+        )
 
         return 0
 
@@ -346,6 +337,22 @@ For more information, see:
 
     # list command
     parser_list = subparsers.add_parser("list", help="List all resources")
+    parser_list.add_argument(
+        "--type",
+        help="Filter by resource type (e.g., go-service, bash-script)"
+    )
+    parser_list.add_argument(
+        "--tag",
+        help="Filter by tag"
+    )
+    parser_list.add_argument(
+        "--query",
+        help="Search by name or description"
+    )
+    parser_list.add_argument(
+        "--protocol",
+        help="Filter interfaces by protocol (e.g., https, kafka)"
+    )
 
     # validate command
     parser_validate = subparsers.add_parser("validate", help="Validate architecture model")
