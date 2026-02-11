@@ -26,6 +26,13 @@ from .path_resolver import (
     ResolutionResult,
 )
 
+from .validator import (
+    ArchitectureValidator,
+    ValidationResult,
+    ValidationIssue,
+    Severity,
+)
+
 __all__ = [
     # Models
     "Interface",
@@ -40,4 +47,9 @@ __all__ = [
     # Path resolver
     "PathResolver",
     "ResolutionResult",
+    # Validator
+    "ArchitectureValidator",
+    "ValidationResult",
+    "ValidationIssue",
+    "Severity",
 ]
