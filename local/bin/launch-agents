@@ -998,7 +998,7 @@ cmd_stop() {
 
                 # Send Ctrl-C and exit to each agent window's panes
                 for window_id in $agent_windows; do
-                    local window_name=$(tmux list-windows -t "$target_session" | grep "^${window_id}:" | sed 's/^[0-9]*: \([^ ]*\).*/\1/')
+                    local window_name=$(tmux list-windows -t "$target_session" -F "#{window_index} #{window_name}" | awk -v id="$window_id" '$1==id {print $2; exit}')
                     debug "Stopping window: $window_name"
 
                     # Send Ctrl-C to both panes (claude on left, shell on right)
@@ -1016,7 +1016,7 @@ cmd_stop() {
 
                 # Send graceful shutdown to each agent window
                 for window_id in $agent_windows; do
-                    local window_name=$(tmux list-windows -t "$target_session" | grep "^${window_id}:" | sed 's/^[0-9]*: \([^ ]*\).*/\1/')
+                    local window_name=$(tmux list-windows -t "$target_session" -F "#{window_index} #{window_name}" | awk -v id="$window_id" '$1==id {print $2; exit}')
                     debug "Graceful shutdown to window: $window_name"
 
                     # Send shutdown message to claude pane (pane 1)
