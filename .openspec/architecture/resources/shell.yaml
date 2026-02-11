@@ -1,0 +1,242 @@
+# Dotfiles Shell Integration
+#
+# Shell initialization, topic discovery, and caching system.
+# Provides 10x performance improvement via mtime-based cache invalidation.
+
+resources:
+  - id: shell-integration
+    name: Shell Integration
+    type: service
+    abstract: true
+    description: |
+      Auto-discovery and loading of shell configuration from topics.
+      Sources aliases, completions, functions, and environment variables
+      with intelligent caching.
+    children:
+      - id: bash-profile
+        name: Bash Profile
+        type: bash-script
+        technology: Bash
+        location: bash/bash_profile.symlink
+        description: |
+          Login shell initialization.
+          Sources bash_env from all topics, sets up XDG paths.
+        interfaces:
+          - id: login-init
+            protocol: bash-source
+            direction: subscribe
+            description: Executed on login shell start
+
+      - id: bashrc
+        name: Bash RC
+        type: bash-script
+        technology: Bash
+        location: bash/bashrc.symlink
+        description: |
+          Interactive shell initialization.
+          Sources cached bash_aliases and bash_completion,
+          regenerates cache if stale.
+        interfaces:
+          - id: interactive-init
+            protocol: bash-source
+            direction: subscribe
+            description: Executed on interactive shell start
+
+      - id: topic-discovery
+        name: Topic Discovery
+        type: bash-function
+        technology: Bash
+        location: bash/bashrc.symlink:discover_topics()
+        description: |
+          Auto-discovers 19 topics by scanning $DOTFILES directory.
+          No manual registration required - topics are automatically found
+          if they contain bash_aliases, bash_completion, or bash_functions files.
+        interfaces:
+          - id: discover
+            protocol: function-call
+            direction: request-response
+            description: Scans filesystem for topics
+
+  - id: caching-system
+    name: Caching System
+    type: service
+    abstract: true
+    description: |
+      Mtime-based cache invalidation for shell initialization.
+      Provides 10x performance improvement by avoiding filesystem
+      scanning on every shell start.
+    children:
+      - id: cache-generator
+        name: Cache Generator
+        type: bash-function
+        technology: Bash
+        location: bash/bashrc.symlink:generate_cache()
+        description: |
+          Generates cached versions of:
+          - bash_aliases.sh (all topic aliases)
+          - bash_completion.sh (all topic completions)
+          - bash_functions.sh (all topic functions)
+        interfaces:
+          - id: generate
+            protocol: function-call
+            direction: request-response
+            description: Creates cache files in $XDG_CACHE_HOME/dotfiles/
+
+      - id: cache-validator
+        name: Cache Validator
+        type: bash-function
+        technology: Bash
+        location: bash/bashrc.symlink:is_cache_valid()
+        description: |
+          Checks if cache is valid by comparing mtime:
+          - Cache file must exist
+          - Cache mtime must be newer than all source files
+          - Returns 0 if valid, 1 if stale
+        interfaces:
+          - id: validate
+            protocol: function-call
+            direction: request-response
+            description: Checks cache freshness
+
+      - id: cache-storage
+        name: Cache Storage
+        type: directory
+        technology: Filesystem
+        location: $XDG_CACHE_HOME/dotfiles/
+        description: |
+          Stores cached shell initialization files:
+          - bash_aliases.sh
+          - bash_completion.sh
+          - bash_functions.sh
+        interfaces:
+          - id: cache-read-write
+            protocol: filesystem
+            direction: read-write
+            description: Cache file storage and retrieval
+
+  - id: topic-loader
+    name: Topic Loader
+    type: service
+    abstract: true
+    description: |
+      Loads shell configuration from discovered topics.
+      Each topic can provide:
+      - bash_aliases: Command aliases
+      - bash_completion: Tab completion rules
+      - bash_functions: Reusable shell functions
+      - bash_env: Environment variables
+    children:
+      - id: alias-loader
+        name: Alias Loader
+        type: bash-function
+        technology: Bash
+        location: bash/bashrc.symlink:load_aliases()
+        description: Sources bash_aliases from all topics (cached)
+        interfaces:
+          - id: load
+            protocol: bash-source
+            direction: subscribe
+            description: Sources cached or live aliases
+
+      - id: completion-loader
+        name: Completion Loader
+        type: bash-function
+        technology: Bash
+        location: bash/bashrc.symlink:load_completions()
+        description: Sources bash_completion from all topics (cached)
+        interfaces:
+          - id: load
+            protocol: bash-source
+            direction: subscribe
+            description: Sources cached or live completions
+
+      - id: function-loader
+        name: Function Loader
+        type: bash-function
+        technology: Bash
+        location: bash/bashrc.symlink:load_functions()
+        description: Sources bash_functions from all topics (cached)
+        interfaces:
+          - id: load
+            protocol: bash-source
+            direction: subscribe
+            description: Sources cached or live functions
+
+      - id: env-loader
+        name: Environment Loader
+        type: bash-function
+        technology: Bash
+        location: bash/bash_profile.symlink:load_env()
+        description: Sources bash_env from all topics (no cache)
+        interfaces:
+          - id: load
+            protocol: bash-source
+            direction: subscribe
+            description: Sources environment variables
+
+# Relationships within shell integration
+relationships:
+  # Shell startup flow
+  - from: shell-integration.bash-profile.login-init
+    to: shell-integration.topic-discovery.discover
+    description: Discovers topics on login
+
+  - from: shell-integration.bash-profile.login-init
+    to: topic-loader.env-loader.load
+    description: Loads environment variables from all topics
+
+  - from: shell-integration.bashrc.interactive-init
+    to: caching-system.cache-validator.validate
+    description: Checks if cache is valid
+
+  - from: shell-integration.bashrc.interactive-init
+    to: caching-system.cache-generator.generate
+    description: Regenerates cache if stale
+
+  - from: shell-integration.bashrc.interactive-init
+    to: topic-loader.alias-loader.load
+    description: Loads aliases (from cache if valid)
+
+  - from: shell-integration.bashrc.interactive-init
+    to: topic-loader.completion-loader.load
+    description: Loads completions (from cache if valid)
+
+  - from: shell-integration.bashrc.interactive-init
+    to: topic-loader.function-loader.load
+    description: Loads functions (from cache if valid)
+
+  # Cache generation
+  - from: caching-system.cache-generator.generate
+    to: shell-integration.topic-discovery.discover
+    description: Discovers topics before caching
+
+  - from: caching-system.cache-generator.generate
+    to: caching-system.cache-storage.cache-read-write
+    description: Writes generated cache files
+
+  # Cache validation
+  - from: caching-system.cache-validator.validate
+    to: caching-system.cache-storage.cache-read-write
+    description: Checks cache file mtime
+
+  # Topic loading
+  - from: topic-loader.alias-loader.load
+    to: caching-system.cache-storage.cache-read-write
+    description: Sources bash_aliases.sh from cache
+
+  - from: topic-loader.completion-loader.load
+    to: caching-system.cache-storage.cache-read-write
+    description: Sources bash_completion.sh from cache
+
+  - from: topic-loader.function-loader.load
+    to: caching-system.cache-storage.cache-read-write
+    description: Sources bash_functions.sh from cache
+
+  # XDG integration
+  - from: caching-system.cache-storage.cache-read-write
+    to: xdg.cache-home.cache-read-write
+    description: Uses $XDG_CACHE_HOME for cache storage
+
+  - from: shell-integration.topic-discovery.discover
+    to: xdg.data-home.data-read
+    description: Scans topics from $DOTFILES directory
