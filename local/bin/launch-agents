@@ -937,43 +937,88 @@ cmd_stop() {
         tmux kill-session -t "$target_session"
         echo -e "${GREEN}✓ Workspace stopped${NC}"
     else
-        # Swarm mode: original logic
-        local pane_count=$(tmux list-panes -t "$target_session:agents" 2>/dev/null | wc -l | tr -d ' ')
-
-        if [[ "$FORCE" == true ]]; then
-            echo -e "${YELLOW}Force killing agents...${NC}"
-
-            # Send Ctrl-C to interrupt running processes
-            for i in $(seq 1 $pane_count); do
-                debug "Sending Ctrl-C to agent-$i"
-                tmux send-keys -t "$target_session:agents.$i" C-c
-            done
-            sleep 0.5
-
-            # Send exit to terminate shells
-            for i in $(seq 1 $pane_count); do
-                debug "Sending exit to agent-$i"
-                tmux send-keys -t "$target_session:agents.$i" "exit" Enter
-            done
-            sleep 0.5
-
-            echo -e "${YELLOW}Killing tmux session: $target_session${NC}"
-            tmux kill-session -t "$target_session"
-            echo -e "${GREEN}✓ Session killed${NC}"
+        # Swarm mode: detect layout (classic vs per-agent windows)
+        local layout_type=""
+        if tmux list-windows -t "$target_session" 2>/dev/null | grep -q "^[0-9]*: agents"; then
+            layout_type="classic"
         else
-            echo -e "${YELLOW}Sending shutdown to agents...${NC}"
-
-            # Send graceful shutdown message to each agent (two commands required)
-            for i in $(seq 1 $pane_count); do
-                debug "Sending shutdown to agent-$i"
-                tmux send-keys -t "$target_session:agents.$i" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter
-                tmux send-keys -t "$target_session:agents.$i" Enter
-            done
-
-            echo -e "${YELLOW}Killing tmux session: $target_session${NC}"
-            tmux kill-session -t "$target_session"
-            echo -e "${GREEN}✓ Session stopped${NC}"
+            layout_type="per-agent"
         fi
+
+        debug "Detected layout type: $layout_type"
+
+        if [[ "$layout_type" == "classic" ]]; then
+            # Classic layout: all agents in one 'agents' window
+            local pane_count=$(tmux list-panes -t "$target_session:agents" 2>/dev/null | wc -l | tr -d ' ')
+
+            if [[ "$FORCE" == true ]]; then
+                echo -e "${YELLOW}Force killing agents (classic layout)...${NC}"
+
+                # Send Ctrl-C to interrupt running processes
+                for i in $(seq 1 $pane_count); do
+                    debug "Sending Ctrl-C to agent-$i"
+                    tmux send-keys -t "$target_session:agents.$i" C-c
+                done
+                sleep 0.5
+
+                # Send exit to terminate shells
+                for i in $(seq 1 $pane_count); do
+                    debug "Sending exit to agent-$i"
+                    tmux send-keys -t "$target_session:agents.$i" "exit" Enter
+                done
+                sleep 0.5
+            else
+                echo -e "${YELLOW}Sending shutdown to agents (classic layout)...${NC}"
+
+                # Send graceful shutdown message to each agent
+                for i in $(seq 1 $pane_count); do
+                    debug "Sending shutdown to agent-$i"
+                    tmux send-keys -t "$target_session:agents.$i" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter
+                    tmux send-keys -t "$target_session:agents.$i" Enter
+                done
+                sleep 1
+            fi
+        else
+            # Per-agent window layout: separate agent-N windows
+            local agent_windows=$(tmux list-windows -t "$target_session" 2>/dev/null | grep -E "^[0-9]*: agent-[0-9]+" | cut -d: -f1)
+
+            if [[ "$FORCE" == true ]]; then
+                echo -e "${YELLOW}Force killing agents (per-agent layout)...${NC}"
+
+                # Send Ctrl-C and exit to each agent window's panes
+                for window_id in $agent_windows; do
+                    local window_name=$(tmux list-windows -t "$target_session" | grep "^${window_id}:" | sed 's/^[0-9]*: \([^ ]*\).*/\1/')
+                    debug "Stopping window: $window_name"
+
+                    # Send Ctrl-C to both panes (claude on left, shell on right)
+                    tmux send-keys -t "$target_session:${window_id}.1" C-c 2>/dev/null || true
+                    tmux send-keys -t "$target_session:${window_id}.2" C-c 2>/dev/null || true
+                    sleep 0.3
+
+                    # Send exit to both panes
+                    tmux send-keys -t "$target_session:${window_id}.1" "exit" Enter 2>/dev/null || true
+                    tmux send-keys -t "$target_session:${window_id}.2" "exit" Enter 2>/dev/null || true
+                done
+                sleep 0.5
+            else
+                echo -e "${YELLOW}Sending shutdown to agents (per-agent layout)...${NC}"
+
+                # Send graceful shutdown to each agent window
+                for window_id in $agent_windows; do
+                    local window_name=$(tmux list-windows -t "$target_session" | grep "^${window_id}:" | sed 's/^[0-9]*: \([^ ]*\).*/\1/')
+                    debug "Graceful shutdown to window: $window_name"
+
+                    # Send shutdown message to claude pane (pane 1)
+                    tmux send-keys -t "$target_session:${window_id}.1" "Please shut down gracefully. Finish any current task, log a shutdown event, then exit." Enter 2>/dev/null || true
+                    tmux send-keys -t "$target_session:${window_id}.1" Enter 2>/dev/null || true
+                done
+                sleep 1
+            fi
+        fi
+
+        echo -e "${YELLOW}Killing tmux session: $target_session${NC}"
+        tmux kill-session -t "$target_session"
+        echo -e "${GREEN}✓ Session stopped${NC}"
     fi
 }
 

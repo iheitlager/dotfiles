@@ -431,6 +431,8 @@ do
     if [[ "$VERBOSE" == true ]]; then
         source "${src}" 2>&1 || exit 1
     else
+        source "${src}" &>/dev/null || exit 1
+    fi
 done
 
 # Finally, export the Brewfile
