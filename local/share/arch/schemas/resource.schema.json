@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/iheitlager/dotfiles/schemas/resource.schema.json",
+  "title": "Grounded C4 Resource",
+  "description": "A concrete or abstract resource in a Grounded C4 architecture model",
+  "type": "object",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier within parent scope",
+      "pattern": "^[a-z0-9-]+$",
+      "examples": ["dotfiles", "bootstrap", "sessions-cache", "collab-service"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the resource",
+      "examples": ["Dotfiles System", "Bootstrap Script", "Sessions Cache"]
+    },
+    "type": {
+      "type": "string",
+      "description": "Concrete type identifier (technology-specific, not abstract classifications)",
+      "examples": [
+        "system",
+        "bash-script",
+        "go-service",
+        "python-service",
+        "rds-postgresql",
+        "elasticache-redis",
+        "s3-bucket",
+        "lambda-function",
+        "sagemaker-endpoint",
+        "step-functions-workflow",
+        "kafka-topic",
+        "msk-kafka",
+        "filesystem"
+      ]
+    },
+    "abstract": {
+      "type": "boolean",
+      "default": false,
+      "description": "Flag indicating if this is a logical grouping (not a deployed resource)"
+    },
+    "technology": {
+      "type": "string",
+      "description": "Specific technology version or configuration details",
+      "examples": ["Bash 5.2", "Go 1.22", "PostgreSQL 15", "Redis 7.2", "Python 3.12"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the resource and its purpose"
+    },
+    "repository": {
+      "type": "string",
+      "description": "Repository URL or file path where the resource is defined",
+      "examples": [
+        "github.com/example/service",
+        "~/.dotfiles/script/bootstrap",
+        "/path/to/config.yaml"
+      ]
+    },
+    "instance": {
+      "type": "string",
+      "description": "Instance type or size for cloud resources",
+      "examples": ["cache.r7g.large", "ml.g5.xlarge", "t3.medium"]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization and filtering"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extensible metadata as key-value pairs for custom fields",
+      "additionalProperties": true
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/interface"
+      },
+      "description": "Interfaces exposed by this resource"
+    },
+    "children": {
+      "type": "array",
+      "items": {
+        "$ref": "#"
+      },
+      "description": "Nested child resources (for hierarchical composition)"
+    },
+    "implementation": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/codeRef"
+      },
+      "description": "Links to code implementing this resource (for traceability)"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "interface": {
+      "type": "object",
+      "required": ["id", "protocol", "direction"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier within the resource",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "protocol": {
+          "type": "string",
+          "description": "Communication protocol used by this interface"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "publish",
+            "subscribe",
+            "request-response",
+            "bidirectional",
+            "read",
+            "write"
+          ],
+          "description": "Direction of communication flow"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the interface"
+        },
+        "topic": {
+          "type": "string",
+          "description": "Topic name for pub-sub protocols"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Extensible metadata for protocol-specific details",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "codeRef": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "File path to implementation (relative to repository root)",
+          "examples": ["script/bootstrap", "src/services/auth.go", "lib/cache.py"]
+        },
+        "lines": {
+          "type": "string",
+          "description": "Line range in the format 'start-end' or single line 'N'",
+          "pattern": "^\\d+(-\\d+)?$",
+          "examples": ["53-73", "42", "100-150"]
+        },
+        "function": {
+          "type": "string",
+          "description": "Function, method, or class name",
+          "examples": ["setup_xdg_dirs()", "NewAuthService", "CacheManager"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of what this code reference implements"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

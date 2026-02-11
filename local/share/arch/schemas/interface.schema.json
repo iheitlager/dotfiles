@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/iheitlager/dotfiles/schemas/interface.schema.json",
+  "title": "Grounded C4 Interface",
+  "description": "An interface for interacting with a resource in a Grounded C4 architecture model",
+  "type": "object",
+  "required": ["id", "protocol", "direction"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier within the resource",
+      "pattern": "^[a-z0-9-]+$",
+      "examples": ["cli", "cache-api", "ws-connect", "session-events"]
+    },
+    "protocol": {
+      "type": "string",
+      "description": "Communication protocol used by this interface",
+      "examples": [
+        "https",
+        "http",
+        "grpc",
+        "kafka",
+        "websocket",
+        "redis",
+        "s3-api",
+        "bash",
+        "filesystem",
+        "tcp",
+        "udp",
+        "mqtt",
+        "amqp"
+      ]
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "publish",
+        "subscribe",
+        "request-response",
+        "bidirectional",
+        "read",
+        "write"
+      ],
+      "description": "Direction of communication flow"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the interface"
+    },
+    "topic": {
+      "type": "string",
+      "description": "Topic name for pub-sub protocols (e.g., Kafka topic, MQTT topic)"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extensible metadata for protocol-specific details (latency_p99, rate_limit, path, instance, etc.)",
+      "additionalProperties": true,
+      "examples": [
+        {
+          "latency_p99": "800ms",
+          "rate_limit": "1000/s"
+        },
+        {
+          "path": "/api/v1/users",
+          "method": "POST"
+        },
+        {
+          "instance": "cache.r7g.large"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}
