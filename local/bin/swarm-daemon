@@ -1163,6 +1163,10 @@ class SwarmDaemon:
         timestamp = parts[0].split("T")[1][:8] if "T" in parts[0] else parts[0]
         agent = parts[1]
         event = parts[2]
+
+        # REQUEST/REQUEST_END are generic heartbeats — specific TOOL_* events carry the same info
+        if event in ("REQUEST", "REQUEST_START", "REQUEST_END"):
+            return
         data = " | ".join(parts[3:]) if len(parts) > 3 else ""
 
         # Color by event type
