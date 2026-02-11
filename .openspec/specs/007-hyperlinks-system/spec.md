@@ -5,6 +5,7 @@
 **Updated:** 2026-02-11
 **Owner:** Ilja Heitlager
 **Issue:** [#46](https://github.com/iheitlager/dotfiles/issues/46)
+**PR:** [#47](https://github.com/iheitlager/dotfiles/pull/47)
 
 ---
 
