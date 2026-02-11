@@ -26,7 +26,15 @@ hyperlink() {
     fi
 
     # OSC 8 format: ESC ] 8 ; params ; URI ESC \ text ESC ] 8 ; ; ESC \
-    printf '\e]8;%s;%s\e\\%s\e]8;;\e\\' "$params" "$uri" "$text"
+    # When inside tmux, wrap in DCS passthrough sequence
+    if [[ -n "$TMUX" ]]; then
+        # Tmux DCS passthrough: \ePtmux;\e<escaped-sequence>\e\\
+        # Each ESC (\e) in the sequence must be doubled
+        printf '\ePtmux;\e\e]8;%s;%s\e\e\\\e\\%s\ePtmux;\e\e]8;;\e\e\\\e\\' "$params" "$uri" "$text"
+    else
+        # Direct OSC 8 sequence
+        printf '\e]8;%s;%s\e\\%s\e]8;;\e\\' "$params" "$uri" "$text"
+    fi
 }
 
 # Create a file:// hyperlink with hostname validation
