@@ -189,13 +189,33 @@ def cmd_diagram(args):
         print("❌ Error: No architecture directory found", file=sys.stderr)
         return 1
 
-    print(f"📦 Generating diagram from: {arch_dir}")
-    print(f"   Format: {args.format}")
-    print(f"   Zoom: {args.zoom}")
-    if args.output:
-        print(f"   Output: {args.output}")
-    print("\n⚠️  Not yet implemented")
-    return 0
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.path_resolver import PathResolver
+        from arch.commands.diagram import render_diagram
+
+        # Load model
+        model = load_architecture(arch_dir)
+        resolver = PathResolver(model)
+
+        # Generate diagram
+        return render_diagram(
+            model,
+            resolver,
+            format=args.format,
+            zoom=args.zoom,
+            output=args.output,
+            preview=args.preview,
+        )
+
+    except LoadError as e:
+        print(f"\n❌ Load error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 def cmd_coverage(args):
