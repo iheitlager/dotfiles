@@ -14,7 +14,7 @@ brew install jless || brew upgrade jless
 brew install flock || brew upgrade flock
 brew install htop || brew upgrade htop
 
-packages=(fd jq yq delta fzf bat eza rg tldr glow)
+packages=(fd jq yq git-delta fzf bat eza ripgrep tldr glow)
 for pkg in "${packages[@]}"; do
     brew install "$pkg" || brew upgrade "$pkg"
 done

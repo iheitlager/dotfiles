@@ -23,6 +23,7 @@ COMMANDS:
     status            Show installation status and outdated packages
     invalidate        Clear dotfiles caches (bash_env, bash_aliases, etc.)
     purge             Find and remove stale symlinks in XDG directories
+    orphans           Show packages installed but not declared in dotfiles
     clean             Clean Claude Code config files and backups from home directory
     (none)            Install homebrew packages (default behavior)
 
@@ -43,6 +44,7 @@ Example:
     dot invalidate                # Clear dotfiles caches
     dot purge                     # Remove stale symlinks in ~/.config etc.
     dot purge --force             # Remove stale symlinks without confirmation
+    dot orphans                   # Show installed packages not tracked in dotfiles
     dot clean                     # Clean Claude Code files
     dot -n                        # Regenerate Brewfile and install
     dot -x                        # Export current installations to Brewfile
@@ -323,6 +325,89 @@ if [[ $# -gt 0 ]]; then
             else
                 echo "ℹ️  No changes made"
             fi
+            exit 0
+            ;;
+        orphans)
+            if [[ -z $DOTFILES ]]; then
+                echo "❌ DOTFILES variable not set, exiting"
+                exit 1
+            fi
+
+            echo "🔍 Scanning dotfiles brew declarations..."
+
+            # Collect declared formulae (direct installs + array-style)
+            mapfile -t declared_formulae < <(
+                {
+                    find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                        xargs grep -hv '^\s*#' | \
+                        grep 'brew install ' | grep -v '\-\-cask' | \
+                        grep -oE 'brew install [a-zA-Z0-9@._/-]+' | awk '{print $NF}'
+                    find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                        xargs grep -hv '^\s*#' | \
+                        grep -E '[a-z_]+=\(' | \
+                        grep -oE '\([^)]+\)' | tr -d '()' | tr ' ' '\n'
+                } | grep -v '^\s*$' | sort -u
+            )
+
+            # Collect declared casks
+            mapfile -t declared_casks < <(
+                find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                    xargs grep -hv '^\s*#' | \
+                    grep 'brew install --cask' | \
+                    grep -oE 'brew install --cask [a-zA-Z0-9@._/-]+' | awk '{print $NF}' | \
+                    sort -u
+            )
+
+            echo "   Declared formulae: ${#declared_formulae[@]}"
+            echo "   Declared casks:    ${#declared_casks[@]}"
+            echo ""
+
+            # Get installed packages (leaves = explicitly requested, not auto-deps)
+            mapfile -t installed_formulae < <(brew leaves -r 2>/dev/null | sort)
+            mapfile -t installed_casks < <(brew list --cask 2>/dev/null | sort)
+
+            # Find orphans: installed but not in any brew_packages file
+            orphan_formulae=()
+            for pkg in "${installed_formulae[@]}"; do
+                found=false
+                for declared in "${declared_formulae[@]}"; do
+                    [[ "$pkg" == "$declared" ]] && found=true && break
+                done
+                [[ "$found" == false ]] && orphan_formulae+=("$pkg")
+            done
+
+            orphan_casks=()
+            for pkg in "${installed_casks[@]}"; do
+                found=false
+                for declared in "${declared_casks[@]}"; do
+                    [[ "$pkg" == "$declared" ]] && found=true && break
+                done
+                [[ "$found" == false ]] && orphan_casks+=("$pkg")
+            done
+
+            if [[ ${#orphan_formulae[@]} -eq 0 && ${#orphan_casks[@]} -eq 0 ]]; then
+                echo "✅ No orphaned packages found"
+                exit 0
+            fi
+
+            if [[ ${#orphan_formulae[@]} -gt 0 ]]; then
+                echo "📦 Orphaned formulae (not declared in dotfiles):"
+                for pkg in "${orphan_formulae[@]}"; do
+                    echo "   - $pkg"
+                done
+                echo ""
+            fi
+
+            if [[ ${#orphan_casks[@]} -gt 0 ]]; then
+                echo "🖥️  Orphaned casks (not declared in dotfiles):"
+                for pkg in "${orphan_casks[@]}"; do
+                    echo "   - $pkg"
+                done
+                echo ""
+            fi
+
+            echo "💡 To remove:  brew uninstall <formula>  |  brew uninstall --cask <cask>"
+            echo "   To track:   add to the appropriate topic's brew_packages file"
             exit 0
             ;;
         clean)

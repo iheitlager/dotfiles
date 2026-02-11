@@ -17,7 +17,7 @@ brew install --cask ghostty || brew upgrade ghostty
 brew install --cask font-jetbrains-mono || brew upgrade font-jetbrains-mono
 # brew install --cask iterm2 || brew upgrade iterm2
 
-packages=(fd jq yq delta fzf bat eza rg tldr glow)
+packages=(fd jq yq git-delta fzf bat eza ripgrep tldr glow)
 for pkg in "${packages[@]}"; do
     brew install "$pkg" || brew upgrade "$pkg"
 done

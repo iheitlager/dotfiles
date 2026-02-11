@@ -5,7 +5,7 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 # only want the latest and greatest
-brew install nvim || brew upgrade nvim
+brew install neovim || brew upgrade neovim
 
 
 export PATH=$TMPPATH
