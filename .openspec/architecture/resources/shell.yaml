@@ -17,7 +17,8 @@ resources:
         name: Bash Profile
         type: bash-script
         technology: Bash
-        location: bash/bash_profile.symlink
+        metadata:
+          location: bash/bash_profile.symlink
         description: |
           Login shell initialization.
           Sources bash_env from all topics, sets up XDG paths.
@@ -31,7 +32,8 @@ resources:
         name: Bash RC
         type: bash-script
         technology: Bash
-        location: bash/bashrc.symlink
+        metadata:
+          location: bash/bashrc.symlink
         description: |
           Interactive shell initialization.
           Sources cached bash_aliases and bash_completion,
@@ -46,7 +48,8 @@ resources:
         name: Topic Discovery
         type: bash-function
         technology: Bash
-        location: bash/bashrc.symlink:discover_topics()
+        metadata:
+          location: bash/bashrc.symlink:discover_topics()
         description: |
           Auto-discovers 19 topics by scanning $DOTFILES directory.
           No manual registration required - topics are automatically found
@@ -70,7 +73,8 @@ resources:
         name: Cache Generator
         type: bash-function
         technology: Bash
-        location: bash/bashrc.symlink:generate_cache()
+        metadata:
+          location: bash/bashrc.symlink:generate_cache()
         description: |
           Generates cached versions of:
           - bash_aliases.sh (all topic aliases)
@@ -86,7 +90,8 @@ resources:
         name: Cache Validator
         type: bash-function
         technology: Bash
-        location: bash/bashrc.symlink:is_cache_valid()
+        metadata:
+          location: bash/bashrc.symlink:is_cache_valid()
         description: |
           Checks if cache is valid by comparing mtime:
           - Cache file must exist
@@ -102,7 +107,8 @@ resources:
         name: Cache Storage
         type: directory
         technology: Filesystem
-        location: $XDG_CACHE_HOME/dotfiles/
+        metadata:
+          location: $XDG_CACHE_HOME/dotfiles/
         description: |
           Stores cached shell initialization files:
           - bash_aliases.sh
@@ -111,7 +117,7 @@ resources:
         interfaces:
           - id: cache-read-write
             protocol: filesystem
-            direction: read-write
+            direction: bidirectional
             description: Cache file storage and retrieval
 
   - id: topic-loader
@@ -130,7 +136,8 @@ resources:
         name: Alias Loader
         type: bash-function
         technology: Bash
-        location: bash/bashrc.symlink:load_aliases()
+        metadata:
+          location: bash/bashrc.symlink:load_aliases()
         description: Sources bash_aliases from all topics (cached)
         interfaces:
           - id: load
@@ -142,7 +149,8 @@ resources:
         name: Completion Loader
         type: bash-function
         technology: Bash
-        location: bash/bashrc.symlink:load_completions()
+        metadata:
+          location: bash/bashrc.symlink:load_completions()
         description: Sources bash_completion from all topics (cached)
         interfaces:
           - id: load
@@ -154,7 +162,8 @@ resources:
         name: Function Loader
         type: bash-function
         technology: Bash
-        location: bash/bashrc.symlink:load_functions()
+        metadata:
+          location: bash/bashrc.symlink:load_functions()
         description: Sources bash_functions from all topics (cached)
         interfaces:
           - id: load
@@ -166,7 +175,8 @@ resources:
         name: Environment Loader
         type: bash-function
         technology: Bash
-        location: bash/bash_profile.symlink:load_env()
+        metadata:
+          location: bash/bash_profile.symlink:load_env()
         description: Sources bash_env from all topics (no cache)
         interfaces:
           - id: load

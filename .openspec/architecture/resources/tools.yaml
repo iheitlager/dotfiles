@@ -8,7 +8,8 @@ resources:
     name: Dot Command
     type: cli-tool
     technology: Bash
-    location: local/bin/dot
+    metadata:
+      location: local/bin/dot
     description: |
       Swiss-army knife for dotfiles management.
       Handles package installation, topic discovery, system status,
@@ -23,7 +24,8 @@ resources:
       - id: dot-install
         name: Package Installer
         type: bash-function
-        location: local/bin/dot:install()
+        metadata:
+          location: local/bin/dot:install()
         description: Installs brew packages from command line
         interfaces:
           - id: brew-install-cmd
@@ -34,7 +36,8 @@ resources:
       - id: dot-list
         name: Topic Lister
         type: bash-function
-        location: local/bin/dot:list()
+        metadata:
+          location: local/bin/dot:list()
         description: Lists all topics with install.sh scripts
         interfaces:
           - id: list-topics
@@ -45,7 +48,8 @@ resources:
       - id: dot-status
         name: System Status
         type: bash-function
-        location: local/bin/dot:status()
+        metadata:
+          location: local/bin/dot:status()
         description: |
           Shows status of all topics with flags:
           I=install.sh, B=brew.txt, S=symlinks, A=aliases,
@@ -59,7 +63,8 @@ resources:
       - id: dot-update
         name: Dotfiles Updater
         type: bash-function
-        location: local/bin/dot:update()
+        metadata:
+          location: local/bin/dot:update()
         description: Pulls latest changes from git and re-bootstraps
         interfaces:
           - id: update-dotfiles
@@ -70,7 +75,8 @@ resources:
       - id: dot-edit
         name: Dotfiles Editor
         type: bash-function
-        location: local/bin/dot:edit()
+        metadata:
+          location: local/bin/dot:edit()
         description: Opens dotfiles repo in editor
         interfaces:
           - id: edit-dotfiles
@@ -82,15 +88,16 @@ resources:
     name: Arch Command
     type: cli-tool
     technology: Python 3.11+
-    location: local/bin/arch
+    metadata:
+      location: local/bin/arch
+      dependencies:
+        - rich>=13.0.0
+        - pyyaml>=6.0
+        - jsonschema>=4.0.0
     description: |
       Grounded C4 architecture modeling tool.
       Models, validates, and visualizes software architecture
       using concrete resources and progressive zoom.
-    dependencies:
-      - rich>=13.0.0
-      - pyyaml>=6.0
-      - jsonschema>=4.0.0
     interfaces:
       - id: arch-cli
         protocol: command-line
@@ -101,7 +108,8 @@ resources:
       - id: arch-list
         name: Resource Lister
         type: python-module
-        location: local/lib/arch/commands/list.py
+        metadata:
+          location: local/lib/arch/commands/list.py
         description: Lists all architecture resources in tree format
         interfaces:
           - id: list-resources
@@ -112,7 +120,8 @@ resources:
       - id: arch-validate
         name: Model Validator
         type: python-module
-        location: local/lib/arch/commands/validate.py
+        metadata:
+          location: local/lib/arch/commands/validate.py
         description: |
           Validates architecture model:
           - Schema validation (JSON Schema Draft 07)
@@ -127,7 +136,8 @@ resources:
       - id: arch-diagram
         name: Diagram Generator
         type: python-module
-        location: local/lib/arch/commands/diagram.py
+        metadata:
+          location: local/lib/arch/commands/diagram.py
         description: |
           Generates diagrams from architecture model.
           Supports Mermaid format with landscape, domain, service zoom levels.
@@ -140,7 +150,8 @@ resources:
       - id: arch-loader
         name: Model Loader
         type: python-module
-        location: local/lib/arch/loader.py
+        metadata:
+          location: local/lib/arch/loader.py
         description: Loads and merges YAML fragments with schema validation
         interfaces:
           - id: load-yaml
@@ -151,7 +162,8 @@ resources:
       - id: arch-path-resolver
         name: Path Resolver
         type: python-module
-        location: local/lib/arch/path_resolver.py
+        metadata:
+          location: local/lib/arch/path_resolver.py
         description: O(1) path lookups with resource/interface indexes
         interfaces:
           - id: resolve-path
@@ -163,7 +175,8 @@ resources:
     name: Spec Command
     type: cli-tool
     technology: Bash + fzf
-    location: local/bin/spec
+    metadata:
+      location: local/bin/spec
     description: |
       OpenSpec specification browser.
       Interactive fzf interface for browsing and viewing
@@ -178,7 +191,8 @@ resources:
       - id: spec-browser
         name: Interactive Browser
         type: bash-function
-        location: local/bin/spec:browse()
+        metadata:
+          location: local/bin/spec:browse()
         description: |
           fzf-based interactive browser with:
           - Requirement filtering and search
@@ -194,7 +208,8 @@ resources:
       - id: spec-lister
         name: Spec Lister
         type: bash-function
-        location: local/bin/spec:list()
+        metadata:
+          location: local/bin/spec:list()
         description: Lists all specs with metadata and requirements
         interfaces:
           - id: list-specs
@@ -205,7 +220,8 @@ resources:
       - id: spec-status
         name: Status Overview
         type: bash-function
-        location: local/bin/spec:status()
+        metadata:
+          location: local/bin/spec:status()
         description: Compact overview table of all specs
         interfaces:
           - id: show-status

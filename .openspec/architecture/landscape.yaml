@@ -34,8 +34,7 @@ resources:
         direction: request-response
         description: Command-line tool interfaces (dot, arch, spec)
 
-# External Actors
-actors:
+# External Actors (as resources)
   - id: developer
     name: Developer
     type: person
@@ -46,13 +45,13 @@ actors:
     type: system
     description: Bash shell that loads dotfiles configuration
 
-# External Systems
-external_systems:
+# External Systems (as resources)
   - id: homebrew
     name: Homebrew
     type: package-manager
     description: macOS package manager for installing CLI tools and applications
-    url: https://brew.sh
+    metadata:
+      url: https://brew.sh
     interfaces:
       - id: brew-api
         protocol: command-line
@@ -63,7 +62,8 @@ external_systems:
     name: GitHub
     type: version-control
     description: Git repository hosting and CI/CD
-    url: https://github.com
+    metadata:
+      url: https://github.com
     interfaces:
       - id: gh-api
         protocol: https
@@ -74,26 +74,27 @@ external_systems:
     name: XDG Base Directory
     type: filesystem-standard
     description: Standard directory layout for config, data, cache, and state
-    url: https://specifications.freedesktop.org/basedir-spec/
+    metadata:
+      url: https://specifications.freedesktop.org/basedir-spec/
     interfaces:
       - id: config-dir
         protocol: filesystem
-        direction: read-write
+        direction: bidirectional
         description: $XDG_CONFIG_HOME (~/.config)
 
       - id: data-dir
         protocol: filesystem
-        direction: read-write
+        direction: bidirectional
         description: $XDG_DATA_HOME (~/.local/share)
 
       - id: cache-dir
         protocol: filesystem
-        direction: read-write
+        direction: bidirectional
         description: $XDG_CACHE_HOME (~/.cache)
 
       - id: state-dir
         protocol: filesystem
-        direction: read-write
+        direction: bidirectional
         description: $XDG_STATE_HOME (~/.local/state)
 
 # High-level relationships

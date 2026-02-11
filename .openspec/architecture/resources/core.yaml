@@ -14,7 +14,6 @@ resources:
         name: Bootstrap Script
         type: bash-script
         technology: Bash
-        location: script/bootstrap
         description: |
           Main installation script with 8-step process:
           1. Check for Homebrew, install if missing
@@ -25,6 +24,9 @@ resources:
           6. Set macOS defaults
           7. Install oh-my-zsh if requested
           8. Configure git
+        metadata:
+          metadata:
+            location: script/bootstrap
         interfaces:
           - id: bootstrap-entry
             protocol: bash-script
@@ -35,8 +37,10 @@ resources:
         name: Symlink Manager
         type: bash-function
         technology: Bash
-        location: script/bootstrap:link_file()
         description: Creates symlinks for *.symlink files to $HOME
+        metadata:
+          metadata:
+            location: script/bootstrap:link_file()
         interfaces:
           - id: link-files
             protocol: function-call
@@ -47,7 +51,8 @@ resources:
         name: Installer Runner
         type: bash-function
         technology: Bash
-        location: script/bootstrap:run_installers()
+        metadata:
+          location: script/bootstrap:run_installers()
         description: Executes install.sh in each topic with I flag
         interfaces:
           - id: run-topic-installers
@@ -67,7 +72,8 @@ resources:
         name: XDG Environment Variables
         type: bash-script
         technology: Bash
-        location: bash/bash_env
+        metadata:
+          location: bash/bash_env
         description: Exports XDG_* environment variables with defaults
         interfaces:
           - id: export-xdg-vars
@@ -79,19 +85,21 @@ resources:
         name: Config Home
         type: directory
         technology: Filesystem
-        location: $HOME/.config
+        metadata:
+          location: $HOME/.config
         description: User-specific configuration files
         interfaces:
           - id: config-read-write
             protocol: filesystem
-            direction: read-write
+            direction: bidirectional
             description: Configuration file storage
 
       - id: data-home
         name: Data Home
         type: directory
         technology: Filesystem
-        location: $HOME/.local/share
+        metadata:
+          location: $HOME/.local/share
         description: User-specific data files (scripts, libraries)
         interfaces:
           - id: data-read
@@ -103,24 +111,26 @@ resources:
         name: Cache Home
         type: directory
         technology: Filesystem
-        location: $HOME/.cache
+        metadata:
+          location: $HOME/.cache
         description: User-specific non-essential cache files
         interfaces:
           - id: cache-read-write
             protocol: filesystem
-            direction: read-write
+            direction: bidirectional
             description: Cache file storage with mtime-based invalidation
 
       - id: state-home
         name: State Home
         type: directory
         technology: Filesystem
-        location: $HOME/.local/state
+        metadata:
+          location: $HOME/.local/state
         description: User-specific state data (logs, history)
         interfaces:
           - id: state-read-write
             protocol: filesystem
-            direction: read-write
+            direction: bidirectional
             description: State file storage
 
   - id: homebrew-mgmt
@@ -133,7 +143,8 @@ resources:
         name: Brewfile
         type: config-file
         technology: Ruby DSL
-        location: homebrew/Brewfile
+        metadata:
+          location: homebrew/Brewfile
         description: |
           Declarative package list for Homebrew Bundle.
           Includes taps, brews, casks, mas apps, and VSCode extensions.
@@ -147,7 +158,8 @@ resources:
         name: Brew Installer
         type: bash-script
         technology: Bash
-        location: homebrew/brew_install.sh
+        metadata:
+          location: homebrew/brew_install.sh
         description: Installs Homebrew if not present
         interfaces:
           - id: install-homebrew
