@@ -158,15 +158,85 @@ def cmd_validate(args):
         print("❌ Error: No architecture directory found", file=sys.stderr)
         return 1
 
-    print(f"📦 Validating: {arch_dir}")
-    print("\n⚠️  Not yet implemented")
-    print("   This command will validate:")
-    print("   - YAML schema compliance")
-    print("   - Referential integrity")
-    print("   - Unique IDs")
-    print("   - Abstract resources have children")
-    print("   - State machines anchor to concrete resources")
-    return 0
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.validator import ArchitectureValidator
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console()
+
+        # Load model (includes schema validation)
+        console.print(f"📦 Loading architecture from: {arch_dir}")
+        model = load_architecture(arch_dir, validate_schema=True)
+
+        console.print(f"✅ Schema validation passed\n")
+
+        # Run referential integrity validation
+        console.print("🔍 Checking referential integrity...")
+        validator = ArchitectureValidator(model)
+        result = validator.validate()
+
+        # Display results
+        if result.valid:
+            console.print("✅ [bold green]Validation passed[/bold green]")
+            console.print(f"   No errors found")
+
+            if result.warnings:
+                console.print(f"\n⚠️  [bold yellow]{len(result.warnings)} warning(s)[/bold yellow]")
+                for warning in result.warnings:
+                    console.print(f"   [yellow]•[/yellow] {warning.message}")
+                    if warning.path:
+                        console.print(f"     Path: {warning.path}")
+            return 0
+
+        else:
+            console.print(f"❌ [bold red]Validation failed[/bold red]")
+            console.print(f"   {len(result.errors)} error(s), {len(result.warnings)} warning(s)\n")
+
+            # Show errors in table
+            if result.errors:
+                table = Table(title="Errors", show_header=True, header_style="bold red")
+                table.add_column("Rule", style="cyan")
+                table.add_column("Message", style="white")
+                table.add_column("Path", style="yellow")
+
+                for error in result.errors:
+                    table.add_row(
+                        error.rule or "—",
+                        error.message,
+                        error.path or "—"
+                    )
+
+                console.print(table)
+
+            # Show warnings in table
+            if result.warnings:
+                console.print()
+                table = Table(title="Warnings", show_header=True, header_style="bold yellow")
+                table.add_column("Rule", style="cyan")
+                table.add_column("Message", style="white")
+                table.add_column("Path", style="yellow")
+
+                for warning in result.warnings:
+                    table.add_row(
+                        warning.rule or "—",
+                        warning.message,
+                        warning.path or "—"
+                    )
+
+                console.print(table)
+
+            return 1
+
+    except LoadError as e:
+        print(f"\n❌ Load error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 def cmd_diagram(args):
