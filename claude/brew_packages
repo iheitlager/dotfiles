@@ -9,5 +9,6 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install --cask claude-code || brew upgrade --cask claude-code
+brew install --cask claude || brew upgrade --cask claude
 
 export PATH=$TMPPATH

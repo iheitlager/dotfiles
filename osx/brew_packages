@@ -15,4 +15,7 @@ brew unlink openssl && brew link --force openssl
 brew install mkcert || brew upgrade mkcert
 mkcert -install
 
+brew install --cask 1password-cli || brew upgrade --cask 1password-cli
+brew install --cask pgadmin4 || brew upgrade --cask pgadmin4
+
 export PATH=$TMPPATH
