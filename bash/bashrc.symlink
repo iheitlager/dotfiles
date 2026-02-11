@@ -86,8 +86,8 @@ source "$HOMEBREW_PREFIX/etc/bash_completion.d/git-prompt.sh"
 _dotfiles_cached_source bash_completion
 
 # Ghostty shell integration (cmd+click files, command markers, etc.)
-if [[ "$TERM_PROGRAM" == "ghostty" ]]; then
-    source /Applications/Ghostty.app/Contents/Resources/ghostty/shell-integration/bash/ghostty.bash
+if [ -n "${GHOSTTY_RESOURCES_DIR}" ]; then
+    builtin source "${GHOSTTY_RESOURCES_DIR}/shell-integration/bash/ghostty.bash"
 fi
 
 # Prompt configuration
