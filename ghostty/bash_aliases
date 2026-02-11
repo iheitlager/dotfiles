@@ -5,6 +5,9 @@
 # OSC 8 Hyperlink support for Ghostty terminal
 # Spec: https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
 # Ghostty docs: https://ghostty.org/docs/vt/external
+#
+# NOTE: Inside tmux, use Shift+Cmd+Click to open hyperlinks (not just Cmd+Click).
+# Tmux captures mouse events in alternate screen mode; Shift bypasses this.
 
 # Core hyperlink function - creates clickable terminal links using OSC 8
 # Usage: hyperlink "https://example.com" "Click here"
@@ -26,6 +29,8 @@ hyperlink() {
     fi
 
     # OSC 8 format: ESC ] 8 ; params ; URI ESC \ text ESC ] 8 ; ; ESC \
+    # With tmux 3.4+ native hyperlink support (terminal-features :hyperlinks),
+    # use direct OSC 8 sequences. Tmux will handle them natively.
     printf '\e]8;%s;%s\e\\%s\e]8;;\e\\' "$params" "$uri" "$text"
 }
 
@@ -208,15 +213,26 @@ inline_link() {
 # Check if terminal supports OSC 8 hyperlinks
 # Returns 0 if supported, 1 if not
 supports_hyperlinks() {
-    # Check for Ghostty or other known supporting terminals
+    # Check for known supporting terminals (direct or via tmux)
     if [[ "$TERM_PROGRAM" == "ghostty" ]] ||
        [[ "$VTE_VERSION" ]] ||
        [[ "$TERM_PROGRAM" == "iTerm.app" ]] ||
        [[ "$TERM_PROGRAM" == "WezTerm" ]]; then
         return 0
-    else
-        return 1
     fi
+
+    # Inside tmux, check the outer terminal
+    if [[ -n "$TMUX" ]]; then
+        local client_term
+        client_term="$(tmux display -p '#{client_termname}' 2>/dev/null)"
+        if [[ "$client_term" == *ghostty* ]] ||
+           [[ "$client_term" == *iterm* ]] ||
+           [[ "$client_term" == *wezterm* ]]; then
+            return 0
+        fi
+    fi
+
+    return 1
 }
 
 # Wrapper that only creates hyperlinks if supported
