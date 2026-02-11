@@ -7,6 +7,7 @@ BREWFILE="${XDG_DATA_HOME:-$HOME/.local/share}/Brewfile"
 
 # Trap Ctrl-C and exit cleanly
 trap 'echo ""; echo "❌ Installation interrupted by user"; exit 130' INT
+set -e
 
 print_usage() {
     local HELP="cat"
