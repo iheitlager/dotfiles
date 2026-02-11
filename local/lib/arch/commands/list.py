@@ -115,33 +115,52 @@ def _build_resource_tree(resource: Resource, parent_tree: Optional[Tree] = None)
     return tree
 
 
-def _filter_resources(
+def _matches_filter(
+    resource: Resource,
+    resource_type: Optional[str] = None,
+    tag: Optional[str] = None,
+    query: Optional[str] = None,
+) -> bool:
+    """Check if a resource matches filter criteria."""
+    # Filter by type
+    if resource_type and resource.type != resource_type:
+        return False
+
+    # Filter by tag
+    if tag and tag not in resource.tags:
+        return False
+
+    # Filter by query (search in name or description)
+    if query:
+        query_lower = query.lower()
+        if query_lower not in resource.name.lower():
+            if not resource.description or query_lower not in resource.description.lower():
+                return False
+
+    return True
+
+
+def _collect_matching_resources(
     resources: List[Resource],
     resource_type: Optional[str] = None,
     tag: Optional[str] = None,
     query: Optional[str] = None,
 ) -> List[Resource]:
-    """Filter resources based on type, tag, or query."""
-    filtered = resources
+    """Recursively collect all resources matching filter criteria."""
+    matching = []
 
-    # Filter by type
-    if resource_type:
-        filtered = [r for r in filtered if r.type == resource_type]
+    for resource in resources:
+        # Check if this resource matches
+        if _matches_filter(resource, resource_type, tag, query):
+            matching.append(resource)
 
-    # Filter by tag
-    if tag:
-        filtered = [r for r in filtered if tag in r.tags]
+        # Recursively check children
+        if resource.children:
+            matching.extend(
+                _collect_matching_resources(resource.children, resource_type, tag, query)
+            )
 
-    # Filter by query (search in name or description)
-    if query:
-        query_lower = query.lower()
-        filtered = [
-            r for r in filtered
-            if query_lower in r.name.lower()
-            or (r.description and query_lower in r.description.lower())
-        ]
-
-    return filtered
+    return matching
 
 
 def render_list(
@@ -165,20 +184,25 @@ def render_list(
     console = Console()
 
     # Apply filters
-    resources = model.resources
-
     if resource_type or tag or query:
-        resources = _filter_resources(resources, resource_type, tag, query)
+        # Recursively collect all matching resources from tree
+        resources = _collect_matching_resources(model.resources, resource_type, tag, query)
 
-    if not resources:
-        console.print("[yellow]No resources found matching filters.[/yellow]")
-        return
+        if not resources:
+            console.print("[yellow]No resources found matching filters.[/yellow]")
+            return
 
-    # Build and display tree for each root resource
-    for resource in resources:
-        tree = _build_resource_tree(resource)
-        console.print(tree)
-        console.print()  # Blank line between trees
+        # Build and display tree for each matching resource
+        for resource in resources:
+            tree = _build_resource_tree(resource)
+            console.print(tree)
+            console.print()  # Blank line between trees
+    else:
+        # No filters - display full tree for each root resource
+        for resource in model.resources:
+            tree = _build_resource_tree(resource)
+            console.print(tree)
+            console.print()  # Blank line between trees
 
     # Display summary statistics
     total_resources = model.resource_count()
