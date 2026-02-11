@@ -215,15 +215,30 @@ spec
 **Status:** Implemented
 **Description:** Complete specification of the modular, XDG-compliant dotfiles management system with topic-based organization, automated bootstrapping, and package management.
 
+### Dotfiles Caching System
+**Location:** `specs/002-dotfiles-caching/spec.md`
+**Status:** Implemented
+**Description:** Mtime-based caching system for shell integrations that improves shell startup performance through aggressive caching with automatic invalidation.
+
 ### Keyboard Shortcuts System
 **Location:** `specs/003-shortcuts-system/spec.md`
 **Status:** Implemented
 **Description:** Dynamic keyboard shortcuts documentation system that automatically discovers and displays keybindings across all dotfiles modules.
 
-### Dotfiles Caching System
-**Location:** `specs/002-dotfiles-caching/spec.md`
+### OpenSpec Specification Format
+**Location:** `specs/004-openspec-specification/spec.md`
 **Status:** Implemented
-**Description:** Mtime-based caching system for shell integrations that improves shell startup performance through aggressive caching with automatic invalidation.
+**Description:** Structured specification format with validation rules, traceability tracking, and coverage analysis for documenting system requirements and acceptance criteria.
+
+### Aliases Documentation System
+**Location:** `specs/005-aliases-system/spec.md`
+**Status:** Implemented
+**Description:** Dynamic, modular aliases documentation system that automatically discovers and displays shell aliases across all dotfiles topics with smart caching.
+
+### Agent Swarm System
+**Location:** `specs/006-agent-swarm-system/spec.md`
+**Status:** Implemented
+**Description:** Multi-agent orchestration system for coordinating AI coding agents working in parallel on a shared repository with git worktree isolation and file-based job queue.
 
 ---
 
@@ -358,15 +373,18 @@ $ spec status
 
 OpenSpec Status (~/.dotfiles/.openspec)
 
-Files: 3
+Files: 6
 
 Specification                              Version   Status        Reqs
 ──────────────────────────────────────────────────────────────────────
-Dotfiles System Core Specification         1.0.0     Implemented   8
-Keyboard Shortcuts System Specification    1.0.0     Implemented   6
+Dotfiles System Core Specification         1.0.0     Implemented   9
 Dotfiles Caching System Specification      1.0.0     Implemented   4
+Keyboard Shortcuts System Specification    1.0.0     Implemented   8
+OpenSpec Specification Format              1.0.0     Implemented   13
+Aliases Documentation System               1.0.0     Implemented   7
+Agent Swarm System Specification           1.0.0     Implemented   15
 
-Total Requirements: 18
+Total Requirements: 56
 ```
 
 ---
@@ -397,4 +415,4 @@ SPDX-License-Identifier: Apache-2.0
 
 ---
 
-*Last updated: 2026-02-07*
+*Last updated: 2026-02-11*
