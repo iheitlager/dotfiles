@@ -832,8 +832,10 @@ cmd_workspace() {
     echo "  Ctrl-b d        Detach"
     echo ""
 
-    # Set Ghostty window title
-    printf '\e]0;workspace · %s\a' "$(basename "$PWD")"
+    # Set Ghostty window title (immediate + persist via tmux @title for reattach)
+    local ws_title="workspace · $(basename "$PWD")"
+    tmux set -t "$ws_session" @title "$ws_title"
+    printf '\e]0;%s\a' "$ws_title"
 
     tmux attach -t "$ws_session"
 }
@@ -899,8 +901,10 @@ cmd_start() {
     echo "  Ctrl-b d        Detach"
     echo ""
 
-    # Set Ghostty window title
-    printf '\e]0;swarm · %s (%s agents)\a' "$REPO_NAME" "$AGENT_COUNT"
+    # Set Ghostty window title (immediate + persist via tmux @title for reattach)
+    local swarm_title="swarm · $REPO_NAME ($AGENT_COUNT agents)"
+    tmux set -t "$SESSION" @title "$swarm_title"
+    printf '\e]0;%s\a' "$swarm_title"
 
     tmux attach -t "$SESSION"
 }
