@@ -1,34 +1,33 @@
 #!/usr/bin/env bash
-# Powerline-style statusline for Claude Code
+# Catppuccin Mocha statusline for Claude Code
 # Shows: model | folder | branch | context | price
 
 # Read JSON input
 input=$(cat)
 
-# Powerline separator (use these for powerline fonts)
-SEP=""  #
-SEP_THIN="" #
+# Separator (simple chevron like nvim)
+SEP="›"  # Use › or > or │
 
-# Color codes (256 color palette for better powerline look)
-# Background colors
-BG_MODEL="\033[48;5;25m"      # Deep blue
-BG_FOLDER="\033[48;5;240m"    # Dark gray
-BG_BRANCH="\033[48;5;142m"    # Yellow-green
-BG_CONTEXT="\033[48;5;61m"    # Purple
-BG_PRICE="\033[48;5;166m"     # Orange
+# Catppuccin Mocha colors (matching Ghostty theme)
+# Base colors
+BG="\033[48;5;235m"           # #1e1e2e (background)
+FG="\033[38;5;189m"           # #cdd6f4 (foreground)
 
-# Foreground colors (for text)
-FG_WHITE="\033[38;5;15m"
-FG_BLACK="\033[38;5;0m"
+# Accent colors (using Catppuccin palette)
+BLUE="\033[38;5;117m"         # #89b4fa
+GREEN="\033[38;5;151m"        # #a6e3a1
+YELLOW="\033[38;5;223m"       # #f9e2af
+PINK="\033[38;5;218m"         # #f5c2e7
+PEACH="\033[38;5;216m"        # #fab387
+MAUVE="\033[38;5;183m"        # #cba6f7
+TEAL="\033[38;5;152m"         # #94e2d5
+GRAY="\033[38;5;240m"         # #45475a
 
-# Separator colors (foreground = previous bg)
-FG_MODEL="\033[38;5;25m"
-FG_FOLDER="\033[38;5;240m"
-FG_BRANCH="\033[38;5;142m"
-FG_CONTEXT="\033[38;5;61m"
-FG_PRICE="\033[38;5;166m"
+# Dim foreground for separators
+DIM="\033[2m\033[38;5;240m"   # Dimmed gray
 
 RESET="\033[0m"
+BOLD="\033[1m"
 
 # Extract data from JSON input
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
@@ -103,32 +102,34 @@ case "$model" in
     *) model_short="claude" ;;
 esac
 
-# Build powerline segments
-# Segment 1: Model
-segment1="${BG_MODEL}${FG_WHITE} ⚡ ${model_short} ${RESET}"
-sep1="${FG_MODEL}${BG_FOLDER}${SEP}${RESET}"
+# Build statusline segments (nvim-style with icons and separators)
+# Format: color + icon + text + dim separator
 
-# Segment 2: Folder
-segment2="${BG_FOLDER}${FG_WHITE} 📁 ${folder} ${RESET}"
-sep2="${FG_FOLDER}${BG_BRANCH}${SEP}${RESET}"
+# Segment 1: Model (with lightning icon)
+segment1="${BLUE}${BOLD} ${model_short}${RESET}"
 
-# Segment 3: Branch
-segment3="${BG_BRANCH}${FG_BLACK} ⎇ ${branch} ${RESET}"
-sep3="${FG_BRANCH}${BG_CONTEXT}${SEP}${RESET}"
+# Segment 2: Folder (with folder icon)
+segment2="${TEAL} ${folder}${RESET}"
 
-# Segment 4: Context
-context_icon="🧠"
+# Segment 3: Branch (with git branch icon)
+segment3="${YELLOW} ${branch}${RESET}"
+
+# Segment 4: Context (with dynamic icon based on usage)
+context_color="$GREEN"
+context_icon=""
 if [[ "$context_pct" -ge 90 ]]; then
-    context_icon="⚠️"
+    context_color="$PEACH"
+    context_icon=" "  # Warning
 elif [[ "$context_pct" -ge 75 ]]; then
-    context_icon="⚡"
+    context_color="$YELLOW"
+    context_icon=" "  # Alert
+else
+    context_icon=" "  # Database/memory
 fi
-segment4="${BG_CONTEXT}${FG_WHITE} ${context_icon} ${context_display}/${limit_display} ${context_pct}% ${RESET}"
-sep4="${FG_CONTEXT}${BG_PRICE}${SEP}${RESET}"
+segment4="${context_color}${context_icon} ${context_display}/${limit_display} ${context_pct}%${RESET}"
 
-# Segment 5: Price
-segment5="${BG_PRICE}${FG_WHITE} 💰 \$${cost} ${RESET}"
-sep5="${FG_PRICE}${SEP}${RESET}"
+# Segment 5: Price (with dollar icon)
+segment5="${PEACH} \$${cost}${RESET}"
 
-# Combine all segments and output directly using printf
-printf "${segment1}${sep1}${segment2}${sep2}${segment3}${sep3}${segment4}${sep4}${segment5}${sep5} "
+# Combine all segments with dim separators
+printf '%b' "${segment1} ${DIM}${SEP}${RESET} ${segment2} ${DIM}${SEP}${RESET} ${segment3} ${DIM}${SEP}${RESET} ${segment4} ${DIM}${SEP}${RESET} ${segment5} "

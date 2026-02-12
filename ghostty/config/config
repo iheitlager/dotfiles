@@ -7,7 +7,7 @@
 # =============================================================================
 # FONT
 # =============================================================================
-font-family = JetBrains Mono
+font-family = JetBrainsMono Nerd Font
 font-size = 14
 font-thicken = true
 adjust-cell-height = 10%
