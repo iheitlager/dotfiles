@@ -24,6 +24,7 @@ Grounded C4 Architecture Modeling Tool
 
 Commands:
     arch              Interactive fzf browser (default)
+    arch init         Initialize architecture directory structure
     arch list         List all resources
     arch landscape    Show system landscape view
     arch validate     Validate architecture model
@@ -258,6 +259,79 @@ def cmd_reverse_engineer(args):
     return 0
 
 
+def cmd_init(args):
+    """Initialize architecture directory structure."""
+    cwd = Path.cwd()
+
+    # Step 1: Determine OpenSpec directory
+    # Check for openspec/ (no dot)
+    if (cwd / "openspec").exists():
+        openspec_dir = cwd / "openspec"
+        print(f"✅ Found existing: openspec/")
+    # Check for .openspec/ (with dot)
+    elif (cwd / ".openspec").exists():
+        openspec_dir = cwd / ".openspec"
+        print(f"✅ Found existing: .openspec/")
+    # Create .openspec/ (default)
+    else:
+        openspec_dir = cwd / ".openspec"
+        openspec_dir.mkdir(exist_ok=True)
+        print(f"📁 Created: .openspec/")
+
+    # Step 2: Check if architecture already exists
+    arch_dir = openspec_dir / "architecture"
+    if arch_dir.exists():
+        print(f"❌ Error: {arch_dir.relative_to(cwd)} already exists")
+        return 1
+
+    # Step 3: Create architecture structure
+    print(f"📦 Initializing architecture in: {arch_dir.relative_to(cwd)}/")
+    arch_dir.mkdir()
+
+    # Create subdirectories
+    (arch_dir / "resources").mkdir()
+    (arch_dir / "sequences").mkdir()
+    (arch_dir / "state-machines").mkdir()
+    (arch_dir / "decisions").mkdir()
+
+    # Create template landscape.yaml
+    landscape_template = """# System Landscape
+# Top-level view of your system and its external dependencies
+
+landscape:
+  id: my-system
+  name: My System
+  description: |
+    Brief description of your system
+
+resources:
+  # Define your top-level systems and external dependencies here
+  # Example:
+  # - id: main-app
+  #   name: Main Application
+  #   type: system
+  #   abstract: true
+  #   children: []
+
+relationships: []
+"""
+
+    (arch_dir / "landscape.yaml").write_text(landscape_template)
+
+    # Create .gitkeep files
+    for subdir in ["resources", "sequences", "state-machines", "decisions"]:
+        (arch_dir / subdir / ".gitkeep").touch()
+
+    print("\n✅ Architecture initialized!")
+    print(f"\nNext steps:")
+    print(f"  1. Edit {arch_dir.relative_to(cwd)}/landscape.yaml")
+    print(f"  2. Add resources to {arch_dir.relative_to(cwd)}/resources/")
+    print(f"  3. Run: arch validate")
+    print(f"\nSee: docs/grounded-c4.md for modeling guide")
+
+    return 0
+
+
 def cmd_browse(args):
     """Interactive fzf browser for architecture."""
     arch_dir = find_architecture_dir(args.root)
@@ -279,6 +353,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  arch init               Initialize architecture directory
   arch                    Interactive browser
   arch list               List all resources
   arch validate           Validate architecture model
@@ -305,6 +380,9 @@ For more information, see:
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # init command
+    parser_init = subparsers.add_parser("init", help="Initialize architecture directory structure")
 
     # list command
     parser_list = subparsers.add_parser("list", help="List all resources")
@@ -397,7 +475,9 @@ For more information, see:
         args.command = "browse"
 
     # Route to command handlers
-    if args.command == "list":
+    if args.command == "init":
+        return cmd_init(args)
+    elif args.command == "list":
         return cmd_list(args)
     elif args.command == "validate":
         return cmd_validate(args)
