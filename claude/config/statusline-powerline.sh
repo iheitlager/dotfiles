@@ -130,12 +130,5 @@ sep4="${FG_CONTEXT}${BG_PRICE}${SEP}${RESET}"
 segment5="${BG_PRICE}${FG_WHITE} 💰 \$${cost} ${RESET}"
 sep5="${FG_PRICE}${SEP}${RESET}"
 
-# Combine all segments
-prompt="${segment1}${sep1}${segment2}${sep2}${segment3}${sep3}${segment4}${sep4}${segment5}${sep5} "
-
-# Output JSON
-jq -n \
-    --arg prompt "$prompt" \
-    '{
-        prompt: $prompt
-    }'
+# Combine all segments and output directly using printf
+printf "${segment1}${sep1}${segment2}${sep2}${segment3}${sep3}${segment4}${sep4}${segment5}${sep5} "
