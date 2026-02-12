@@ -1,0 +1,142 @@
+# Dotfiles System - Landscape View
+#
+# Top-level architecture view showing the dotfiles system,
+# external actors, and external systems.
+
+resources:
+  - id: dotfiles
+    name: Dotfiles System
+    type: system
+    description: |
+      Personal development environment configuration system.
+      Manages shell configuration, CLI tools, package management,
+      and development workflows across macOS systems.
+    technology: Bash + Python 3.11+
+    repository: github.com/iheitlager/.dotfiles
+    tags:
+      - dotfiles
+      - shell-config
+      - development-environment
+
+    interfaces:
+      - id: bootstrap
+        protocol: bash-script
+        direction: request-response
+        description: Initial installation and setup entry point
+
+      - id: shell-init
+        protocol: bash-source
+        direction: subscribe
+        description: Shell initialization on login/interactive start
+
+      - id: cli-tools
+        protocol: command-line
+        direction: request-response
+        description: Command-line tool interfaces (dot, arch, spec)
+
+# External Actors (as resources)
+  - id: developer
+    name: Developer
+    type: person
+    description: Primary user who installs and uses the dotfiles system
+
+  - id: shell
+    name: Shell Process
+    type: system
+    description: Bash shell that loads dotfiles configuration
+
+# External Systems (as resources)
+  - id: homebrew
+    name: Homebrew
+    type: package-manager
+    description: macOS package manager for installing CLI tools and applications
+    metadata:
+      url: https://brew.sh
+    interfaces:
+      - id: brew-api
+        protocol: command-line
+        direction: request-response
+        description: brew command for package installation
+
+  - id: github
+    name: GitHub
+    type: version-control
+    description: Git repository hosting and CI/CD
+    metadata:
+      url: https://github.com
+    interfaces:
+      - id: gh-api
+        protocol: https
+        direction: request-response
+        description: GitHub CLI and API access
+
+  - id: xdg-dirs
+    name: XDG Base Directory
+    type: filesystem-standard
+    description: Standard directory layout for config, data, cache, and state
+    metadata:
+      url: https://specifications.freedesktop.org/basedir-spec/
+    interfaces:
+      - id: config-dir
+        protocol: filesystem
+        direction: bidirectional
+        description: $XDG_CONFIG_HOME (~/.config)
+
+      - id: data-dir
+        protocol: filesystem
+        direction: bidirectional
+        description: $XDG_DATA_HOME (~/.local/share)
+
+      - id: cache-dir
+        protocol: filesystem
+        direction: bidirectional
+        description: $XDG_CACHE_HOME (~/.cache)
+
+      - id: state-dir
+        protocol: filesystem
+        direction: bidirectional
+        description: $XDG_STATE_HOME (~/.local/state)
+
+# High-level relationships
+relationships:
+  # Developer installs dotfiles
+  - from: developer
+    to: dotfiles.bootstrap
+    description: Runs script/bootstrap to install dotfiles
+
+  # Shell loads dotfiles
+  - from: shell
+    to: dotfiles.shell-init
+    description: Sources bash_profile and bashrc on shell start
+
+  # Developer uses CLI tools
+  - from: developer
+    to: dotfiles.cli-tools
+    description: Executes dot, arch, spec commands
+
+  # Dotfiles uses Homebrew
+  - from: dotfiles.bootstrap
+    to: homebrew.brew-api
+    description: Installs packages via brew bundle
+
+  # Dotfiles uses GitHub
+  - from: dotfiles.cli-tools
+    to: github.gh-api
+    description: Interacts with GitHub (issues, PRs) via gh CLI
+
+  # Dotfiles follows XDG standard
+  - from: dotfiles.shell-init
+    to: xdg-dirs.config-dir
+    description: Reads config from $XDG_CONFIG_HOME
+
+  - from: dotfiles.shell-init
+    to: xdg-dirs.data-dir
+    description: Reads scripts from $XDG_DATA_HOME
+
+  - from: dotfiles.shell-init
+    to: xdg-dirs.cache-dir
+    description: Reads/writes cache files to $XDG_CACHE_HOME
+
+  - from: dotfiles.shell-init
+    to: xdg-dirs.state-dir
+    description: Reads/writes state to $XDG_STATE_HOME

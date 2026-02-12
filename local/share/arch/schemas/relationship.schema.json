@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/iheitlager/dotfiles/schemas/relationship.schema.json",
+  "title": "Grounded C4 Relationship",
+  "description": "A relationship connecting two interfaces or resources in a Grounded C4 architecture model",
+  "type": "object",
+  "required": ["from", "to"],
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "Source InterfaceRef (resource.path.interface-id) or ResourceRef (resource.path) using dotted notation",
+      "pattern": "^[a-z0-9.-]+$",
+      "examples": [
+        "dotfiles.bootstrap",
+        "dotfiles.bootstrap.cli",
+        "music-platform.collab-service.ws-connect",
+        "resonance.ai.ai-mixer.mix-request"
+      ]
+    },
+    "to": {
+      "type": "string",
+      "description": "Target InterfaceRef or ResourceRef using dotted notation",
+      "pattern": "^[a-z0-9.-]+$",
+      "examples": [
+        "dotfiles.xdg-dirs",
+        "dotfiles.sessions-cache.cache-api",
+        "music-platform.event-bus.producer",
+        "resonance.collaboration.sessions-cache.cache-read-write"
+      ]
+    },
+    "via": {
+      "type": "string",
+      "description": "Optional intermediary ResourceRef (e.g., API gateway, load balancer, event bus) that routes the connection",
+      "pattern": "^[a-z0-9.-]+$",
+      "examples": [
+        "dotfiles.api-gateway",
+        "music-platform.event-bus",
+        "resonance.shared.load-balancer"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what this connection does",
+      "examples": [
+        "Creates XDG directories",
+        "Session state read/write",
+        "Trigger AI mix on session checkpoint",
+        "Publish session events to Kafka"
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for categorization and filtering"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Extensible metadata as key-value pairs (e.g., latency, bandwidth, rate limits)",
+      "additionalProperties": true,
+      "examples": [
+        {
+          "latency_p99": "50ms",
+          "rate_limit": "1000/s"
+        },
+        {
+          "bandwidth": "1Gbps",
+          "protocol_version": "2.0"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

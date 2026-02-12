@@ -1,0 +1,418 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "rich>=13.0.0",
+#   "pyyaml>=6.0",
+#   "jsonschema>=4.0.0",
+# ]
+# ///
+#
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+#
+# arch - Grounded C4 Architecture Modeling Tool
+#
+# A tool for modeling, validating, and visualizing software architecture
+# using the Grounded C4 approach (concrete resources, progressive zoom,
+# behavioral modeling with sequences and state machines).
+#
+# Part of the OpenSpec system for specification-driven development.
+
+"""
+Grounded C4 Architecture Modeling Tool
+
+Commands:
+    arch              Interactive fzf browser (default)
+    arch list         List all resources
+    arch landscape    Show system landscape view
+    arch validate     Validate architecture model
+    arch diagram      Generate diagrams
+    arch coverage     Check architecture coverage
+    arch reverse-engineer  Extract architecture from code
+    arch deps         Show dependencies
+    arch impact       Analyze impact of changes
+    arch adr          Show related ADRs
+"""
+
+import sys
+import os
+import argparse
+from pathlib import Path
+
+# Add local/lib to path for importing arch modules
+SCRIPT_DIR = Path(__file__).parent
+LIB_DIR = SCRIPT_DIR.parent / "lib"
+if str(LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(LIB_DIR))
+
+VERSION = "0.1.0"
+
+
+def find_architecture_dir(start_path=None):
+    """
+    Find the architecture directory (.openspec/architecture).
+
+    Search order:
+    1. Explicit start path (if provided)
+    2. Git repository root (if inside a git repo)
+    3. Current directory and parents (walk up)
+
+    Returns:
+        Path to .openspec/architecture directory, or None if not found
+    """
+    if start_path:
+        arch_dir = Path(start_path) / ".openspec" / "architecture"
+        if arch_dir.exists():
+            return arch_dir
+        return None
+
+    # Try git root
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode == 0:
+            git_root = Path(result.stdout.strip())
+            arch_dir = git_root / ".openspec" / "architecture"
+            if arch_dir.exists():
+                return arch_dir
+    except Exception:
+        pass
+
+    # Walk up directory tree
+    current = Path.cwd()
+    while current != current.parent:
+        arch_dir = current / ".openspec" / "architecture"
+        if arch_dir.exists():
+            return arch_dir
+        current = current.parent
+
+    return None
+
+
+def cmd_list(args):
+    """List all resources in the architecture model."""
+    arch_dir = find_architecture_dir(args.root)
+
+    if not arch_dir:
+        print("❌ Error: No architecture directory found", file=sys.stderr)
+        print("   Searched for: .openspec/architecture", file=sys.stderr)
+        if args.root:
+            print(f"   In: {args.root}", file=sys.stderr)
+        else:
+            print(f"   From: {Path.cwd()} (git root or walking up)", file=sys.stderr)
+        return 1
+
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.path_resolver import PathResolver
+        from arch.commands.list import render_list
+
+        # Load model
+        model = load_architecture(arch_dir)
+
+        # Build path resolver
+        resolver = PathResolver(model)
+
+        # Render tree structure
+        render_list(
+            model,
+            resolver,
+            resource_type=getattr(args, 'type', None),
+            tag=getattr(args, 'tag', None),
+            query=getattr(args, 'query', None),
+            protocol=getattr(args, 'protocol', None),
+        )
+
+        return 0
+
+    except LoadError as e:
+        print(f"\n❌ Load error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def cmd_validate(args):
+    """Validate architecture model for schema and referential integrity."""
+    arch_dir = find_architecture_dir(args.root)
+
+    if not arch_dir:
+        print("❌ Error: No architecture directory found", file=sys.stderr)
+        return 1
+
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.validator import ArchitectureValidator
+        from arch.commands.validate import render_validate
+        from rich.console import Console
+
+        console = Console()
+
+        # Load model (includes schema validation)
+        console.print(f"📦 Loading architecture from: {arch_dir}")
+        model = load_architecture(arch_dir, validate_schema=True)
+
+        console.print(f"✅ Schema validation passed\n")
+
+        # Run referential integrity validation
+        console.print("🔍 Checking referential integrity...")
+        validator = ArchitectureValidator(model)
+        result = validator.validate()
+
+        # Render results and get exit code
+        return render_validate(model, result)
+
+    except LoadError as e:
+        print(f"\n❌ Load error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def cmd_diagram(args):
+    """Generate diagrams from architecture model."""
+    arch_dir = find_architecture_dir(args.root)
+
+    if not arch_dir:
+        print("❌ Error: No architecture directory found", file=sys.stderr)
+        return 1
+
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.path_resolver import PathResolver
+        from arch.commands.diagram import render_diagram
+
+        # Load model
+        model = load_architecture(arch_dir)
+        resolver = PathResolver(model)
+
+        # Generate diagram
+        return render_diagram(
+            model,
+            resolver,
+            format=args.format,
+            zoom=args.zoom,
+            output=args.output,
+            preview=args.preview,
+        )
+
+    except LoadError as e:
+        print(f"\n❌ Load error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+def cmd_coverage(args):
+    """Check architecture coverage against codebase."""
+    arch_dir = find_architecture_dir(args.root)
+
+    if not arch_dir:
+        print("❌ Error: No architecture directory found", file=sys.stderr)
+        return 1
+
+    print(f"📦 Checking coverage: {arch_dir}")
+    if args.source:
+        print(f"   Source: {args.source}")
+    print("\n⚠️  Not yet implemented")
+    print("   This command will:")
+    print("   - Scan codebase for resources (scripts, configs, services)")
+    print("   - Compare against architecture model")
+    print("   - Report: documented, undocumented, orphaned")
+    return 0
+
+
+def cmd_reverse_engineer(args):
+    """Extract architecture from existing codebase."""
+    arch_dir = find_architecture_dir(args.root)
+
+    if not arch_dir:
+        print("❌ Error: No architecture directory found", file=sys.stderr)
+        return 1
+
+    print(f"📦 Reverse engineering to: {arch_dir}")
+    if args.source:
+        print(f"   Source: {args.source}")
+    if args.format:
+        print(f"   Format: {args.format}")
+    print("\n⚠️  Not yet implemented")
+    print("   This command will:")
+    print("   - Extract resources from code/config files")
+    print("   - Detect interfaces (APIs, events, file operations)")
+    print("   - Generate initial YAML models")
+    return 0
+
+
+def cmd_browse(args):
+    """Interactive fzf browser for architecture."""
+    arch_dir = find_architecture_dir(args.root)
+
+    if not arch_dir:
+        print("❌ Error: No architecture directory found", file=sys.stderr)
+        return 1
+
+    print(f"📦 Architecture browser: {arch_dir}")
+    print("\n⚠️  Not yet implemented")
+    print("   This command will provide an interactive fzf browser")
+    print("   similar to the 'spec' command for browsing specifications.")
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Grounded C4 Architecture Modeling Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  arch                    Interactive browser
+  arch list               List all resources
+  arch validate           Validate architecture model
+  arch diagram --zoom=landscape --format=mermaid
+  arch coverage --source=script/
+  arch reverse-engineer --source=script/ --output=architecture/
+
+For more information, see:
+  - Design doc: docs/grounded-c4.md
+  - Specification: .openspec/specs/008-grounded-c4-architecture/spec.md
+  - Proposal: .openspec/changes/grounded-c4-architecture/proposal.md
+        """
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"arch {VERSION}"
+    )
+
+    parser.add_argument(
+        "-r", "--root",
+        help="Explicit root directory to search for .openspec/architecture"
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # list command
+    parser_list = subparsers.add_parser("list", help="List all resources")
+    parser_list.add_argument(
+        "--type",
+        help="Filter by resource type (e.g., go-service, bash-script)"
+    )
+    parser_list.add_argument(
+        "--tag",
+        help="Filter by tag"
+    )
+    parser_list.add_argument(
+        "--query",
+        help="Search by name or description"
+    )
+    parser_list.add_argument(
+        "--protocol",
+        help="Filter interfaces by protocol (e.g., https, kafka)"
+    )
+
+    # validate command
+    parser_validate = subparsers.add_parser("validate", help="Validate architecture model")
+
+    # diagram command
+    parser_diagram = subparsers.add_parser("diagram", help="Generate diagrams")
+    parser_diagram.add_argument(
+        "--format",
+        choices=["mermaid", "plantuml"],
+        default="mermaid",
+        help="Diagram format (default: mermaid)"
+    )
+    parser_diagram.add_argument(
+        "--zoom",
+        choices=["landscape", "domain", "service", "interface"],
+        default="landscape",
+        help="Zoom level (default: landscape)"
+    )
+    parser_diagram.add_argument(
+        "--output",
+        help="Output file path (default: stdout)"
+    )
+    parser_diagram.add_argument(
+        "--preview",
+        action="store_true",
+        help="Preview in terminal with glow/bat"
+    )
+
+    # coverage command
+    parser_coverage = subparsers.add_parser("coverage", help="Check architecture coverage")
+    parser_coverage.add_argument(
+        "--source",
+        help="Source directory to scan (default: current directory)"
+    )
+    parser_coverage.add_argument(
+        "--format",
+        choices=["table", "json"],
+        default="table",
+        help="Output format (default: table)"
+    )
+
+    # reverse-engineer command
+    parser_reverse = subparsers.add_parser(
+        "reverse-engineer",
+        help="Extract architecture from code"
+    )
+    parser_reverse.add_argument(
+        "--source",
+        help="Source directory to analyze"
+    )
+    parser_reverse.add_argument(
+        "--format",
+        choices=["bash", "docker-compose", "kubernetes"],
+        help="Source format hint"
+    )
+    parser_reverse.add_argument(
+        "--output",
+        help="Output directory for generated YAML (default: .openspec/architecture/)"
+    )
+    parser_reverse.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Confirm before writing files"
+    )
+
+    # Parse arguments
+    args = parser.parse_args()
+
+    # Default to browse if no command specified
+    if not args.command:
+        args.command = "browse"
+
+    # Route to command handlers
+    if args.command == "list":
+        return cmd_list(args)
+    elif args.command == "validate":
+        return cmd_validate(args)
+    elif args.command == "diagram":
+        return cmd_diagram(args)
+    elif args.command == "coverage":
+        return cmd_coverage(args)
+    elif args.command == "reverse-engineer":
+        return cmd_reverse_engineer(args)
+    elif args.command == "browse":
+        return cmd_browse(args)
+    else:
+        parser.print_help()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

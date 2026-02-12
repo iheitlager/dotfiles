@@ -604,9 +604,14 @@ validate_spec_file() {
         ((issues++))
     fi
 
-    # Check ADDED Requirements section
-    if grep -q "^## ADDED Requirements" "$spec_file"; then
-        echo -e "✅ ADDED Requirements: ${GREEN}Present${RESET}"
+    # Check Requirements section (main specs) or ADDED Requirements (delta specs)
+    if grep -q "^## Requirements" "$spec_file" || grep -q "^## ADDED Requirements" "$spec_file"; then
+        # Determine which type
+        if grep -q "^## ADDED Requirements" "$spec_file"; then
+            echo -e "✅ ADDED Requirements: ${GREEN}Present${RESET} (delta spec)"
+        else
+            echo -e "✅ Requirements: ${GREEN}Present${RESET}"
+        fi
 
         # Count requirements (both formats: "Requirement:" and "Requirement N:")
         local req_count
@@ -643,7 +648,7 @@ validate_spec_file() {
             ((issues++))
         fi
     else
-        echo -e "❌ ${RED}Missing ADDED Requirements section${RESET}"
+        echo -e "❌ ${RED}Missing Requirements section (use '## Requirements' for main specs or '## ADDED Requirements' for delta specs)${RESET}"
         ((issues++))
     fi
 

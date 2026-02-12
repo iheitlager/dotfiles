@@ -6,3 +6,12 @@ AGENTS.md
 
 # Neovim plugin lock file
 nvim/config/lazy-lock.json
+__pycache__/
+
+# Test virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

@@ -1,0 +1,224 @@
+# Dotfiles Core Resources
+#
+# Bootstrap process, XDG Base Directory integration,
+# and Homebrew package management.
+
+resources:
+  - id: bootstrap
+    name: Bootstrap System
+    type: service
+    abstract: true
+    description: Installation and setup orchestration
+    children:
+      - id: bootstrap-script
+        name: Bootstrap Script
+        type: bash-script
+        technology: Bash
+        description: |
+          Main installation script with 8-step process:
+          1. Check for Homebrew, install if missing
+          2. Update Homebrew
+          3. Install brew bundle dependencies
+          4. Create symlinks for dotfiles
+          5. Install topic-specific scripts
+          6. Set macOS defaults
+          7. Install oh-my-zsh if requested
+          8. Configure git
+        metadata:
+          metadata:
+            location: script/bootstrap
+        interfaces:
+          - id: bootstrap-entry
+            protocol: bash-script
+            direction: request-response
+            description: Main entry point for installation
+
+      - id: symlink-manager
+        name: Symlink Manager
+        type: bash-function
+        technology: Bash
+        description: Creates symlinks for *.symlink files to $HOME
+        metadata:
+          metadata:
+            location: script/bootstrap:link_file()
+        interfaces:
+          - id: link-files
+            protocol: function-call
+            direction: request-response
+            description: Symlinks dotfiles from topics to home directory
+
+      - id: installer-runner
+        name: Installer Runner
+        type: bash-function
+        technology: Bash
+        metadata:
+          location: script/bootstrap:run_installers()
+        description: Executes install.sh in each topic with I flag
+        interfaces:
+          - id: run-topic-installers
+            protocol: function-call
+            direction: request-response
+            description: Runs installation scripts for all topics
+
+  - id: xdg
+    name: XDG Base Directory Integration
+    type: service
+    abstract: true
+    description: |
+      Compliance with XDG Base Directory specification.
+      Organizes config, data, cache, and state into standard locations.
+    children:
+      - id: xdg-env
+        name: XDG Environment Variables
+        type: bash-script
+        technology: Bash
+        metadata:
+          location: bash/bash_env
+        description: Exports XDG_* environment variables with defaults
+        interfaces:
+          - id: export-xdg-vars
+            protocol: bash-source
+            direction: publish
+            description: Sets XDG_CONFIG_HOME, XDG_DATA_HOME, XDG_CACHE_HOME, XDG_STATE_HOME
+
+      - id: config-home
+        name: Config Home
+        type: directory
+        technology: Filesystem
+        metadata:
+          location: $HOME/.config
+        description: User-specific configuration files
+        interfaces:
+          - id: config-read-write
+            protocol: filesystem
+            direction: bidirectional
+            description: Configuration file storage
+
+      - id: data-home
+        name: Data Home
+        type: directory
+        technology: Filesystem
+        metadata:
+          location: $HOME/.local/share
+        description: User-specific data files (scripts, libraries)
+        interfaces:
+          - id: data-read
+            protocol: filesystem
+            direction: read
+            description: Script and data file access
+
+      - id: cache-home
+        name: Cache Home
+        type: directory
+        technology: Filesystem
+        metadata:
+          location: $HOME/.cache
+        description: User-specific non-essential cache files
+        interfaces:
+          - id: cache-read-write
+            protocol: filesystem
+            direction: bidirectional
+            description: Cache file storage with mtime-based invalidation
+
+      - id: state-home
+        name: State Home
+        type: directory
+        technology: Filesystem
+        metadata:
+          location: $HOME/.local/state
+        description: User-specific state data (logs, history)
+        interfaces:
+          - id: state-read-write
+            protocol: filesystem
+            direction: bidirectional
+            description: State file storage
+
+  - id: homebrew-mgmt
+    name: Homebrew Management
+    type: service
+    abstract: true
+    description: Package installation and management via Homebrew
+    children:
+      - id: brewfile
+        name: Brewfile
+        type: config-file
+        technology: Ruby DSL
+        metadata:
+          location: homebrew/Brewfile
+        description: |
+          Declarative package list for Homebrew Bundle.
+          Includes taps, brews, casks, mas apps, and VSCode extensions.
+        interfaces:
+          - id: brewfile-read
+            protocol: filesystem
+            direction: read
+            description: Package list for brew bundle
+
+      - id: brew-installer
+        name: Brew Installer
+        type: bash-script
+        technology: Bash
+        metadata:
+          location: homebrew/brew_install.sh
+        description: Installs Homebrew if not present
+        interfaces:
+          - id: install-homebrew
+            protocol: bash-script
+            direction: request-response
+            description: Downloads and installs Homebrew
+
+      - id: brew-bundle
+        name: Brew Bundle
+        type: command
+        technology: Homebrew
+        description: Installs packages from Brewfile
+        interfaces:
+          - id: bundle-install
+            protocol: command-line
+            direction: request-response
+            description: brew bundle install in homebrew/
+
+# Relationships within core resources
+relationships:
+  # Bootstrap orchestration
+  - from: bootstrap.bootstrap-script.bootstrap-entry
+    to: homebrew-mgmt.brew-installer.install-homebrew
+    description: Ensures Homebrew is installed (step 1)
+
+  - from: bootstrap.bootstrap-script.bootstrap-entry
+    to: homebrew-mgmt.brew-bundle.bundle-install
+    description: Installs packages from Brewfile (step 3)
+
+  - from: bootstrap.bootstrap-script.bootstrap-entry
+    to: bootstrap.symlink-manager.link-files
+    description: Creates symlinks for dotfiles (step 4)
+
+  - from: bootstrap.bootstrap-script.bootstrap-entry
+    to: bootstrap.installer-runner.run-topic-installers
+    description: Runs topic install.sh scripts (step 5)
+
+  # XDG integration
+  - from: bootstrap.bootstrap-script.bootstrap-entry
+    to: xdg.xdg-env.export-xdg-vars
+    description: Sources XDG environment variables
+
+  - from: xdg.xdg-env.export-xdg-vars
+    to: xdg.config-home.config-read-write
+    description: Sets XDG_CONFIG_HOME path
+
+  - from: xdg.xdg-env.export-xdg-vars
+    to: xdg.data-home.data-read
+    description: Sets XDG_DATA_HOME path
+
+  - from: xdg.xdg-env.export-xdg-vars
+    to: xdg.cache-home.cache-read-write
+    description: Sets XDG_CACHE_HOME path
+
+  - from: xdg.xdg-env.export-xdg-vars
+    to: xdg.state-home.state-read-write
+    description: Sets XDG_STATE_HOME path
+
+  # Brewfile usage
+  - from: homebrew-mgmt.brew-bundle.bundle-install
+    to: homebrew-mgmt.brewfile.brewfile-read
+    description: Reads package list from Brewfile
