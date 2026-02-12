@@ -80,7 +80,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline.sh"
+    "command": "~/.dotfiles/claude/config/statusline-powerline.sh"
   },
   "teammateMode": "tmux",
   "additionalDirectories": [

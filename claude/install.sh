@@ -11,6 +11,7 @@ mkdir -p "$XDG_CONFIG_HOME/claude"  2>/dev/null
 ln -sf "$XDG_CONFIG_HOME/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 ln -sf "$XDG_CONFIG_HOME/claude/settings.json" "$HOME/.claude/settings.json"
 ln -sf "$XDG_CONFIG_HOME/claude/statusline.sh" "$HOME/.claude/statusline.sh"
+ln -sf "$XDG_CONFIG_HOME/claude/statusline-powerline.sh" "$HOME/.claude/statusline-powerline.sh"
 
 # Symlink all directories found in config
 for dir in "$XDG_CONFIG_HOME/claude"/*/; do
