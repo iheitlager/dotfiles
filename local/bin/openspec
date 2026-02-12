@@ -2557,7 +2557,7 @@ def build_fzf_list(spec_dir: Path) -> List[tuple]:
         requirements = extract_requirements(lines, sections)
 
         title = (metadata.title if metadata else spec_file.parent.name).strip().replace('\n', ' ')
-        domain = (metadata.domain if metadata else "").strip().replace('\n', ' ')
+        domain = ((metadata.domain or "") if metadata else "").strip().replace('\n', ' ')
         rel_path = spec_file.relative_to(spec_dir)
 
         # Add file entry
