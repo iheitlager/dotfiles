@@ -112,10 +112,10 @@ segment1="${BLUE}${BOLD} ${model_short}${RESET}"
 segment2="${TEAL} ${folder}${RESET}"
 
 # Segment 3: Branch (with git branch icon)
-segment3="${YELLOW} ${branch}${RESET}"
+segment3="${GREEN} ${branch}${RESET}"
 
 # Segment 4: Context (with dynamic icon based on usage)
-context_color="$GREEN"
+context_color="$MAUVE"
 context_icon=""
 if [[ "$context_pct" -ge 90 ]]; then
     context_color="$PEACH"

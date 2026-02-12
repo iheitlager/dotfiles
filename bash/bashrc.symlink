@@ -166,7 +166,7 @@ update_prompt() {
     
     # Only show first line if there's content
     if [[ -n "$first_line" ]]; then
-        PS1="${first_line}\n${MAGENTA}\w>${RESET} "
+        PS1="${first_line}\n${CYAN}\w>${RESET} "
     else
         PS1="${CYAN}[\W] >${RESET} "
     fi
