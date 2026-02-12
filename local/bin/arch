@@ -338,13 +338,31 @@ def cmd_browse(args):
 
     if not arch_dir:
         print("❌ Error: No architecture directory found", file=sys.stderr)
+        print("   Searched for: .openspec/architecture", file=sys.stderr)
+        if args.root:
+            print(f"   In: {args.root}", file=sys.stderr)
+        else:
+            print(f"   From: {Path.cwd()} (git root or walking up)", file=sys.stderr)
         return 1
 
-    print(f"📦 Architecture browser: {arch_dir}")
-    print("\n⚠️  Not yet implemented")
-    print("   This command will provide an interactive fzf browser")
-    print("   similar to the 'spec' command for browsing specifications.")
-    return 0
+    try:
+        from arch.loader import load_architecture, LoadError
+        from arch.path_resolver import PathResolver
+        from arch.commands.browse import render_browser
+
+        model = load_architecture(arch_dir)
+        resolver = PathResolver(model)
+
+        return render_browser(model, resolver)
+
+    except LoadError as e:
+        print(f"❌ Load Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"❌ Error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return 1
 
 
 def main():
@@ -405,6 +423,9 @@ For more information, see:
 
     # validate command
     parser_validate = subparsers.add_parser("validate", help="Validate architecture model")
+
+    # browse command
+    parser_browse = subparsers.add_parser("browse", help="Interactive fzf browser for architecture")
 
     # diagram command
     parser_diagram = subparsers.add_parser("diagram", help="Generate diagrams")
@@ -495,4 +516,29 @@ For more information, see:
 
 
 if __name__ == "__main__":
+    # Special handler for __preview__ command (called by fzf preview script)
+    if len(sys.argv) >= 4 and sys.argv[1] == "__preview__":
+        entry_type = sys.argv[2]
+        full_path = sys.argv[3]
+
+        # Find architecture directory
+        arch_dir = find_architecture_dir()
+        if not arch_dir:
+            print("Error: No architecture directory found", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            from arch.loader import load_architecture
+            from arch.path_resolver import PathResolver
+            from arch.commands.browse import render_preview
+
+            model = load_architecture(arch_dir)
+            resolver = PathResolver(model)
+            render_preview(entry_type, full_path, model, resolver)
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    # Normal command handling
     sys.exit(main())
