@@ -523,6 +523,37 @@ result: null
 - GIVEN `swarm-daemon status` / `agents` / `log` / `cleanup` is run directly (non-REPL)
 - THEN the same underlying output SHALL be produced without the interactive prompt
 
+#### Scenario: Live Event Feedback (Foreground Daemon)
+
+- GIVEN `swarm-daemon daemon` is run in a terminal (stdout/stderr is a tty)
+- THEN it SHALL display new events from `events.log` as they arrive in real-time
+- AND events SHALL be formatted as: `HH:MM:SS  EVENT_TYPE          agent-id   [data summary]`
+- AND color coding SHALL be applied:
+  - GREEN: AGENT_STARTUP, REQUEST_START, TEST_PASSED, LINT_PASSED
+  - YELLOW: AGENT_SHUTDOWN, JOB_PR_READY
+  - RED: TEST_FAILED, LINT_FAILED, AGENT_ERROR
+  - DIM: REQUEST, REQUEST_END (high-frequency events)
+  - Default: all other events
+
+#### Scenario: Startup Status Line
+
+- GIVEN `swarm-daemon daemon` starts in a terminal
+- AFTER the initial 4 startup lines
+- THEN it SHALL print the current agent count: `Agents: N registered (<agents>: working)`
+
+#### Scenario: Periodic Heartbeat
+
+- GIVEN the daemon is running in foreground mode
+- WHEN no new events have occurred for 30 seconds
+- THEN it SHALL print a dim status line: `[HH:MM:SS] -- no new events (N agents working) --`
+- AND this confirms the daemon is alive and monitoring
+
+#### Scenario: Background Mode (Non-TTY)
+
+- GIVEN `swarm-daemon daemon` output is redirected or piped
+- WHEN `not sys.stderr.isatty()`
+- THEN it SHALL maintain current behavior: log to file only, no terminal output
+
 ---
 
 ### Requirement 13: Swarm-Hook Claude Code Integration
