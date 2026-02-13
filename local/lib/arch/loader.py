@@ -13,7 +13,7 @@ import json
 import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
-from jsonschema import validate as schema_validate, ValidationError, RefResolver
+from jsonschema import validate as schema_validate, ValidationError
 
 from .model import ArchitectureModel, Resource, Relationship, Sequence, StateMachine
 

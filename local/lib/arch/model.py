@@ -233,8 +233,7 @@ class AlternativeBlock:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AlternativeBlock':
         """Create from dictionary."""
-        from . import model  # Avoid circular import
-        steps = [model.Step.from_dict(s) for s in data["steps"]]
+        steps = [Step.from_dict(s) for s in data["steps"]]
         return cls(condition=data["condition"], steps=steps)
 
 
