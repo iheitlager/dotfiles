@@ -240,23 +240,28 @@ def cmd_coverage(args):
 
 def cmd_reverse_engineer(args):
     """Extract architecture from existing codebase."""
-    arch_dir = find_architecture_dir(args.root)
+    from arch.commands.reverse_engineer import run_reverse_engineer
 
-    if not arch_dir:
-        print("❌ Error: No architecture directory found", file=sys.stderr)
-        return 1
+    # Determine source directory
+    source = Path(args.source) if args.source else Path.cwd()
 
-    print(f"📦 Reverse engineering to: {arch_dir}")
-    if args.source:
-        print(f"   Source: {args.source}")
-    if args.format:
-        print(f"   Format: {args.format}")
-    print("\n⚠️  Not yet implemented")
-    print("   This command will:")
-    print("   - Extract resources from code/config files")
-    print("   - Detect interfaces (APIs, events, file operations)")
-    print("   - Generate initial YAML models")
-    return 0
+    # Determine output path
+    output = None
+    if args.output:
+        output = Path(args.output)
+    else:
+        # Default: save to architecture directory if it exists
+        arch_dir = find_architecture_dir(args.root)
+        if arch_dir:
+            output = arch_dir / "extracted.yaml"
+
+    # Run reverse engineering
+    return run_reverse_engineer(
+        source=source,
+        output=output,
+        interactive=args.interactive if hasattr(args, 'interactive') else False,
+        recursive=True
+    )
 
 
 def cmd_init(args):
