@@ -81,6 +81,8 @@ def render_validate(
     console.print(f"  Resources: {model.resource_count()}")
     console.print(f"  Interfaces: {model.interface_count()}")
     console.print(f"  Relationships: {len(model.relationships)}")
+    console.print(f"  Sequences: {model.sequence_count()}")
+    console.print(f"  State Machines: {model.state_machine_count()}")
 
     # Final status message
     console.print()

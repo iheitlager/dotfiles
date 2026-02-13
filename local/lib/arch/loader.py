@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from jsonschema import validate as schema_validate, ValidationError, RefResolver
 
-from .model import ArchitectureModel, Resource, Relationship
+from .model import ArchitectureModel, Resource, Relationship, Sequence, StateMachine
 
 
 class LoadError(Exception):
@@ -55,7 +55,7 @@ def _load_schema(schema_name: str) -> Dict[str, Any]:
 def _load_all_schemas() -> Dict[str, Any]:
     """Load all JSON schemas and create resolver."""
     schemas = {}
-    for name in ["interface", "resource", "relationship"]:
+    for name in ["interface", "resource", "relationship", "sequence", "state-machine"]:
         schemas[name] = _load_schema(name)
     return schemas
 
@@ -147,28 +147,48 @@ def _merge_models(models: List[Dict[str, Any]]) -> Dict[str, Any]:
         Merged model dictionary
 
     Raises:
-        LoadError: If duplicate resource IDs are found
+        LoadError: If duplicate resource IDs or sequence IDs are found
     """
     merged = {
         "resources": [],
         "relationships": [],
+        "sequences": [],
+        "state_machines": [],
     }
 
-    # Track resource IDs to detect duplicates
-    seen_ids = set()
+    # Track IDs to detect duplicates
+    seen_resource_ids = set()
+    seen_sequence_ids = set()
+    seen_state_machine_ids = set()
 
     for model in models:
         # Merge resources
         for resource in model.get("resources", []):
             resource_id = resource.get("id")
-            if resource_id in seen_ids:
+            if resource_id in seen_resource_ids:
                 raise LoadError(f"Duplicate resource ID: {resource_id}")
-            seen_ids.add(resource_id)
+            seen_resource_ids.add(resource_id)
             merged["resources"].append(resource)
 
         # Merge relationships
         for relationship in model.get("relationships", []):
             merged["relationships"].append(relationship)
+
+        # Merge sequences
+        for sequence in model.get("sequences", []):
+            sequence_id = sequence.get("id")
+            if sequence_id in seen_sequence_ids:
+                raise LoadError(f"Duplicate sequence ID: {sequence_id}")
+            seen_sequence_ids.add(sequence_id)
+            merged["sequences"].append(sequence)
+
+        # Merge state machines
+        for state_machine in model.get("state_machines", []):
+            sm_id = state_machine.get("id")
+            if sm_id in seen_state_machine_ids:
+                raise LoadError(f"Duplicate state machine ID: {sm_id}")
+            seen_state_machine_ids.add(sm_id)
+            merged["state_machines"].append(state_machine)
 
     return merged
 
@@ -230,6 +250,10 @@ def load_architecture(path: Union[str, Path], validate_schema: bool = True) -> A
                 _validate_against_schema(resource, "resource", str(path))
             for relationship in data.get("relationships", []):
                 _validate_against_schema(relationship, "relationship", str(path))
+            for sequence in data.get("sequences", []):
+                _validate_against_schema(sequence, "sequence", str(path))
+            for state_machine in data.get("state_machines", []):
+                _validate_against_schema(state_machine, "state-machine", str(path))
 
     elif path.is_dir():
         # Find all YAML files
@@ -251,6 +275,10 @@ def load_architecture(path: Union[str, Path], validate_schema: bool = True) -> A
                     _validate_against_schema(resource, "resource", str(file_path))
                 for relationship in file_data.get("relationships", []):
                     _validate_against_schema(relationship, "relationship", str(file_path))
+                for sequence in file_data.get("sequences", []):
+                    _validate_against_schema(sequence, "sequence", str(file_path))
+                for state_machine in file_data.get("state_machines", []):
+                    _validate_against_schema(state_machine, "state-machine", str(file_path))
 
             models.append(file_data)
             source_files.append(str(file_path))

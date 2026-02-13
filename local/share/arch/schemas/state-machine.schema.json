@@ -1,0 +1,157 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/iheitlager/dotfiles/schemas/state-machine.schema.json",
+  "title": "Grounded C4 State Machine",
+  "description": "A state machine capturing operational states and transitions for a resource in a Grounded C4 architecture model",
+  "type": "object",
+  "required": ["id", "name", "resource", "initial", "states", "transitions"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the state machine",
+      "pattern": "^[a-z0-9-]+$",
+      "examples": [
+        "bootstrap-lifecycle",
+        "session-lifecycle",
+        "deployment-states",
+        "connection-states"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the state machine",
+      "examples": [
+        "Bootstrap Script Lifecycle",
+        "Session Lifecycle",
+        "Deployment State Machine",
+        "WebSocket Connection States"
+      ]
+    },
+    "resource": {
+      "type": "string",
+      "description": "ResourceRef (dotted path) anchoring this state machine to a concrete resource",
+      "pattern": "^[a-z0-9.-]+$",
+      "examples": [
+        "dotfiles.bootstrap",
+        "music-platform.collab-service",
+        "sessions-cache",
+        "deployment-pipeline"
+      ]
+    },
+    "initial": {
+      "type": "string",
+      "description": "StateId of the starting state",
+      "pattern": "^[a-z0-9-]+$",
+      "examples": ["not-run", "idle", "disconnected", "pending"]
+    },
+    "states": {
+      "type": "array",
+      "description": "List of possible states in this state machine",
+      "items": {
+        "$ref": "#/definitions/state"
+      },
+      "minItems": 1
+    },
+    "transitions": {
+      "type": "array",
+      "description": "List of transitions between states",
+      "items": {
+        "$ref": "#/definitions/transition"
+      },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "state": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the state",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["not-run", "running", "complete", "failed", "idle", "active"]
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the state",
+          "examples": ["Not Run", "Running", "Complete", "Failed", "Idle", "Active"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of what this state represents"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags for categorization (e.g., 'terminal', 'error', 'initial')"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Extensible metadata for custom state properties",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "transition": {
+      "type": "object",
+      "required": ["from", "to", "trigger"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "StateId of the source state",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["not-run", "running", "idle", "connected"]
+        },
+        "to": {
+          "type": "string",
+          "description": "StateId of the target state",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["running", "complete", "failed", "active"]
+        },
+        "trigger": {
+          "type": "string",
+          "description": "Event that causes this transition",
+          "examples": [
+            "user-invocation",
+            "all-steps-pass",
+            "step-error",
+            "timeout",
+            "connection-established"
+          ]
+        },
+        "guard": {
+          "type": "string",
+          "description": "Condition that must be true for this transition to occur",
+          "examples": [
+            "if all dependencies ready",
+            "if retries < 3",
+            "if session valid",
+            "unless in maintenance mode"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "description": "Side effect or operation performed during the transition",
+          "examples": [
+            "Begin bootstrap process",
+            "Display success message",
+            "Log error and rollback",
+            "Send notification"
+          ]
+        },
+        "sequence": {
+          "type": "string",
+          "description": "SequenceId referencing a sequence definition that details this transition's flow",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["bootstrap-flow", "session-create", "rollback-flow"]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

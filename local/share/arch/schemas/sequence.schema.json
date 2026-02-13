@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/iheitlager/dotfiles/schemas/sequence.schema.json",
+  "title": "Grounded C4 Sequence",
+  "description": "A sequence diagram modeling runtime interactions as ordered steps in a Grounded C4 architecture model",
+  "type": "object",
+  "required": ["id", "name", "steps"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the sequence",
+      "pattern": "^[a-z0-9-]+$",
+      "examples": ["bootstrap-flow", "package-install", "session-create", "auth-flow"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name for the sequence",
+      "examples": [
+        "Bootstrap Installation Flow",
+        "Package Installation Sequence",
+        "Session Creation Flow",
+        "Authentication Flow"
+      ]
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what this sequence represents"
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Event or condition that starts this sequence",
+      "examples": [
+        "User runs script/bootstrap",
+        "API receives POST /session",
+        "Cron job triggers at midnight",
+        "User clicks login button"
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered list of interaction steps in the sequence",
+      "items": {
+        "$ref": "#/definitions/step"
+      },
+      "minItems": 1
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "step": {
+      "type": "object",
+      "required": ["from", "to", "action"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Source InterfaceRef or ResourceRef using dotted notation (or 'user' for external actor)",
+          "pattern": "^([a-z0-9.-]+|user)$",
+          "examples": [
+            "user",
+            "dotfiles.bootstrap",
+            "dotfiles.bootstrap.cli",
+            "music-platform.collab-service.ws-connect"
+          ]
+        },
+        "to": {
+          "type": "string",
+          "description": "Target InterfaceRef or ResourceRef using dotted notation (or external actor)",
+          "pattern": "^[a-z0-9.-]+$",
+          "examples": [
+            "dotfiles.bootstrap.cli",
+            "dotfiles.xdg-dirs",
+            "sessions-cache.cache-api",
+            "event-bus.producer"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "description": "What happens in this interaction step",
+          "examples": [
+            "Run script/bootstrap",
+            "Create XDG directory structure",
+            "Read session from cache",
+            "Publish event to topic"
+          ]
+        },
+        "condition": {
+          "type": "string",
+          "description": "Guard clause or condition that must be true for this step to execute",
+          "examples": [
+            "if session exists",
+            "if cache miss",
+            "if user is authenticated",
+            "unless already installed"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "description": "Documentation or additional context for this step"
+        },
+        "parallel": {
+          "type": "array",
+          "description": "Concurrent steps that execute in parallel (fork/join pattern)",
+          "items": {
+            "$ref": "#/definitions/step"
+          }
+        },
+        "alt": {
+          "type": "array",
+          "description": "Alternative flows (if/else branches)",
+          "items": {
+            "$ref": "#/definitions/alternativeBlock"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "alternativeBlock": {
+      "type": "object",
+      "required": ["condition", "steps"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "Condition that determines if this alternative is taken",
+          "examples": [
+            "if cache hit",
+            "if user authenticated",
+            "if error occurs",
+            "else"
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "description": "Steps to execute if this condition is true",
+          "items": {
+            "$ref": "#/definitions/step"
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

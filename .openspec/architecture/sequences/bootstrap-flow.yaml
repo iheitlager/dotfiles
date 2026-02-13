@@ -1,0 +1,21 @@
+sequences:
+  - id: bootstrap-flow
+    name: Bootstrap Installation Flow
+    description: Full bootstrap process for new machine setup
+    trigger: User runs script/bootstrap
+    steps:
+      - from: user
+        to: dotfiles.bootstrap
+        action: Run script/bootstrap
+
+      - from: bootstrap.bootstrap-script
+        to: xdg-dirs
+        action: Create XDG directory structure
+
+      - from: bootstrap.bootstrap-script
+        to: homebrew.brew-api
+        action: Install Homebrew packages
+
+      - from: bootstrap.symlink-manager
+        to: xdg-dirs.config-dir
+        action: Symlink topic configs to XDG_CONFIG_HOME
