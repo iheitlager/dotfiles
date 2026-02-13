@@ -46,7 +46,7 @@ class TestBashExtractor:
         resource = resources[0]
 
         assert resource.id == "simple-script"
-        assert resource.type == "bash-script"
+        assert resource.type == "bash-library"  # Not executable, so it's a library
         assert len(resource.interfaces) == 3  # setup, cleanup, main
         assert len(resource.implementation) == 3
 
