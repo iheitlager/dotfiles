@@ -36,25 +36,24 @@ cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 model_raw=$(echo "$input" | jq -r 'if (.model | type) == "object" then .model.id else .model end // "claude"')
 model="$model_raw"
 
-# Extract context window information
-context_used=$(echo "$input" | jq -r '(.context_window.total_input_tokens // 0) + (.context_window.total_output_tokens // 0)')
+# Extract context window information - use current_usage (resets on /compact) not total (cumulative)
+current_input=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // 0')
+cache_creation=$(echo "$input" | jq -r '.context_window.current_usage.cache_creation_input_tokens // 0')
+cache_read=$(echo "$input" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
+context_used=$((current_input + cache_creation + cache_read))
 context_limit=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
+
+# Use Claude Code's pre-calculated percentage (accurate after /compact or /clear)
+context_pct=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
 
 # Use total cost if available, otherwise calculate from current usage
 total_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
 if [[ -n "$total_cost" ]]; then
     cost=$(printf "%.4f" "$total_cost")
 else
-    input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // 0')
+    input_tokens="$current_input"
     output_tokens=$(echo "$input" | jq -r '.context_window.current_usage.output_tokens // 0')
     cost=$(awk -v input="${input_tokens:-0}" -v output="${output_tokens:-0}" 'BEGIN {printf "%.4f", (input * 3 + output * 15) / 1000000}')
-fi
-
-# Calculate context percentage
-if [[ "${context_limit:-0}" -gt 0 ]]; then
-    context_pct=$(awk -v used="${context_used:-0}" -v limit="${context_limit:-1}" 'BEGIN {printf "%.0f", (used / limit) * 100}')
-else
-    context_pct=0
 fi
 
 # Format context display
@@ -106,7 +105,7 @@ esac
 # Format: color + icon + text + dim separator
 
 # Segment 1: Model (with lightning icon)
-segment1="${BLUE}${BOLD} ${model_short}${RESET}"
+segment1="${BLUE}${BOLD}${model_short}${RESET}"
 
 # Segment 2: Folder (with folder icon)
 segment2="${TEAL} ${folder}${RESET}"
@@ -132,4 +131,4 @@ segment4="${context_color}${context_icon} ${context_display}/${limit_display} ${
 segment5="${PEACH} \$${cost}${RESET}"
 
 # Combine all segments with dim separators
-printf '%b' "${segment1} ${DIM}${SEP}${RESET} ${segment2} ${DIM}${SEP}${RESET} ${segment3} ${DIM}${SEP}${RESET} ${segment4} ${DIM}${SEP}${RESET} ${segment5} "
+printf '%b' "${segment1} ${DIM}${SEP}${RESET}${segment2}${DIM} ${SEP}${RESET}${segment3}${DIM} ${SEP}${RESET}${segment4}${DIM} ${SEP}${RESET}${segment5}"
