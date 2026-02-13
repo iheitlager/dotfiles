@@ -1,0 +1,43 @@
+state_machines:
+  - id: bootstrap-lifecycle
+    name: Bootstrap Script Lifecycle
+    resource: bootstrap.bootstrap-script
+    initial: not-run
+    states:
+      - id: not-run
+        name: Not Run
+        description: Fresh machine, bootstrap has never run
+
+      - id: running
+        name: Running
+        description: Bootstrap process in progress
+
+      - id: complete
+        name: Complete
+        description: All steps completed successfully
+
+      - id: failed
+        name: Failed
+        description: Bootstrap encountered errors
+
+    transitions:
+      - from: not-run
+        to: running
+        trigger: user-invocation
+        action: Begin bootstrap process
+        sequence: bootstrap-flow
+
+      - from: running
+        to: complete
+        trigger: all-steps-pass
+        action: Display success message
+
+      - from: running
+        to: failed
+        trigger: step-error
+        action: Display error message and rollback
+
+      - from: failed
+        to: running
+        trigger: user-retry
+        action: Retry from failed step

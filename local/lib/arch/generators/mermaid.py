@@ -4,8 +4,8 @@ Generates Mermaid flowchart diagrams from Grounded C4 architecture models
 with support for multiple zoom levels (landscape, domain, service).
 """
 
-from typing import List, Tuple, Set
-from ..model import Resource, Relationship, Interface, ArchitectureModel
+from typing import List, Tuple, Set, Optional
+from ..model import Resource, Relationship, Interface, ArchitectureModel, Sequence, StateMachine, Step
 from ..path_resolver import PathResolver
 
 
@@ -274,3 +274,219 @@ def _sanitize_id(path: str) -> str:
     # Replace dots and dashes with underscores
     # Mermaid IDs can't have dots or dashes
     return path.replace(".", "_").replace("-", "_")
+
+
+def generate_sequence_diagram(
+    sequence: Sequence,
+    resolver: PathResolver,
+) -> str:
+    """Generate Mermaid sequence diagram from a Sequence model.
+
+    Args:
+        sequence: The sequence to visualize
+        resolver: PathResolver for looking up resources/interfaces
+
+    Returns:
+        Mermaid sequence diagram as a string
+    """
+    lines = ["sequenceDiagram"]
+
+    # Add title if description is present
+    if sequence.description:
+        lines.append(f"    title {sequence.name}: {sequence.description}")
+
+    # Collect all participants (actors)
+    participants = _collect_sequence_participants(sequence.steps)
+    for participant in participants:
+        # Sanitize participant names for Mermaid
+        sanitized = _sanitize_participant(participant)
+        if participant != sanitized:
+            lines.append(f"    participant {sanitized} as {participant}")
+        else:
+            lines.append(f"    participant {sanitized}")
+
+    lines.append("")  # Blank line after participants
+
+    # Render steps
+    _render_sequence_steps(lines, sequence.steps, indent=4)
+
+    return "\n".join(lines)
+
+
+def _collect_sequence_participants(steps: List[Step]) -> List[str]:
+    """Collect all unique participants (from/to) in sequence steps.
+
+    Args:
+        steps: List of steps to analyze
+
+    Returns:
+        List of unique participant names in order of appearance
+    """
+    participants = []
+    seen = set()
+
+    def add_participant(ref: str):
+        if ref not in seen:
+            seen.add(ref)
+            participants.append(ref)
+
+    def process_steps(step_list: List[Step]):
+        for step in step_list:
+            add_participant(step.from_ref)
+            add_participant(step.to_ref)
+
+            # Process nested steps
+            if step.parallel:
+                process_steps(step.parallel)
+            if step.alt:
+                for alt_block in step.alt:
+                    process_steps(alt_block.steps)
+
+    process_steps(steps)
+    return participants
+
+
+def _sanitize_participant(name: str) -> str:
+    """Sanitize participant name for Mermaid sequence diagrams.
+
+    Args:
+        name: Participant name (dotted path or actor name)
+
+    Returns:
+        Sanitized name safe for Mermaid
+    """
+    # For simple names like "user", keep as-is
+    if "." not in name:
+        return name
+
+    # For dotted paths, use last segment only (e.g., "dotfiles.bootstrap.cli" -> "bootstrap-cli")
+    parts = name.split(".")
+    if len(parts) >= 2:
+        # Use last two parts for clarity
+        return "-".join(parts[-2:])
+    return parts[-1]
+
+
+def _render_sequence_steps(
+    lines: List[str],
+    steps: List[Step],
+    indent: int = 4,
+) -> None:
+    """Render sequence steps as Mermaid syntax.
+
+    Args:
+        lines: Output lines list (modified in place)
+        steps: Steps to render
+        indent: Indentation level (spaces)
+    """
+    indent_str = " " * indent
+
+    for step in steps:
+        from_participant = _sanitize_participant(step.from_ref)
+        to_participant = _sanitize_participant(step.to_ref)
+        action = step.action
+
+        # Add note if present
+        if step.note:
+            lines.append(f"{indent_str}Note over {from_participant},{to_participant}: {step.note}")
+
+        # Handle parallel execution
+        if step.parallel:
+            lines.append(f"{indent_str}par {action}")
+            lines.append(f"{indent_str}    {from_participant}->>{to_participant}: {action}")
+            for parallel_step in step.parallel:
+                p_from = _sanitize_participant(parallel_step.from_ref)
+                p_to = _sanitize_participant(parallel_step.to_ref)
+                lines.append(f"{indent_str}and")
+                lines.append(f"{indent_str}    {p_from}->>{p_to}: {parallel_step.action}")
+            lines.append(f"{indent_str}end")
+
+        # Handle alternative flows
+        elif step.alt:
+            lines.append(f"{indent_str}alt {step.alt[0].condition}")
+            _render_sequence_steps(lines, step.alt[0].steps, indent + 4)
+
+            for alt_block in step.alt[1:]:
+                lines.append(f"{indent_str}else {alt_block.condition}")
+                _render_sequence_steps(lines, alt_block.steps, indent + 4)
+
+            lines.append(f"{indent_str}end")
+
+        # Regular step
+        else:
+            arrow = "->>" if not step.condition else "->"
+            msg = f"{action}"
+            if step.condition:
+                msg = f"[{step.condition}] {msg}"
+            lines.append(f"{indent_str}{from_participant}{arrow}{to_participant}: {msg}")
+
+
+def generate_state_diagram(
+    state_machine: StateMachine,
+    resolver: PathResolver,
+) -> str:
+    """Generate Mermaid state diagram from a StateMachine model.
+
+    Args:
+        state_machine: The state machine to visualize
+        resolver: PathResolver for looking up resources
+
+    Returns:
+        Mermaid state diagram as a string
+    """
+    lines = ["stateDiagram-v2"]
+
+    # Add title comment
+    lines.append(f"    %% {state_machine.name}")
+    lines.append(f"    %% Resource: {state_machine.resource}")
+    lines.append("")
+
+    # Define states
+    for state in state_machine.states:
+        state_id = _sanitize_state_id(state.id)
+        state_label = state.name
+
+        if state.description:
+            lines.append(f"    {state_id}: {state_label}")
+            lines.append(f"    note right of {state_id}")
+            lines.append(f"        {state.description}")
+            lines.append(f"    end note")
+        else:
+            lines.append(f"    {state_id}: {state_label}")
+
+    lines.append("")
+
+    # Mark initial state
+    initial_state_id = _sanitize_state_id(state_machine.initial)
+    lines.append(f"    [*] --> {initial_state_id}")
+
+    # Define transitions
+    for trans in state_machine.transitions:
+        from_state_id = _sanitize_state_id(trans.from_state)
+        to_state_id = _sanitize_state_id(trans.to_state)
+
+        # Build transition label
+        label_parts = [trans.trigger]
+        if trans.guard:
+            label_parts.append(f"[{trans.guard}]")
+        if trans.action:
+            label_parts.append(f"/ {trans.action}")
+        if trans.sequence:
+            label_parts.append(f"(seq: {trans.sequence})")
+
+        label = " ".join(label_parts)
+        lines.append(f"    {from_state_id} --> {to_state_id}: {label}")
+
+    return "\n".join(lines)
+
+
+def _sanitize_state_id(state_id: str) -> str:
+    """Sanitize state ID for Mermaid state diagrams.
+
+    Args:
+        state_id: State identifier
+
+    Returns:
+        Sanitized ID safe for Mermaid (replace dashes with underscores)
+    """
+    return state_id.replace("-", "_")
