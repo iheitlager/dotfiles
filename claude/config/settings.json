@@ -76,6 +76,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/iheitlager/.claude/hooks/rtk-rewrite.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -87,7 +98,6 @@
     ".",
     "~/.local/state/agent-context",
     "~/.dotfiles",
-    "~/wc/**",
-    "/workspace/**"
+    "~/wc/**"
   ]
 }

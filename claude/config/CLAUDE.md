@@ -240,3 +240,5 @@ When releasing a new version, update these **three locations**:
 ---
 
 *Last updated: 2026-01-14*
+
+@RTK.md
