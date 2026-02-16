@@ -124,6 +124,9 @@ OpenSpec uses a structured directory layout:
 │   ├── 001-dotfiles-core/spec.md
 │   ├── 002-dotfiles-caching/spec.md
 │   └── 003-shortcuts-system/spec.md
+├── adr/                            # Architectural Decision Records
+│   ├── index.md                    # Summary table of all ADRs
+│   └── 0001-<decision-name>.md    # Individual ADRs (zero-padded)
 ├── changes/                        # Delta specs (proposed changes)
 │   ├── 001-feature-proposal/
 │   │   ├── proposal.md             # Intent, scope, approach

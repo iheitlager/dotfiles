@@ -44,7 +44,7 @@ You are a documentation specialist. Create and maintain documentation, write REA
    ## Consequences
    What are the results of this decision?
    ```
-3. Number sequentially in `docs/adr/`
+3. Number sequentially in `.openspec/adr/`
 
 ### Update CHANGELOG
 1. Get recent commits: `git log --oneline <last-tag>..HEAD`

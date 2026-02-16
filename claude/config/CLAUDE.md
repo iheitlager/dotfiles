@@ -29,9 +29,11 @@ project/
 ├── tests/               # Test suite
 │   ├── unit/            # Unit tests
 │   └── integration/     # Integration tests
-├── docs/                # Documentation
+├── .openspec/           # OpenSpec specifications & ADRs
+│   ├── specs/           # System specifications
 │   ├── adr/             # Architectural Decision Records
-│   └── ...
+│   └── changes/         # Delta specs (proposals)
+├── docs/                # Documentation
 ├── pyproject.toml       # Project configuration
 ├── Makefile             # Common tasks
 ├── README.md
@@ -41,7 +43,7 @@ project/
 ### Architectural Decision Records (ADRs)
 
 I use ADRs to document significant design decisions:
-- Store in `docs/adr/` with format `NNNN-title.md`
+- Store in `.openspec/adr/` with format `NNNN-title.md`
 - Always check existing ADRs before proposing architectural changes
 - Create new ADRs for decisions that affect architecture
 
@@ -223,7 +225,7 @@ When releasing a new version, update these **three locations**:
 
 - **Project README**: [README.md](README.md)
 - **Change Log**: [CHANGELOG.md](CHANGELOG.md)
-- **ADR Index**: [docs/adr/index.md](docs/adr/index.md)
+- **ADR Index**: [.openspec/adr/index.md](.openspec/adr/index.md)
 - **Vision**: [docs/vision.md](docs/vision.md)
 
 ---

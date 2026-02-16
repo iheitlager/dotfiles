@@ -99,7 +99,7 @@ implementation:
   adr: ["ADR-0001", "ADR-0004"]  # List of ADR IDs
 ```
 
-The generator will create clickable links to `docs/adr/NNNN-*.md`.
+The generator will create clickable links to `.openspec/adr/NNNN-*.md`.
 
 **Current ADRs** (as of 2026-01-14):
 
@@ -247,7 +247,7 @@ Before committing changes:
 - [ ] Parent feature exists
 - [ ] Status is valid (`planned`, `in-progress`, `implemented`, `deprecated`)
 - [ ] Type is valid (`mandatory`, `optional`, `alternative`, `or-group`)
-- [ ] ADR references exist in `docs/adr/`
+- [ ] ADR references exist in `.openspec/adr/`
 - [ ] Module paths exist in `src/`
 - [ ] Tags are lowercase, hyphenated
 - [ ] Generator runs without errors
@@ -285,7 +285,7 @@ This ensures:
 
 ### Project Documentation
 
-- [ADR Index](../docs/adr/index.md)
+- [ADR Index](../.openspec/adr/index.md)
 - [Vision Document](../docs/vision.md)
 - [Language Parsers](../docs/language_parsers.md)
 
@@ -307,7 +307,7 @@ Ensure all required fields are present: `id`, `name`, `type`, `status`, `parent`
 
 ### "Links broken in FEATURES.md"
 
-Verify ADR files exist at `docs/adr/NNNN-*.md` with correct naming.
+Verify ADR files exist at `.openspec/adr/NNNN-*.md` with correct naming.
 
 ---
 

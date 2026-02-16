@@ -19,7 +19,7 @@ An ADR is a concise document that records a significant architectural, technical
 ## Recommended ADR Repository Structure
 
 ```
-docs/adr/
+.openspec/adr/
 ├── README.md                 # ADR documentation guide and index
 ├── index.md                  # Summary table of all ADRs with status
 ├── 0001-<decision-name>.md   # Individual ADRs (zero-padded numbering)
@@ -189,7 +189,7 @@ As requirements change:
 
 ## Creating an ADR Index
 
-Maintain a master index (`docs/adr/index.md`) with all ADRs:
+Maintain a master index (`.openspec/adr/index.md`) with all ADRs:
 
 ```markdown
 # Architecture Decision Records
@@ -216,19 +216,19 @@ Maintain a master index (`docs/adr/index.md`) with all ADRs:
 ### By Status
 ```bash
 # Find all accepted ADRs
-grep -r "Status: ✅" docs/adr/
+grep -r "Status: ✅" .openspec/adr/
 
 # Find proposed ADRs
-grep -r "Status: 📋" docs/adr/
+grep -r "Status: 📋" .openspec/adr/
 ```
 
 ### By Topic
 ```bash
 # Find ADRs mentioning a specific technology
-grep -r "PostgreSQL" docs/adr/
+grep -r "PostgreSQL" .openspec/adr/
 
 # Find related ADRs
-grep -r "Related ADRs:" docs/adr/0001-*.md
+grep -r "Related ADRs:" .openspec/adr/0001-*.md
 ```
 
 ### Organization Tips
@@ -240,7 +240,7 @@ grep -r "Related ADRs:" docs/adr/0001-*.md
 
 2. **Use consistent naming**: `NNNN-descriptive-title.md`
 
-3. **Create README**: `docs/adr/README.md` explains the ADR process to new team members
+3. **Create README**: `.openspec/adr/README.md` explains the ADR process to new team members
 
 ## Workflow Integration
 
@@ -271,7 +271,7 @@ grep -r "Related ADRs:" docs/adr/0001-*.md
 3. **Incomplete Context**: Future readers may not know current situation
 4. **Never Updated**: Mark superseded ADRs, don't just ignore them
 5. **No Validation**: Always include how/when the decision was validated
-6. **Hidden ADRs**: Store in standard location (`docs/adr/`) for visibility
+6. **Hidden ADRs**: Store in standard location (`.openspec/adr/`) for visibility
 
 ## Advanced Features (Optional)
 

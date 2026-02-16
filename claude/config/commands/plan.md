@@ -4,8 +4,8 @@ Create planning documents: feature plans or architectural decision records (ADRs
 
 ```
 /plan                    Interactive feature plan
-/plan <feature>          Plan specific feature → docs/plans/
-/plan adr <decision>     Architectural decision → docs/adr/
+/plan <feature>          Plan specific feature → .openspec/plans/
+/plan adr <decision>     Architectural decision → .openspec/adr/
 ```
 
 ## Process
@@ -84,7 +84,7 @@ Follow the template from `0003-feature-plans.md`:
 
 Format: `NNN-short-name.md`
 
-1. Check existing plans: `ls docs/plans/`
+1. Check existing plans: `ls .openspec/plans/`
 2. Use next sequential number
 3. Use lowercase, hyphenated name
 
@@ -92,7 +92,7 @@ Format: `NNN-short-name.md`
 
 After gathering info:
 1. Show plan preview
-2. Create file at `./docs/plans/NNN-feature-name.md`
+2. Create file at `./.openspec/plans/NNN-feature-name.md`
 3. Suggest creating related branch: `feat/feature-name`
 4. Suggest creating GitHub issue if none exists
 
@@ -163,7 +163,7 @@ Create an Architectural Decision Record for significant design decisions.
 
 Format: `NNNN-short-title.md`
 
-1. Check existing ADRs: `ls docs/adr/`
+1. Check existing ADRs: `ls .openspec/adr/`
 2. Use next sequential number (4 digits, zero-padded)
 3. Use lowercase, hyphenated title
 
@@ -171,7 +171,7 @@ Format: `NNNN-short-title.md`
 
 After gathering context:
 1. Show ADR preview
-2. Create file at `./docs/adr/NNNN-title.md`
+2. Create file at `./.openspec/adr/NNNN-title.md`
 3. Update ADR index if one exists
 4. Suggest linking from relevant code comments
 

@@ -209,7 +209,7 @@ Over 20 targets organized into categories:
 | Unit tests | `tests/unit/` |
 | Research spikes | `tests/spikes/` |
 | Test data | `tests/corpus/` |
-| Architecture docs | `docs/adr/` |
+| Architecture docs | `.openspec/adr/` |
 | Database config | `etc/` |
 | Version | `src/code_analyzer/__init__.py` |
 | Dependencies | `pyproject.toml` + `uv.lock` |
