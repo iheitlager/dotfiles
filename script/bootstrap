@@ -15,6 +15,35 @@ starttime=$(date +"%s")
 FORCE_GIT=false
 SKIP_BREW=false
 
+# Show help using bat if available (pattern from local/lib/shell-common.sh)
+_show_help() {
+    if command -v bat &>/dev/null; then
+        bat --plain --language=help
+    else
+        cat
+    fi
+}
+
+usage() {
+    _show_help <<'EOF'
+Usage: bootstrap [OPTIONS]
+
+  Prepare the environment with dotfiles. Sets up XDG directories,
+  configures git, installs Homebrew packages, and links dotfiles.
+
+OPTIONS
+  -g, --git       Force regeneration of ~/.local/gitconfig
+      --no-brew   Skip Homebrew package installation
+  -h, --help      Show this help message
+
+EOF
+}
+
+# Check for help before the sudo prompt
+for arg in "$@"; do
+    [[ "$arg" == "-h" || "$arg" == "--help" ]] && usage && exit 0
+done
+
 # make sure we get the sudo password at the start
 sudo -v
 
@@ -342,6 +371,10 @@ while [[ $# -gt 0 ]]; do
     --no-brew)
       SKIP_BREW=true
       shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
       ;;
     *)
       echo "Unknown option: $1"
