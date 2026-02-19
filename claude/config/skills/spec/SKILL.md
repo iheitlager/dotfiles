@@ -229,6 +229,8 @@ The system MUST [clear statement of requirement].
 - THEN [expected outcome]
 - AND [additional outcomes]
 
+**Tests**: `tests/unit/test_feature.py::test_happy_path`
+
 #### Scenario: [Edge Case]
 
 - GIVEN [different precondition]
@@ -272,6 +274,75 @@ When the user wants to edit a spec:
 3. **Make targeted edits**: Use Edit tool for specific changes
 4. **Maintain structure**: Keep RFC 2119 keywords and scenario format
 5. **Update version**: If requirements change significantly, bump version
+
+## Traceability Model (ADR-0019)
+
+OpenSpec follows the **traceability metamodel** defined in ADR-0019. Understanding this model is essential for writing well-structured specs.
+
+### Entity Domains
+
+Specs contain entities organized into three domains:
+
+| Domain | Entities | Role |
+|--------|----------|------|
+| **Intent** | Spec, Requirement, ADR | Normative commitments — what the system MUST/SHOULD/MAY do |
+| **Bridge** | Scenario | Translates requirements into testable behaviors |
+| **Evidence** | TestFunction | Proves that scenarios hold |
+
+### Scenario as Bridge Entity
+
+A Scenario is NOT just an example — it is the **specification of evidence**. It bridges Intent and Evidence:
+
+```
+Requirement -[CONTAINS]-> Scenario -[TESTED_BY]-> TestFunction
+```
+
+A requirement is proven when **each of its Scenarios** has a TESTED_BY edge, not merely when "some test exists." A requirement without scenarios cannot reach FULLY PROVEN status.
+
+### Traceability Edges and Confidence
+
+| Edge | Direction | Confidence | Meaning |
+|------|-----------|------------|---------|
+| `IMPLEMENTED_BY` | Requirement → Code | 0.7 (file path) / 0.8 (function) | "This code realizes the requirement" |
+| `ADDRESSED_BY` | Requirement → ADR | 0.9 | "This ADR documents the design rationale" |
+| `TESTED_BY` | Scenario → TestFunction | 0.9 (declared) | "This test validates the scenario" |
+
+File-level `**Implementation**:` references are Level 1 (declared, confidence 0.7). Function-level references (`src/path/file.py::function_name`) are Level 2 (resolved, confidence 0.8) — stronger evidence because they target specific code.
+
+### Declaring Test Traceability per Scenario
+
+Use `**Tests**:` lines within scenarios to declare which tests validate that scenario:
+
+```markdown
+#### Scenario: Generate FQN for top-level function
+
+- GIVEN a Python file containing a top-level function
+- WHEN the system generates an FQN
+- THEN it MUST produce a unique, deterministic identifier
+
+**Tests**: `tests/unit/core/test_fqn.py::test_generate_fqn_top_level`
+```
+
+This creates a `TESTED_BY` edge from the Scenario to the TestFunction. Multiple test references can be comma-separated:
+
+```markdown
+**Tests**: `tests/unit/test_a.py::test_one`, `tests/unit/test_a.py::test_two`
+```
+
+Scenarios without `**Tests**:` lines are untested gaps — they can be filled later by structural or semantic inference.
+
+### Proof States (per Requirement)
+
+| State | Condition | Gap Type |
+|-------|-----------|----------|
+| **UNPROVEN** | No implementation, no tested scenarios | `missing_implementation` + `missing_test` |
+| **PARTIALLY PROVEN** | Has implementation but some scenarios lack tests | `missing_test` |
+| **UNTETHERED** | All scenarios tested but no implementation declared | `missing_implementation` |
+| **FULLY PROVEN** | Implementation exists AND every scenario has TESTED_BY | None |
+
+Requirements without scenarios cannot be FULLY PROVEN — they surface as `missing_scenarios` gaps.
+
+---
 
 ## Linking Requirements to Implementation Code
 
@@ -480,22 +551,33 @@ The system MUST authenticate users via OAuth.
 - THEN grant access to protected resources
 ```
 
-**After:**
+**After (with ADR-0019 traceability):**
 ```markdown
 ### Requirement: User Authentication
 
 The system MUST authenticate users via OAuth.
 
-**Implementation:**
-- `src/auth/oauth.py::OAuthHandler` (lines 45-120) - OAuth flow implementation
-- `src/auth/session.py::create_session()` (lines 23-35) - Session creation
-- `src/middleware/auth.py::require_auth` (lines 10-18) - Auth middleware decorator
+**Implementation:** `src/auth/oauth.py`, `src/auth/session.py`, ADR-0012
 
 #### Scenario: Successful Login
 - GIVEN a valid OAuth token
 - WHEN user attempts login
 - THEN grant access to protected resources
+
+**Tests**: `tests/unit/test_oauth.py::test_successful_login`
+
+#### Scenario: Expired Token
+- GIVEN an expired OAuth token
+- WHEN user attempts login
+- THEN return 401 Unauthorized
+
+**Tests**: `tests/unit/test_oauth.py::test_expired_token`
 ```
+
+This creates:
+- `IMPLEMENTED_BY` edges from the requirement to `src/auth/oauth.py` and `src/auth/session.py` (confidence 0.7)
+- `ADDRESSED_BY` edge from the requirement to ADR-0012 (confidence 0.9)
+- `TESTED_BY` edges from each scenario to the named test functions (confidence 0.9)
 
 **And at end of spec:**
 ```markdown
@@ -643,6 +725,14 @@ Run through this checklist and report findings:
 ✅ Uses RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
 ✅ Has References section (recommended)
 ✅ Has license/copyright info (recommended)
+
+--- ADR-0019 Traceability Checks (recommended) ---
+✅ MUST requirements have **Implementation**: references
+✅ MUST requirements have **Tests**: per scenario (or gap is documented)
+✅ Scenarios have GIVEN/WHEN/THEN structure (parseable)
+✅ ADR references use ADR-NNNN format (4-digit, for ADDRESSED_BY edges)
+✅ Implementation paths use `src/...` format (for IMPLEMENTED_BY edges)
+✅ Test references use `tests/path/file.py::test_name` format (for TESTED_BY edges)
 ```
 
 ### Validation Example

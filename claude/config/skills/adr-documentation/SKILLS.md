@@ -38,44 +38,82 @@ Each ADR follows a consistent structure:
 ```markdown
 # ADR-NNNN: Brief Title of Decision
 
-## Status
-[Proposed | Accepted | Superseded | Deprecated]
+**Status**: Proposed
+
+**Date**: YYYY-MM-DD
+
+**Decision ID**: NNNN-brief-title
+
+---
 
 ## Context
+
 Describe the issue or requirement that necessitated this decision.
 Include constraints, background, and what triggered the need for this decision.
 
+The first paragraph of this section should be a concise summary — it is
+extracted by the parser as `context_summary` for traceability queries.
+
 ## Decision
+
 State the decision clearly and concisely.
 Explain why this approach was chosen over alternatives.
 
+The first paragraph of this section should be a concise summary — it is
+extracted by the parser as `decision_summary` for traceability queries.
+
 ## Consequences
-Describe the impacts of this decision:
-- Positive consequences / Benefits
-- Negative consequences / Drawbacks
-- Tradeoffs involved
+
+### Positive
+- Benefit 1
+- Benefit 2
+
+### Negative
+- Drawback 1
+- Drawback 2
 
 ## Alternatives Considered
-Document other options that were evaluated:
-- Alternative 1: Why rejected
-- Alternative 2: Why rejected
-- etc.
+
+### [Alternative 1]
+- Pros: ...
+- Cons: ...
+- Why rejected: ...
 
 ## Validation
 How was/will this decision be validated?
 - Testing approach
 - Empirical evidence
 - Metrics for success
-- Review/approval process
 
 ## Related ADRs
-- Supersedes: [link if any]
-- Related to: [other relevant ADRs]
-- Superceded by: [if status is Superseded]
-
-## Implementation Notes
-Optional: Links to implementation, affected code, deployment info.
+- Supersedes: ADR-XXXX [if any]
+- Related to: ADR-XXXX, ADR-YYYY
 ```
+
+**IMPORTANT — Parser-compatible frontmatter format:**
+
+The ADR parser expects bold metadata fields (NOT heading-level sections):
+- `**Status**: Accepted` — parsed into status metadata
+- `**Date**: 2026-01-15` — parsed into date metadata
+- `**Decision ID**: 0001-decision-name` — parsed into decision_id metadata
+- `**Supersedes**: ADR-0001` — parsed into SUPERSEDES edges
+
+Do NOT use `## Status` as a heading — the parser will miss it. Status values:
+Proposed, Accepted, Deprecated, Superseded.
+
+**Section extraction (ADR-0019):**
+
+The parser extracts the first paragraph of `## Context` and `## Decision` sections
+as `context_summary` and `decision_summary`. Write these first paragraphs as
+concise statements suitable for display in traceability reports.
+
+**Role in traceability (ADR-0019 section 7):**
+
+An ADR serves as a **GSN Strategy** — it documents the rationale for HOW a
+requirement is implemented. When a spec references `ADR-NNNN` in its
+`**Implementation**:` line, the parser creates an `ADDRESSED_BY` edge
+(confidence 0.9). This does not prove the requirement is satisfied — it
+provides documented rationale for the chosen approach.
 
 ## Best Practices
 

@@ -113,20 +113,28 @@ Create an Architectural Decision Record for significant design decisions.
 
 ### ADR Template
 
+Use bold metadata fields for parser-compatible frontmatter (NOT heading-level sections):
+
 ```markdown
 # ADR-NNNN: [Title]
 
-**Date**: [Today's date]
-**Status**: Proposed | Accepted | Deprecated | Superseded by ADR-XXXX
-**Deciders**: [who was involved]
+**Status**: Proposed
+
+**Date**: [Today's date, YYYY-MM-DD]
+
+**Decision ID**: NNNN-short-title
+
+---
 
 ## Context
 
-[What is the issue that we're seeing that is motivating this decision?]
+[What is the issue that we're seeing that is motivating this decision?
+First paragraph should be a concise summary — extracted by parser.]
 
 ## Decision
 
-[What is the change that we're proposing and/or doing?]
+[What is the change that we're proposing and/or doing?
+First paragraph should be a concise summary — extracted by parser.]
 
 ## Consequences
 
@@ -138,9 +146,6 @@ Create an Architectural Decision Record for significant design decisions.
 - [drawback 1]
 - [drawback 2]
 
-### Neutral
-- [side effect that is neither good nor bad]
-
 ## Alternatives Considered
 
 ### [Alternative 1]
@@ -148,16 +153,17 @@ Create an Architectural Decision Record for significant design decisions.
 - Cons: ...
 - Why rejected: ...
 
-### [Alternative 2]
-- Pros: ...
-- Cons: ...
-- Why rejected: ...
-
 ## References
 
 - [Link to relevant documentation]
-- [Link to related ADRs]
+- [Related ADRs: ADR-XXXX, ADR-YYYY]
 ```
+
+**Parser-required fields:**
+- `**Status**:` — Accepted / Proposed / Deprecated / Superseded
+- `**Date**:` — YYYY-MM-DD format
+- `**Decision ID**:` — Matches filename stem (e.g., `0019-traceability_metamodel`)
+- `**Supersedes**:` — Optional, for `ADR-XXXX` references (creates SUPERSEDES edges)
 
 ### ADR Naming
 
