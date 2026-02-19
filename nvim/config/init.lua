@@ -338,3 +338,6 @@ keymap('v', '<leader>ae', function() claude.show('Explain this code concisely') 
 keymap('v', '<leader>af', function() claude.replace('Fix this code. Return only the fixed code, no explanation.') end, { desc = 'Fix' })
 keymap('v', '<leader>as', function() claude.replace('Simplify this code. Return only the code, no explanation.') end, { desc = 'Simplify' })
 keymap('v', '<leader>ad', function() claude.show('Add documentation/comments to this code') end, { desc = 'Document' })
+
+-- SheerPower 4GL syntax (loaded from repo)
+vim.opt.runtimepath:prepend(vim.fn.expand('~/wc/sheerpower-worktree/agent-1/etc/nvim'))
