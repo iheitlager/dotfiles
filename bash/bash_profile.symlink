@@ -124,3 +124,7 @@ _dotfiles_cached_source bash_env
 if [[ $- == *i* ]]; then
     source ~/.bashrc
 fi
+
+export WASMTIME_HOME="$HOME/.wasmtime"
+
+export PATH="$WASMTIME_HOME/bin:$PATH"

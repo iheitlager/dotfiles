@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+brew install openjdk || brew upgrade openjdk7
+brew install gradle || brew upgrade gradle
+
+
+export PATH=$TMPPATH
