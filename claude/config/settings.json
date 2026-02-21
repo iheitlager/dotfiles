@@ -29,7 +29,11 @@
       "Bash(date:*)",
       "Bash(pwd)",
       "Bash(which:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+	"mcp__*",
+	"Bash(npm *)",
+	"Bash(*-h*)"
+			
     ],
     "deny": [
       "Bash(rm -rf:*)",
