@@ -38,9 +38,7 @@ Wire the current project to code-analyzer via MCP by creating `.mcp.json` and up
        "permissions": {
          "allow": [
            "Bash(*)",
-           "mcp__code-analyzer__parse_directory",
-           "mcp__code-analyzer__get_summary",
-           "mcp__code-analyzer__cypher_query"
+           "mcp__code-analyzer__*"
          ]
        },
        "enableAllProjectMcpServers": true,
