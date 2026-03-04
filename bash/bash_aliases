@@ -50,7 +50,15 @@ alias x='exit'
 alias a="aliases"
 
 alias c='clear'
-alias e='env | sort | bat --plain --language=bash' # make sure env is always sorted
+_e() {
+    if [[ $# -eq 0 ]]; then
+        command env | sort | bat --plain --language=bash
+    else
+        command env | sort | grep "$@"
+    fi
+}
+alias e=_e
+alias env=_e
 alias reload='source ~/.bashrc && echo "Reloaded ~/.bashrc"'
 alias r='reload'
 alias sc='shortcuts'
