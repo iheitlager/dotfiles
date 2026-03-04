@@ -3,5 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+# Java - point to Homebrew-managed OpenJDK
+export JAVA_HOME="/opt/homebrew/opt/openjdk"
+
 # Gradle - XDG compliant
 export GRADLE_USER_HOME="$XDG_DATA_HOME/gradle"

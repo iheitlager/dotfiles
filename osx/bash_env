@@ -11,3 +11,7 @@ export TLDR_CACHE_DIR="$XDG_CACHE_HOME/tldr"
 mkdir -p "$XDG_STATE_HOME/psql" 2>/dev/null
 export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
 
+# sqlite3 history - XDG compliant
+mkdir -p "$XDG_STATE_HOME/sqlite" 2>/dev/null
+export SQLITE_HISTORY="$XDG_STATE_HOME/sqlite/history"
+

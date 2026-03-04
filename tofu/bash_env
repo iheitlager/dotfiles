@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# OpenTofu - redirect CLI config away from $HOME
+mkdir -p "$XDG_CONFIG_HOME/tofu" 2>/dev/null
+export TF_CLI_CONFIG_FILE="$XDG_CONFIG_HOME/tofu/tofurc"

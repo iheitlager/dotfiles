@@ -4,7 +4,7 @@
 [include]
     # be sure to add the local keys in this file
     # it is excluded from version control
-    path = ~/.local/gitconfig
+    path = ~/.config/git/local
 
 [color]
     diff = auto
