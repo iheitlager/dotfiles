@@ -74,12 +74,6 @@ showenv () {
 }
 alias se="showenv"
 
-function deactivate {
-    local venv=basename $VIRTUAL_ENV
-    export PS1=echo PS1 | sed "s/($venv)//"
-    export PATH=${PATH#$VIRTUAL_ENV}
-    unset VIRTUAL_ENV
-}    
 alias unv='deactivate'
 
 # Virtual environment activation function with caching
@@ -187,7 +181,6 @@ alias venv='_venv_activate'
 #alias v='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
 
 # UV completions and optimizations
-export UV_CACHE_DIR="$HOME/.cache/uv"
 export UV_PYTHON_PREFERENCE="only-managed"  # Prefer uv-managed Python versions
 
 # UV aliases for common workflows

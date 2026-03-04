@@ -3,11 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
+# brew installer helper, normally run this from 'dot'
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-brew install openjdk || brew upgrade openjdk
-brew install gradle || brew upgrade gradle
-
+brew install wasmtime || brew upgrade wasmtime
 
 export PATH=$TMPPATH

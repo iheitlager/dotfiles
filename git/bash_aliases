@@ -366,8 +366,8 @@ _git_print_worktree() {
     echo "Main:   $is_main"
 
     # Check if .virtual_env exists in this worktree
-    local venv_dir=$(ls -d $path/.[^.]*/bin/activate 2>/dev/null | head -n1 | cut -d'/' -f2)
-    if [ -n $venv_dir ]; then
+    local venv_dir=$(ls -d "$worktree_path"/.[^.]*/bin/activate 2>/dev/null | head -n1 | cut -d'/' -f2)
+    if [ -n "$venv_dir" ]; then
         echo "Env:    ✅ $venv_dir exists"
         if [ -n "$VIRTUAL_ENV" ]; then
             echo "Active: ✅ $(basename $VIRTUAL_ENV)"

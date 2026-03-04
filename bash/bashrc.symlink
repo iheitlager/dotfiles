@@ -8,8 +8,8 @@
 # Exit if not running interactively
 [[ $- != *i* ]] && return
 
-# Ensure XDG and HISTFILE are set for non-login shells (e.g., subshells, scripts)
-# This prevents ~/.bash_history from being created
+# Ensure essential vars are set for non-login shells (e.g., subshells, tmux windows)
+export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 export HISTFILE="${HISTFILE:-$XDG_STATE_HOME/bash/history}"
 mkdir -p "$(dirname "$HISTFILE")" 2>/dev/null
