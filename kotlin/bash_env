@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# Gradle - XDG compliant
+export GRADLE_USER_HOME="$XDG_DATA_HOME/gradle"

@@ -132,6 +132,11 @@ The research phase is delegated to an Explore agent, while judgment and implemen
 │     "Does this make sense?"                                 │
 │                 │                                           │
 │                 ▼                                           │
+│  2.5 If prompt contract detected:                           │
+│      └─ Write C4 context doc to .openspec/adr/              │
+│         (lightweight: context + containers + contract)      │
+│                 │                                           │
+│                 ▼                                           │
 │  3. Present plan (interactive)                              │
 │     "Here's my approach..."                                 │
 │                 │                                           │
@@ -207,6 +212,72 @@ Task tool:
     - Relevant patterns to follow
     - Suggested approach based on codebase conventions
 ```
+
+### 2.5 Formalize Prompt Contract → C4 Context Doc (if applicable)
+
+**Trigger:** The issue body contains a `## Prompt Contract` section (created by `/issue` in contract mode) or raw GOAL/CONSTRAINTS/FORMAT/FAILURE CONDITIONS keywords.
+
+**If no prompt contract is detected, skip this step entirely.**
+
+**Process:**
+
+1. **Extract the four contract sections** from the issue body.
+
+2. **Determine the next ADR number:**
+   ```bash
+   ls .openspec/adr/ | grep -E '^[0-9]{4}-' | sort | tail -1
+   # Increment by 1
+   ```
+
+3. **Write the C4 context doc** at `.openspec/adr/NNNN-c4-<feature-slug>.md`:
+
+```markdown
+# C4 Context: <Feature Name>
+
+> Source: #<issue-number> — <issue title>
+
+## System Context
+
+<1-2 sentences: who uses this, what system it belongs to, what external systems it interacts with — derived from GOAL and FORMAT sections>
+
+## Containers
+
+<derived from FORMAT section: list each file/component specified, its role, and technology>
+
+| Container | Path | Role |
+|-----------|------|------|
+| <name> | <path from FORMAT> | <role inferred from GOAL/CONSTRAINTS> |
+
+## Constraints
+
+<verbatim CONSTRAINTS section from the contract>
+
+## Failure Conditions
+
+<verbatim FAILURE CONDITIONS section from the contract>
+
+## Full Prompt Contract
+
+```
+GOAL:
+<verbatim>
+
+CONSTRAINTS:
+<verbatim>
+
+FORMAT:
+<verbatim>
+
+FAILURE CONDITIONS:
+<verbatim>
+```
+```
+
+4. **Reference the ADR** in the plan presentation (step 3): "Architecture formalized in `.openspec/adr/NNNN-c4-<feature>.md`"
+
+5. **During implementation**, use the FORMAT section as the authoritative file structure. Use FAILURE CONDITIONS as a checklist before marking the issue done.
+
+---
 
 ### 3. Validate Issue (Interactive)
 

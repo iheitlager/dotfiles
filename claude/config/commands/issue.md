@@ -4,7 +4,7 @@ List and manage GitHub issues for the current repository.
 
 ```
 /issue                     List open issues
-/issue <description>       Quick create from informal input
+/issue <description>       Quick create from informal input (auto-detects contract)
 /issue new                 Structured create with template
 /issue #123                Show details for specific issue
 ```
@@ -18,6 +18,61 @@ Run `gh issue list` and show a summary including:
 
 If there are many issues, group them by label or priority.
 Suggest which issues might be good to work on next based on labels like "good first issue" or priority indicators.
+
+## Contract Mode (auto-detected)
+
+When the input contains any of these keywords — `GOAL:`, `CONSTRAINTS:`, `FORMAT:`, `FAILURE CONDITIONS:` — treat it as a **prompt contract** rather than an informal description.
+
+A prompt contract is a structured specification used by `/take` to formalize into a C4 context doc before coding.
+
+**Detection:**
+
+```
+if input contains GOAL: or CONSTRAINTS: or FORMAT: or FAILURE CONDITIONS:
+  → Contract Mode
+else
+  → Quick Create Mode
+```
+
+**Process:**
+
+1. **Parse the contract** — Extract each section. Flag any that are missing.
+2. **Validate completeness** — All four sections must be present:
+   - `GOAL` — What to build and why (user value)
+   - `CONSTRAINTS` — Technical stack, libraries, patterns that must be used
+   - `FORMAT` — Exact file paths, naming, structure expected
+   - `FAILURE CONDITIONS` — Explicit conditions that would make the implementation wrong
+3. **Ask for missing sections** before proceeding.
+4. **Draft the issue** with:
+   - Title: `feat: <short description from GOAL>`
+   - Body: the full contract preserved verbatim under a `## Prompt Contract` heading, plus a `## Context` section with brief background
+   - Label: `prompt-contract` (create if it doesn't exist)
+5. **Present for review** — Show the draft before creating. Allow editing.
+
+**Issue body template:**
+
+```markdown
+## Context
+[1-3 sentence background extracted from GOAL]
+
+## Prompt Contract
+
+**GOAL:**
+[verbatim]
+
+**CONSTRAINTS:**
+[verbatim]
+
+**FORMAT:**
+[verbatim]
+
+**FAILURE CONDITIONS:**
+[verbatim]
+```
+
+**Why prompt contracts?** They give `/take` enough signal to generate a C4 architecture doc before writing any code — making the implementation plan verifiable before it starts.
+
+---
 
 ## Quick Create Mode
 

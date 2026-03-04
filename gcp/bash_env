@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# gcloud SDK - XDG compliant
+export CLOUDSDK_CONFIG="$XDG_CONFIG_HOME/gcp"
+mkdir -p "$XDG_CONFIG_HOME/gcp" 2>/dev/null
+
+# gsutil (boto) - XDG compliant (BOTO_CONFIG points to a file, not a dir)
+export BOTO_CONFIG="$XDG_CONFIG_HOME/gcp/boto"

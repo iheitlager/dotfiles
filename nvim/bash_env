@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# Neovim natively uses $XDG_CONFIG_HOME/nvim - no env needed
+

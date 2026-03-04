@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# Wasmtime - XDG compliant
+export WASMTIME_HOME="$XDG_DATA_HOME/wasmtime"
+
+export PATH="$WASMTIME_HOME/bin:$PATH"
