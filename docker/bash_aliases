@@ -5,7 +5,7 @@
 
 
 # clean all docker files
-__docker_clean() {
+_docker_clean() {
 	echo "Cleaning up Docker resources..."
 	docker images | grep "localhost:" | awk '{print $$3}' | xargs docker rmi -f 2>/dev/null || true
 	docker rm -f $(docker ps -aq) 2>/dev/null || true
@@ -17,10 +17,10 @@ __docker_clean() {
 }
 
 
-alias dclean=__docker_clean
+alias dclean=_docker_clean
 
 # clean all podman resources
-__podman_clean() {
+_podman_clean() {
 	echo "Cleaning up Podman resources..."
 	podman images | grep "localhost:" | awk '{print $3}' | xargs podman rmi -f 2>/dev/null || true
 	podman rm -f $(podman ps -aq) 2>/dev/null || true
@@ -31,7 +31,7 @@ __podman_clean() {
 	echo "✓ Podman cleanup completed"
 }
 
-alias pm-clean=__podman_clean
+alias pm-clean=_podman_clean
 
 # ctop needs TERM fix for tmux-256color
 alias ctop='TERM=xterm-256color command ctop'

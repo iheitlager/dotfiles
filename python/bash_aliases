@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-__python_clean() {
+_python_clean() {
     echo "Cleaning up Python build, test and bytecode files..."
     find . -type f -name "*.pyc" -exec rm -f {} +
     find . -type d -name "__pycache__" -exec rm -rf {} +
@@ -19,7 +19,7 @@ __python_clean() {
     echo "✓ Python cleanup completed."
 }
 
-alias pyclean=__python_clean
+alias pyclean=_python_clean
 
 # Regular virtual env handling
 # Old global virtual env commands
@@ -83,7 +83,7 @@ function deactivate {
 alias unv='deactivate'
 
 # Virtual environment activation function with caching
-__venv_activate() {
+_venv_activate() {
     local CACHE_DIR="$XDG_STATE_HOME/python"
     local CACHE_FILE="$CACHE_DIR/venv_latest"
     mkdir -p "$CACHE_DIR" 2>/dev/null
@@ -180,8 +180,8 @@ __venv_activate() {
 }
 
 # Create aliases
-alias v='__venv_activate'
-alias venv='__venv_activate'
+alias v='_venv_activate'
+alias venv='_venv_activate'
 # the local magic
 #alias venv='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
 #alias v='source $(git rev-parse --show-toplevel)/.*/bin/activate || echo "not a git rep"'
@@ -203,11 +203,11 @@ alias uvl="uv python list"
 
 # Bash function to manage outdated Python packages using uv
 # Usage:
-#   __pip_outdated          - Interactive mode with fzf to select and update packages
-#   __pip_outdated -l       - List outdated packages only
-#   __pip_outdated -c       - Generate uv add commands with version comments to stdout
+#   _pip_outdated          - Interactive mode with fzf to select and update packages
+#   _pip_outdated -l       - List outdated packages only
+#   _pip_outdated -c       - Generate uv add commands with version comments to stdout
 
-__pip_outdated() {
+_pip_outdated() {
     local mode="default"
     
     # Parse flags
@@ -223,7 +223,7 @@ __pip_outdated() {
                 ;;
             *)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: __pip_outdated [-c|-l]" >&2
+                echo "Usage: _pip_outdated [-c|-l]" >&2
                 return 1
                 ;;
         esac
@@ -325,10 +325,10 @@ __pip_outdated() {
     esac
 }
 
-alias uvo="__pip_outdated"
+alias uvo="_pip_outdated"
 
 
-__pip_versions() {
+_pip_versions() {
     local package=""
     local limit=5
     local add_mode=false
@@ -351,7 +351,7 @@ __pip_versions() {
                 ;;
             -*)
                 echo "Error: Unknown option '$1'" >&2
-                echo "Usage: __pip_versions [-a] [-d|--dev] [package] [-n|--number <count>]" >&2
+                echo "Usage: _pip_versions [-a] [-d|--dev] [package] [-n|--number <count>]" >&2
                 return 1
                 ;;
             *)
@@ -435,7 +435,7 @@ __pip_versions() {
     # Validate package name is provided
     if [[ -z "$package" ]]; then
         echo "Error: Package name is required" >&2
-        echo "Usage: __pip_versions [-a] [-d|--dev] [package] [-n|--number <count>]" >&2
+        echo "Usage: _pip_versions [-a] [-d|--dev] [package] [-n|--number <count>]" >&2
         return 1
     fi
     
@@ -482,4 +482,4 @@ __pip_versions() {
     fi
 }
 
-alias pv="__pip_versions"
+alias pv="_pip_versions"
