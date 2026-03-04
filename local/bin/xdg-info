@@ -12,6 +12,7 @@ GREEN='\033[32m'
 BLUE='\033[34m'
 YELLOW='\033[33m'
 CYAN='\033[36m'
+RED='\033[31m'
 RESET='\033[0m'
 
 # XDG directories with defaults
@@ -23,7 +24,7 @@ XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 print_usage() {
     local help_cmd="cat"
     command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
-    
+
     $help_cmd << 'EOF'
 Usage: xdg-info [OPTIONS] [APP]
 
@@ -34,6 +35,7 @@ OPTIONS:
     -l, --list      List all apps with XDG presence
     -e, --env       Show environment variables related to XDG
     -s, --sources   Show dotfiles module sources
+    -x, --legacy    Show intentional non-XDG paths (dirs that must stay in $HOME)
 
 ARGUMENTS:
     APP             Show XDG paths for specific app (e.g., vim, git, docker)
@@ -44,6 +46,7 @@ EXAMPLES:
     xdg-info -l          List all apps with XDG presence
     xdg-info -e          Show XDG environment variables
     xdg-info -s          Show dotfiles sources
+    xdg-info -x          Show intentional legacy paths
 
 EOF
 }
@@ -85,6 +88,9 @@ show_overview() {
     echo -e "${BOLD}${DIM}CACHE${RESET} ${DIM}(non-essential cached data)${RESET}"
     echo -e "  ${CYAN}XDG_CACHE_HOME${RESET}  = $XDG_CACHE_HOME"
     show_tree "$XDG_CACHE_HOME" 1
+    echo
+
+    show_legacy
 }
 
 show_app() {
@@ -193,6 +199,47 @@ show_env() {
     env | grep -E '(CONFIG|DATA|STATE|CACHE|HIST|HOME)' | grep -v '^XDG_' | sort | sed 's/^/  /' || echo "  (none)"
 }
 
+show_legacy() {
+    echo -e "${BOLD}Intentional Non-XDG Paths${RESET} ${DIM}(should remain in \$HOME)${RESET}\n"
+
+    # Each entry: "path|reason|override"
+    # override: env var or mechanism that could move it, or "none"
+    local -a entries=(
+        "$HOME/.ssh|OpenSSH hardcodes this path; no env var to relocate it. Moving breaks ssh/scp/git-over-ssh and 1Password SSH agent.|none"
+        "$HOME/.bash_profile|Bash login shell entrypoint — bash requires it in \$HOME. Symlinked from dotfiles, so source lives in version control.|symlink"
+        "$HOME/.bashrc|Bash interactive shell entrypoint — bash requires it in \$HOME. Symlinked from dotfiles.|symlink"
+        "$HOME/.netrc|Used by curl, wget, git credential helper. No universal env override (curl supports CURLOPT_NETRC but not via env).|none"
+        "$HOME/.gnupg|GPG defaults here but respects GNUPGHOME — migratable if needed, but rarely worth the effort on macOS with 1Password.|GNUPGHOME"
+    )
+
+    for entry in "${entries[@]}"; do
+        local path="${entry%%|*}"
+        local rest="${entry#*|}"
+        local reason="${rest%%|*}"
+        local override="${rest##*|}"
+
+        local status
+        if [[ -e "$path" ]]; then
+            status="${GREEN}exists${RESET}"
+        else
+            status="${DIM}absent${RESET}"
+        fi
+
+        local override_tag
+        if [[ "$override" == "none" ]]; then
+            override_tag="${RED}no override${RESET}"
+        elif [[ "$override" == "symlink" ]]; then
+            override_tag="${CYAN}symlinked${RESET}"
+        else
+            override_tag="${YELLOW}override: $override${RESET}"
+        fi
+
+        echo -e "  ${BOLD}${path/#$HOME/\~}${RESET}  [$status]  $override_tag"
+        echo -e "  ${DIM}$reason${RESET}"
+        echo
+    done
+}
+
 show_sources() {
     echo -e "${BOLD}Dotfiles Module Sources${RESET}\n"
     
@@ -233,6 +280,9 @@ case "${1:-}" in
         ;;
     -s|--sources)
         show_sources
+        ;;
+    -x|--legacy)
+        show_legacy
         ;;
     "")
         show_overview
