@@ -1,5 +1,7 @@
 .claude/config/settings.local.json
 claude/config/settings.local.json
+claude/config/oauth-credentials.json
+containers/**/.claude-oauth-creds.json
 .DS_Store
 .netrwhist
 AGENTS.md
