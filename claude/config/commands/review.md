@@ -15,26 +15,26 @@ Review codebase, documentation, and issues to identify gaps and verify completen
 This skill delegates heavy scanning to agents, then synthesizes results interactively.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  /review                                                    │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Explore      │  │ Explore      │  │ Bash         │      │
-│  │ Agent        │  │ Agent        │  │ Agent        │      │
-│  │              │  │              │  │              │      │
-│  │ Code scan    │  │ Doc scan     │  │ GH issues    │      │
-│  │ TODOs, gaps  │  │ Stale docs   │  │ Stale/dupe   │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │               │
-│         └────────────┬────┴────────────────┘               │
-│                      ▼                                      │
-│              Synthesize Report                              │
-│              (main conversation)                            │
-│                      │                                      │
-│                      ▼                                      │
-│              Offer Actions                                  │
-│              (interactive)                                  │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  /review                                               │
+│                                                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ Explore      │  │ Explore      │  │ Bash         │  │
+│  │ Agent        │  │ Agent        │  │ Agent        │  │
+│  │              │  │              │  │              │  │
+│  │ Code scan    │  │ Doc scan     │  │ GH issues    │  │
+│  │ TODOs, gaps  │  │ Stale docs   │  │ Stale/dupe   │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+│         │                 │                 │          │
+│         └────────────┬────┴─────────────────┘          │
+│                      ▼                                 │
+│              Synthesize Report                         │
+│              (main conversation)                       │
+│                      │                                 │
+│                      ▼                                 │
+│              Offer Actions                             │
+│              (interactive)                             │
+└────────────────────────────────────────────────────────┘
 ```
 
 ## Process
