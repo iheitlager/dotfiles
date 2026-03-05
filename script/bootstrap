@@ -158,7 +158,7 @@ validate_config_structure () {
 
 # git gitconfig generator - creates local config with user info and signing key
 setup_gitconfig () {
-  local local_gitconfig="$HOME/.local/gitconfig"
+  local local_gitconfig="$HOME/.config/git/local"
   local force=$1
 
   if [ -f "$local_gitconfig" ] && [ "$force" != "true" ]; then

@@ -60,6 +60,7 @@ Everything is organized by topic (vim, git, python, etc.). Each topic can have:
 | `bash_aliases` | Shell aliases (loaded by .bash_profile) |
 | `bash_env` | Environment variables |
 | `bash_completion` | Tab completions |
+| `bash_shortcuts` | Keyboard shortcuts (displayed by `shortcuts` command) |
 | `brew_packages` | Homebrew packages (run with `dot`) |
 | `install.sh` | Setup script (run with `dot install <topic>`) |
 | `*.symlink` | Symlinked to `$HOME` |
@@ -91,14 +92,14 @@ Use `xdg-info` to inspect XDG paths and app compliance.
 ├── osx/            # macOS-specific settings
 ├── python/         # Python/uv configuration
 ├── tmux/           # tmux config with TPM plugins
-├── vim/            # Vim/Neovim configuration
+├── nvim/           # Neovim configuration
 └── vscode/         # VS Code settings
 ```
 
 ## Secrets
 
 Never commit secrets! Use `~/.config/secrets` (sourced by .bash_profile, excluded from git).
-Git credentials go in `~/.local/gitconfig`.
+Git credentials go in `~/.config/git/local`.
 
 ## Credits
 - Main inspiration: https://github.com/holman/dotfiles

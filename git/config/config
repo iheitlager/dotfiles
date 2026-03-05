@@ -14,7 +14,7 @@
 
 [core]
     excludesfile = ~/.config/git/gitignore
-    editor = nano
+    editor = nvim
     pager = delta
 
 [push]
