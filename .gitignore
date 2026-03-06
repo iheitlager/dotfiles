@@ -5,6 +5,7 @@ containers/**/.claude-oauth-creds.json
 .DS_Store
 .netrwhist
 AGENTS.md
+git/config/local
 
 # Neovim plugin lock file
 nvim/config/lazy-lock.json

@@ -56,7 +56,7 @@
       "Read(~/.config/secrets)"
     ]
   },
-  "model": "sonnet",
+  "model": "opus",
   "hooks": {
     "SessionStart": [
       {

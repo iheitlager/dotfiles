@@ -309,3 +309,6 @@ EOF
 alias h='_bash_history'
 alias hs='_bash_history -s'
 alias hg='_bash_history -g'
+
+# Servers
+alias openclaw='ssh openclaw'
