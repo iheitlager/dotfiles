@@ -6,6 +6,8 @@
     "allow": [
       "Read",
       "Edit",
+      "Glob",
+      "Grep",
       "Bash(tmux:*)",
       "Bash(podman:*)",
       "Bash(uv:*)",
@@ -87,6 +89,15 @@
           {
             "type": "command",
             "command": "/Users/iheitlager/.claude/hooks/rtk-rewrite.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/iheitlager/.dotfiles/claude/hooks/auto-approve.sh"
           }
         ]
       }
