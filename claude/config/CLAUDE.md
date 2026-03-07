@@ -8,7 +8,7 @@ Global coding preferences and workflow guidelines for all my projects.
 
 - **Python Version**: 3.12+ (use modern type hints and syntax)
 - **Linter**: `ruff` — Fast Python linter
-- **Type Checking**: `mypy` — Static type analysis
+- **Type Checking**: `pyright` — Static type analysis
 - **Imports**: `isort` — Import sorting and organization
 - **Testing**: pytest with coverage targets (aim for >80%)
 - **Package Manager**: `uv` — Fast Python package manager
@@ -101,7 +101,7 @@ For Python projects using `uv` for dependency management:
 uv run pytest tests/
 uv run python script.py
 uv run ruff check src/
-uv run mypy src/
+uv run pyright src/
 
 # ❌ AVOID THIS (unless project doesn't use uv)
 pytest tests/
