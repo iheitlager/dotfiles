@@ -19,6 +19,17 @@ if [ ! -d ~/tmp ]; then
 fi
 
 ###########################################################################
+# Power Management (Mac mini sensible defaults)
+###########################################################################
+echo "  Configuring power management defaults..."
+sudo pmset -a sleep 30            # Sleep after 30 min inactivity
+sudo pmset -a disksleep 10        # Spin down disks after 10 min
+sudo pmset -a displaysleep 10     # Display off after 10 min
+sudo pmset -a networkoversleep 0  # Keep network active during sleep (SSH, Wake-on-LAN)
+sudo pmset -a powernap 1          # Power Nap on (default)
+# Note: auto-trader launch.sh overrides these to never-sleep when agents are running
+
+###########################################################################
 # Macbook
 ############################################################################
 # http://osxdaily.com/2007/03/14/how-to-completely-disable-dashboard/

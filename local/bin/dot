@@ -182,6 +182,14 @@ if [[ $# -gt 0 ]]; then
             installed=$(brew list --formula 2>/dev/null | wc -l | tr -d ' ')
             casks_installed=$(brew list --cask 2>/dev/null | wc -l | tr -d ' ')
             echo "   Installed: $installed formulae, $casks_installed casks"
+            # Stale upgrade dirs
+            stale=$(find /opt/homebrew/Caskroom -maxdepth 2 -type d -name '*.upgrading' 2>/dev/null)
+            if [[ -n "$stale" ]]; then
+                echo "   ⚠️  Stale upgrade dirs (run: rm -rf <path>):"
+                echo "$stale" | while read -r d; do echo "      $d"; done
+            else
+                echo "   ✅ No stale upgrade dirs"
+            fi
             echo ""
 
             # XDG paths (fast)
@@ -510,14 +518,32 @@ fi
 # start with brew itself
 source "$DOTFILES/homebrew/brew_install.sh" 2>&1 || exit 1
 
+# Clean up stale Homebrew upgrade dirs before installing
+stale_dirs=$(find /opt/homebrew/Caskroom -maxdepth 2 -type d -name '*.upgrading' 2>/dev/null)
+if [[ -n "$stale_dirs" ]]; then
+    printf "  [ \033[00;33m!!\033[0m ] Cleaning stale Homebrew upgrade dirs...\n"
+    echo "$stale_dirs" | while read -r d; do
+        printf "  [ \033[00;33m..\033[0m ] Removing: %s\n" "$d"
+        rm -rf "$d"
+    done
+fi
+
 # now process all topical brew packages
 for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
 do
-    printf "  [ \033[00;34m..\033[0m ] Processing installer: $(basename $(dirname "$src"))\n"
+    topic=$(basename $(dirname "$src"))
+    printf "  [ \033[00;34m..\033[0m ] Processing installer: %s\n" "$topic"
+    tmplog=$(mktemp)
     if [[ "$VERBOSE" == true ]]; then
-        source "${src}" 2>&1 || exit 1
+        source "${src}" 2>&1 || { echo "❌ Failed: $topic"; exit 1; }
     else
-        source "${src}" &>/dev/null || exit 1
+        source "${src}" >"$tmplog" 2>&1 || {
+            printf "  [ \033[00;31mFAIL\033[0m ] Error in %s:\n" "$topic"
+            cat "$tmplog"
+            rm -f "$tmplog"
+            exit 1
+        }
+        rm -f "$tmplog"
     fi
 done
 

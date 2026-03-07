@@ -7,7 +7,6 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-brew install python@3.13 || brew upgrade python@3.13
-brew install awscli || brew upgrade awscli
+# awscli is managed via the official AWS PKG installer (see aws/install.sh)
 
 export PATH=$TMPPATH
