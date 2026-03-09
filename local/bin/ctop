@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ctop wrapper: auto-detects colima or podman and sets DOCKER_HOST accordingly.
+# Also fixes the termbox crash in tmux by normalizing TERM.
+
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Fix termbox crash: force a terminfo type that ctop's termbox supports
+export TERM=xterm-256color
+
+# Check colima
+if colima status &>/dev/null; then
+    # Parse socket path from colima status output, fall back to default
+    socket=$(colima status 2>/dev/null | awk '/docker socket:/ { print $NF }')
+    export DOCKER_HOST="${socket:-unix://${HOME}/.config/colima/default/docker.sock}"
+    exec /opt/homebrew/bin/ctop "$@"
+fi
+
+# Check podman machine
+if podman machine list --format '{{.Running}}' 2>/dev/null | grep -q true; then
+    socket=$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null | head -1)
+    if [ -n "$socket" ]; then
+        export DOCKER_HOST="unix://${socket}"
+    fi
+    exec /opt/homebrew/bin/ctop "$@"
+fi
+
+printf "${RED}No container runtime detected. Start colima or podman first.${NC}\n"
+exit 1
