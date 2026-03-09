@@ -121,37 +121,52 @@ Closes #N"
 
 ### 4. Merge the PR
 
-```bash
-# Squash merge (default, cleaner history)
-gh pr merge $PR --squash --delete-branch
+**Important**: `gh pr merge` fails when the base branch (e.g. `main`) is checked out in another worktree. Always use the GitHub API directly to avoid this:
 
-# Alternative methods if requested:
-# gh pr merge $PR --merge --delete-branch    # Merge commit
-# gh pr merge $PR --rebase --delete-branch   # Rebase
+```bash
+# Get the repo name
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+
+# Merge via API (works even with worktrees)
+gh api -X PUT repos/$REPO/pulls/$PR/merge \
+  -f merge_method=merge
+
+# Delete remote branch via API
+BRANCH=$(gh pr view $PR --json headRefName -q .headRefName)
+gh api -X DELETE repos/$REPO/git/refs/heads/$BRANCH 2>/dev/null || true
 ```
 
-The `--delete-branch` flag removes the remote branch automatically.
+Do NOT use `gh pr merge` — it attempts local git operations that fail when the base branch is in use by a worktree.
 
 ### 5. Sync Local Repository
 
-```bash
-# Fetch latest and prune deleted remote refs
-git fetch --prune
+**Worktree-aware sync**: determine which worktree owns the feature branch, then operate from there.
 
-# Get the merged branch name
+```bash
 BRANCH=$(gh pr view $PR --json headRefName -q .headRefName)
 
-# Switch to main if on the merged branch
-CURRENT=$(git branch --show-current)
-if [ "$CURRENT" = "$BRANCH" ]; then
-  git checkout main
+# Find the worktree that has this branch checked out (if any)
+WORKTREE=$(git worktree list --porcelain | grep -B2 "branch refs/heads/$BRANCH" | grep "^worktree" | awk '{print $2}')
+
+# Fetch and prune from any worktree (they share the object store)
+git fetch --prune
+
+# Sync the base branch in whichever worktree has it (or current if none)
+BASE_WORKTREE=$(git worktree list --porcelain | grep -B2 "branch refs/heads/main" | grep "^worktree" | awk '{print $2}')
+if [[ -n "$BASE_WORKTREE" ]]; then
+  git -C "$BASE_WORKTREE" pull origin main
 fi
 
-# Update main
-git pull origin main
-
-# Delete local branch (safe delete, won't delete unmerged)
-git branch -d "$BRANCH" 2>/dev/null || true
+# Delete local feature branch — force-delete needed after squash merge
+if [[ -n "$WORKTREE" ]]; then
+  # Branch is checked out in a worktree; can't delete it — skip or use agent branch
+  echo "Note: $BRANCH is checked out in worktree $WORKTREE — checkout agent branch first"
+  AGENT_BRANCH=$(git -C "$WORKTREE" branch --show-current | grep agent || echo "main")
+  git -C "$WORKTREE" checkout "$AGENT_BRANCH" 2>/dev/null && \
+    git branch -D "$BRANCH" 2>/dev/null || true
+else
+  git branch -D "$BRANCH" 2>/dev/null || true
+fi
 ```
 
 ### 6. Verify Linked Issues
@@ -225,7 +240,7 @@ This ensures:
 PR Merged Successfully
 ═══════════════════════════════════════════════════════════════
 
-✓ PR #123 merged into main (squash)
+✓ PR #123 merged into main
 ✓ Remote branch 'feat/oauth-support' deleted
 ✓ Local branch 'feat/oauth-support' deleted
 ✓ Switched to main
@@ -309,9 +324,9 @@ Using merge commit instead.
 
 | Method | Flag | When to Use |
 |--------|------|-------------|
-| **Squash** | `--squash` | Default. Clean single commit. Feature branches. |
-| **Merge** | `--merge` | Preserve full history. Long-running branches. |
-| **Rebase** | `--rebase` | Linear history. Small changes. |
+| **Merge** | `merge_method=merge` | Default. Preserves full history. |
+| **Squash** | `merge_method=squash` | Single commit. Clean history. |
+| **Rebase** | `merge_method=rebase` | Linear history. Small changes. |
 
 Override default: `/merge #123 --merge` or `/merge #123 --rebase`
 

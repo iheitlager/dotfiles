@@ -30,8 +30,8 @@ project/
 │   ├── unit/            # Unit tests
 │   └── integration/     # Integration tests
 ├── .openspec/           # OpenSpec specifications & ADRs
-│   ├── specs/           # System specifications
-│   ├── adr/             # Architectural Decision Records
+│   ├── specs/           # System specifications (NNN-name/spec.md)
+│   ├── adr/             # Architectural Decision Records (NNNN-title.md)
 │   └── changes/         # Delta specs (proposals)
 ├── docs/                # Documentation
 ├── pyproject.toml       # Project configuration
@@ -46,6 +46,36 @@ I use ADRs to document significant design decisions:
 - Store in `.openspec/adr/` with format `NNNN-title.md`
 - Always check existing ADRs before proposing architectural changes
 - Create new ADRs for decisions that affect architecture
+
+### Specification Format
+
+Specs live in `.openspec/specs/NNN-name/spec.md` (numbered directories, each containing a `spec.md`).
+
+Each spec uses sheerpower-style format parseable by code-analyzer (ADR-0019):
+
+```markdown
+### Requirement N: Title [MUST|SHOULD|MAY]
+
+Description using RFC 2119 keywords (SHALL, MUST, etc.).
+
+**Implementation:** `src/path/module.py::ClassName`
+
+#### Scenario: Descriptive name
+
+- GIVEN precondition
+- WHEN action
+- THEN expected result
+
+**Tests:** `tests/unit/test_file.py::TestClass::test_method`
+```
+
+Link codes:
+- `ADR-NNNN` — ADR references
+- `#NN` — GitHub issue references
+- `src/path/module.py` — Source file paths
+- `tests/path/test_file.py::test_function` — Test function paths
+
+Run `make assurance` to validate spec coverage, `make compliance` for full pipeline.
 
 ---
 

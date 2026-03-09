@@ -107,6 +107,7 @@
     "type": "command",
     "command": "~/.dotfiles/claude/config/statusline-powerline.sh"
   },
+  "skipDangerousModePermissionPrompt": true,
   "teammateMode": "tmux",
   "additionalDirectories": [
     ".",

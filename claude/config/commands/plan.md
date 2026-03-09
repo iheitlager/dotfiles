@@ -111,6 +111,23 @@ Create an Architectural Decision Record for significant design decisions.
 - Making decisions that are hard to reverse
 - Documenting why something is the way it is
 
+### Detect Current Version
+
+Before creating the ADR, read the current project version:
+
+```bash
+# Python — primary source
+grep -r "__version__" src/ 2>/dev/null | head -1
+
+# Fallback: pyproject.toml
+grep '^version' pyproject.toml 2>/dev/null | head -1
+
+# Node
+node -p "require('./package.json').version" 2>/dev/null
+```
+
+Use this as `**Version**` in the ADR. If not found, leave as `unknown`.
+
 ### ADR Template
 
 Use bold metadata fields for parser-compatible frontmatter (NOT heading-level sections):
@@ -121,6 +138,8 @@ Use bold metadata fields for parser-compatible frontmatter (NOT heading-level se
 **Status**: Proposed
 
 **Date**: [Today's date, YYYY-MM-DD]
+
+**Version**: [Current version from __init__.py / pyproject.toml]
 
 **Decision ID**: NNNN-short-title
 
@@ -162,6 +181,7 @@ First paragraph should be a concise summary — extracted by parser.]
 **Parser-required fields:**
 - `**Status**:` — Accepted / Proposed / Deprecated / Superseded
 - `**Date**:` — YYYY-MM-DD format
+- `**Version**:` — Version from `src/*/__init__.py` or `pyproject.toml` at time of writing
 - `**Decision ID**:` — Matches filename stem (e.g., `0019-traceability_metamodel`)
 - `**Supersedes**:` — Optional, for `ADR-XXXX` references (creates SUPERSEDES edges)
 
