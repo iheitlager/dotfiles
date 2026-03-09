@@ -245,8 +245,11 @@ require('lazy').setup({
   -- Surround (like vim-surround)
   { 'kylechui/nvim-surround', event = 'VeryLazy', config = true },
 
-  -- Comment toggling
-  { 'numToStr/Comment.nvim', config = true },
+  -- Comment toggling (gcc = line, gc = visual; Ctrl+/ mirrors CMD+/ convention)
+  { 'numToStr/Comment.nvim', config = true, keys = {
+    { '<C-/>', 'gcc', mode = 'n', remap = true, desc = 'Toggle comment' },
+    { '<C-/>', 'gc',  mode = 'v', remap = true, desc = 'Toggle comment' },
+  }},
 
   -- Autopairs
   { 'windwp/nvim-autopairs', event = 'InsertEnter', config = true },
