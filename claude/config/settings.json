@@ -107,6 +107,9 @@
     "type": "command",
     "command": "~/.dotfiles/claude/config/statusline-powerline.sh"
   },
+  "enabledPlugins": {
+    "pyright-lsp@claude-plugins-official": true
+  },
   "skipDangerousModePermissionPrompt": true,
   "teammateMode": "tmux",
   "additionalDirectories": [
