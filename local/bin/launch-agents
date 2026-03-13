@@ -4,9 +4,11 @@
 
 
 # launch-agents
-# Version: 0.8.1
+# Version: 0.9.1
 #
 # Changelog:
+# 0.9.1 Default -n 2 to opus/opus; fix window switch landing on left (claude) pane
+# 0.9.0 Add disk health check: warn/clean runaway Claude tmp output files on startup
 # 0.8.1 Set Ghostty window title for workspace and swarm modes
 # 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-o
 # 0.7.0 Default to sonnet, --opus flag enables opus-based distribution
@@ -94,6 +96,62 @@ debug() {
     fi
 }
 
+check_disk_health() {
+    local threshold_mb=100
+    local warn_free_gb=5
+    local claude_tmp
+    claude_tmp=$(ls -d /private/tmp/claude-* 2>/dev/null | head -1)
+
+    # Check free disk space
+    local free_gb
+    free_gb=$(df -g /System/Volumes/Data 2>/dev/null | awk 'NR==2 {print $4}')
+    if [[ -n "$free_gb" ]] && (( free_gb < warn_free_gb )); then
+        echo -e "${YELLOW}Warning: only ${free_gb}GB free on disk${NC}"
+    fi
+
+    [[ -z "$claude_tmp" ]] && return
+
+    # Find large output files
+    local large_files=()
+    local large_sizes=()
+    while IFS= read -r -d '' file; do
+        local size_bytes size_mb
+        size_bytes=$(stat -f%z "$file" 2>/dev/null || echo 0)
+        size_mb=$((size_bytes / 1024 / 1024))
+        if (( size_mb >= threshold_mb )); then
+            large_files+=("$file")
+            large_sizes+=("$(du -sh "$file" 2>/dev/null | cut -f1)")
+        fi
+    done < <(find "$claude_tmp" -name "*.output" -type f -print0 2>/dev/null)
+
+    [[ ${#large_files[@]} -eq 0 ]] && return
+
+    echo -e "${YELLOW}Warning: large Claude task output files found:${NC}"
+    for i in "${!large_files[@]}"; do
+        echo -e "  ${RED}[${large_sizes[$i]}]${NC} ${large_files[$i]}"
+    done
+
+    if [[ "$FORCE" == true ]]; then
+        for file in "${large_files[@]}"; do
+            rm -f "$file"
+            echo -e "  ${GREEN}deleted${NC} $file"
+        done
+        echo ""
+    else
+        echo ""
+        read -r -p "Delete these files? [y/N] " answer
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
+            for file in "${large_files[@]}"; do
+                rm -f "$file"
+                echo -e "  ${GREEN}deleted${NC} $file"
+            done
+        else
+            echo -e "${YELLOW}Skipped. Use --force to auto-clean on startup.${NC}"
+        fi
+        echo ""
+    fi
+}
+
 print_usage() {
     local help_cmd="cat"
     command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
@@ -120,7 +178,7 @@ Options:
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
     -v, --verbose      Print commands being executed
-    --force            Force restart or clean (skips prompts)
+    -f, --force        Force restart or clean (skips prompts, auto-cleans disk)
     --yolo             Skip permission prompts (Claude agents only)
     -h, --help         Show this help message
 
@@ -206,7 +264,11 @@ get_model() {
         fi
     fi
 
-    # Claude models: default to sonnet, --opus enables opus-based distribution
+    # Claude models: 2-agent default is opus/opus; --opus enables opus for larger configs
+    if [[ "$count" -eq 2 ]]; then
+        echo "opus"
+        return
+    fi
     if [[ "$OPUS_MODE" == true ]]; then
         case $count in
             2)
@@ -639,6 +701,9 @@ create_tmux_layout_new() {
         if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
             tmux send-keys -t "$SESSION:$win.2" "source .venv/bin/activate" C-m
         fi
+
+        # Leave focus on left pane (claude) so switching to this window lands there
+        tmux select-pane -t "$SESSION:$win.1"
     done
 
     # Always add daemon window (starts swarm-daemon only if -d flag)
@@ -1240,7 +1305,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        --force)
+        -f|--force)
             FORCE=true
             shift
             ;;
@@ -1274,6 +1339,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Check for runaway task output files and low disk space
+check_disk_health
 
 # Execute command
 case ${COMMAND:-} in

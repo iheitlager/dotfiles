@@ -115,6 +115,15 @@ alias localip='ipconfig getifaddr en0'
 # perl works best for this command
 alias ports='lsof -iTCP -sTCP:LISTEN -n -P | bat -p --language=perl'
 
+killport() {
+    local port=${1:?Usage: killport <port>}
+    local pids
+    pids=$(lsof -ti:"$port") || { echo "No process on port $port"; return 1; }
+    echo "Killing $(echo "$pids" | wc -w | tr -d ' ') process(es) on port $port: $pids"
+    kill $pids
+}
+alias kp='killport'
+
 _brew_clean() {
     echo "Cleaning up Homebrew..."
     brew cleanup --prune=all

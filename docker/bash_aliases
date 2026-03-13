@@ -21,17 +21,40 @@ alias dclean=_docker_clean
 
 # clean all podman resources
 _podman_clean() {
-	echo "Cleaning up Podman resources..."
-	podman images | grep "localhost:" | awk '{print $3}' | xargs podman rmi -f 2>/dev/null || true
-	podman rm -f $(podman ps -aq) 2>/dev/null || true
-	podman rmi -f $(podman images -aq) 2>/dev/null || true
-	podman volume prune -f 2>/dev/null || true
-	podman network prune -f 2>/dev/null || true
-	podman system prune -a -f --volumes 2>/dev/null || true
-	echo "✓ Podman cleanup completed"
+    # Verify podman machine is running
+    if ! podman machine inspect 2>/dev/null | grep -q '"State": "running"'; then
+        echo "✗ Podman machine is not running. Start it with: pm-start"
+        return 1
+    fi
+
+    echo "Cleaning up Podman resources..."
+    podman rm -f $(podman ps -aq) 2>/dev/null || true
+    podman system prune -a -f --volumes 2>/dev/null || true
+    echo "✓ Podman cleanup completed"
 }
 
 alias pm-clean=_podman_clean
+
+# clean all docker resources on colima
+_colima_clean() {
+    # Verify colima is running
+    if ! colima status 2>/dev/null | grep -q "colima is running"; then
+        echo "✗ Colima is not running. Start it with: colima start"
+        return 1
+    fi
+
+    # Get socket path directly from colima to avoid DOCKER_HOST/context conflicts
+    local socket
+    socket=$(colima status 2>/dev/null | grep -o 'docker socket: [^ ]*' | awk '{print $3}')
+    : "${socket:=${XDG_CONFIG_HOME:-$HOME/.config}/colima/default/docker.sock}"
+
+    echo "Cleaning up Docker resources on colima (socket: $socket)..."
+    DOCKER_HOST="unix://$socket" docker rm -f $(DOCKER_HOST="unix://$socket" docker ps -aq) 2>/dev/null || true
+    DOCKER_HOST="unix://$socket" docker system prune -a -f --volumes 2>/dev/null || true
+    echo "✓ Colima Docker cleanup completed"
+}
+
+alias colima-clean=_colima_clean
 
 # ctop needs TERM fix for tmux-256color
 alias ctop='TERM=xterm-256color command ctop'
