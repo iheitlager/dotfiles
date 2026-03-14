@@ -34,7 +34,7 @@ get_size() {
 get_size_bytes() {
     local path="$1"
     if [[ -e "$path" ]]; then
-        du -sk "$path" 2>/dev/null | awk '{print $1}' || echo "0"
+        du -sk "$path" 2>/dev/null | awk 'NR==1{print $1}' || echo "0"
     else
         echo "0"
     fi
@@ -54,9 +54,13 @@ cleanup_item() {
     local size_bytes=$(get_size_bytes "$path")
 
     if confirm "$prompt ($size)"; then
-        rm -rf "$path"
-        success "Removed $name ($size)"
-        TOTAL_FREED=$((TOTAL_FREED + size_bytes))
+        if rm -rf "$path" 2>/dev/null; then
+            success "Removed $name ($size)"
+            TOTAL_FREED=$((TOTAL_FREED + size_bytes))
+        else
+            warn "Could not remove $name — it may still be running or protected"
+            info "Try quitting the app first, then re-run deepclean"
+        fi
     else
         info "Skipped $name"
     fi
@@ -81,6 +85,11 @@ cleanup_container_runtimes() {
         local size=$(get_size ~/Library/Containers/com.docker.docker)
         warn "Docker Desktop found ($size)"
         info "You're using Colima - Docker Desktop is redundant"
+        if osascript -e 'application "Docker Desktop" is running' 2>/dev/null | grep -q true; then
+            info "Docker Desktop is running — quitting it first..."
+            osascript -e 'quit app "Docker Desktop"' 2>/dev/null || true
+            sleep 2
+        fi
         cleanup_item "Docker Desktop" \
                      ~/Library/Containers/com.docker.docker \
                      "Remove Docker Desktop?"
@@ -121,8 +130,8 @@ cleanup_caches() {
         warn "User caches: $size"
         info "Caches will regenerate as needed"
         if confirm "Clean all user caches?"; then
-            rm -rf ~/Library/Caches/* 2>/dev/null
             local freed=$(get_size_bytes ~/Library/Caches)
+            rm -rf ~/Library/Caches/* 2>/dev/null
             success "User caches cleaned"
             TOTAL_FREED=$((TOTAL_FREED + freed))
         fi
@@ -152,6 +161,71 @@ cleanup_logs() {
     else
         success "Logs already clean"
     fi
+
+    # System unified log store (/private/var/db/diagnostics)
+    local diag_size=$(get_size /private/var/db/diagnostics)
+    warn "System diagnostic logs: $diag_size"
+    info "macOS unified log store — safe to erase, will regenerate"
+    if confirm "Erase system diagnostic logs? (requires sudo)"; then
+        if sudo log erase --all 2>/dev/null; then
+            success "System diagnostic logs erased"
+        else
+            warn "Failed to erase system diagnostic logs"
+        fi
+    else
+        info "Skipped system diagnostic logs"
+    fi
+}
+
+cleanup_agent_space() {
+    print_header "AI Agent Space Cleanup"
+
+    # Claude Code temp files
+    local claude_tmp_size=$(find /private/tmp -maxdepth 1 -name "claude-*" 2>/dev/null | xargs du -sk 2>/dev/null | awk '{sum+=$1} END{print sum+0}')
+    if [[ $claude_tmp_size -gt 0 ]]; then
+        warn "Claude Code temp files: $(echo "scale=1; $claude_tmp_size / 1024" | bc)M"
+        if confirm "Clean Claude Code temp files?"; then
+            find /private/tmp -maxdepth 1 -name "claude-*" -exec rm -rf {} + 2>/dev/null
+            success "Claude Code temp files cleaned"
+            TOTAL_FREED=$((TOTAL_FREED + claude_tmp_size))
+        fi
+    else
+        success "No Claude Code temp files found"
+    fi
+
+    # Cline (VS Code/Cursor/Windsurf extension) — Puppeteer Chromium + checkpoints
+    local found_cline=false
+    for cline_base in "$HOME/Library/Application Support"/*/User/globalStorage/saoudrizwan.claude-dev; do
+        [[ -d "$cline_base" ]] || continue
+        found_cline=true
+
+        local puppeteer="$cline_base/puppeteer"
+        if [[ -d "$puppeteer" ]]; then
+            local size=$(get_size "$puppeteer")
+            local size_bytes=$(get_size_bytes "$puppeteer")
+            warn "Cline Puppeteer (Chromium) in ${cline_base##*/Library/Application Support/}: $size"
+            info "Downloaded for browser automation — re-downloads on demand"
+            if confirm "Remove Cline Puppeteer?"; then
+                rm -rf "$puppeteer"
+                success "Cline Puppeteer removed ($size)"
+                TOTAL_FREED=$((TOTAL_FREED + size_bytes))
+            fi
+        fi
+
+        local checkpoints="$cline_base/checkpoints"
+        if [[ -d "$checkpoints" ]]; then
+            local size=$(get_size "$checkpoints")
+            local size_bytes=$(get_size_bytes "$checkpoints")
+            warn "Cline checkpoints in ${cline_base##*/Library/Application Support/}: $size"
+            info "File snapshots from past Cline sessions — not needed after sessions end"
+            if confirm "Remove Cline checkpoints?"; then
+                rm -rf "$checkpoints"
+                success "Cline checkpoints removed ($size)"
+                TOTAL_FREED=$((TOTAL_FREED + size_bytes))
+            fi
+        fi
+    done
+    $found_cline || success "No Cline extension storage found"
 }
 
 cleanup_trash() {
@@ -196,6 +270,115 @@ cleanup_development() {
         info "Cleaning Python caches..."
         find ~ -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null && success "Python caches cleaned" || true
     fi
+}
+
+cleanup_editors() {
+    print_header "Editor Cache Cleanup"
+
+    # VS Code-family caches (Code, Cursor, Windsurf, etc.)
+    local found_editor=false
+    for editor_support in /Users/iheitlager/Library/Application\ Support/Code \
+                          /Users/iheitlager/Library/Application\ Support/Cursor \
+                          /Users/iheitlager/Library/Application\ Support/Windsurf; do
+        [[ -d "$editor_support" ]] || continue
+        found_editor=true
+        local editor_name="${editor_support##*/}"
+
+        for cache_dir in Cache CachedExtensionVSIXs CachedData GPUCache DawnCache DawnGraphiteCache DawnWebGPUCache; do
+            local path="$editor_support/$cache_dir"
+            [[ -d "$path" ]] || continue
+            local size=$(get_size "$path")
+            local size_bytes=$(get_size_bytes "$path")
+            if [[ $size_bytes -gt 1024 ]]; then
+                cleanup_item "$editor_name/$cache_dir" "$path" "Remove $editor_name $cache_dir?"
+            fi
+        done
+
+        # Extension toolchain downloads (e.g. ziglang downloads Zig compiler)
+        local global_storage="$editor_support/User/globalStorage"
+        if [[ -d "$global_storage" ]]; then
+            for ext_dir in "$global_storage"/*/; do
+                [[ -d "$ext_dir" ]] || continue
+                local ext_size_bytes=$(get_size_bytes "$ext_dir")
+                local ext_name="${ext_dir%/}"
+                ext_name="${ext_name##*/}"
+                # Flag extension dirs over 100MB that aren't known-useful data
+                if [[ $ext_size_bytes -gt 102400 ]] && [[ "$ext_name" != "saoudrizwan.claude-dev" ]]; then
+                    local size=$(get_size "$ext_dir")
+                    warn "$editor_name extension data: $ext_name ($size)"
+                    cleanup_item "$editor_name/$ext_name" "$ext_dir" "Remove $ext_name extension data?"
+                fi
+            done
+        fi
+    done
+    $found_editor || success "No VS Code-family editors found"
+}
+
+cleanup_browsers() {
+    print_header "Browser Cache Cleanup"
+
+    # Chrome
+    local chrome_cache="/Users/iheitlager/Library/Caches/Google/Chrome"
+    if [[ -d "$chrome_cache" ]]; then
+        cleanup_item "Chrome cache" "$chrome_cache" "Remove Chrome cache?"
+    else
+        success "Chrome cache not found"
+    fi
+
+    # Brave
+    for brave_cache in "/Users/iheitlager/Library/Caches/BraveSoftware/Brave-Browser" \
+                       "/Users/iheitlager/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cache"; do
+        [[ -d "$brave_cache" ]] || continue
+        cleanup_item "Brave cache" "$brave_cache" "Remove Brave cache?"
+    done
+
+    # Spotify
+    local spotify_cache="/Users/iheitlager/Library/Caches/com.spotify.client"
+    if [[ -d "$spotify_cache" ]]; then
+        cleanup_item "Spotify cache" "$spotify_cache" "Remove Spotify cache?"
+    else
+        success "Spotify cache not found"
+    fi
+}
+
+cleanup_orphans() {
+    print_header "Orphaned App Data Cleanup"
+
+    # Map of: "App Support dir" => "App bundle to check"
+    declare -A orphan_map
+    orphan_map["Wondershare Filmora 10"]="Wondershare Filmora Mac.app"
+    orphan_map["AI Stylizer for Filmora11"]="Wondershare Filmora Mac.app"
+    orphan_map["Filmora Instant Cutter"]="Wondershare Filmora Mac.app"
+    orphan_map["wondershare"]="Wondershare Filmora Mac.app"
+    orphan_map["com.wondershare.Installer"]=""   # installer cache, always orphaned
+    orphan_map["Skylum Software"]="Luminar AI.app"
+
+    local found_orphan=false
+    for support_dir in "${!orphan_map[@]}"; do
+        local full_path="/Users/iheitlager/Library/Application Support/$support_dir"
+        [[ -d "$full_path" ]] || continue
+
+        local app_bundle="${orphan_map[$support_dir]}"
+        local is_orphan=false
+
+        if [[ -z "$app_bundle" ]]; then
+            is_orphan=true  # Always orphaned (e.g. installer caches)
+        elif [[ ! -d "/Applications/$app_bundle" ]]; then
+            is_orphan=true
+        fi
+
+        if $is_orphan; then
+            found_orphan=true
+            local size=$(get_size "$full_path")
+            if [[ -z "$app_bundle" ]]; then
+                warn "Installer cache: $support_dir ($size)"
+            else
+                warn "Orphaned data for uninstalled '$app_bundle': $support_dir ($size)"
+            fi
+            cleanup_item "$support_dir" "$full_path" "Remove orphaned data '$support_dir'?"
+        fi
+    done
+    $found_orphan || success "No orphaned app data found"
 }
 
 cleanup_downloads() {
@@ -277,10 +460,14 @@ Cleans:
     • Redundant container runtimes (Docker Desktop, Podman)
     • Docker build cache and unused images
     • User caches (~/Library/Caches)
-    • Log files (~/Library/Logs)
+    • Log files (~/Library/Logs, /private/var/db/diagnostics)
     • Homebrew cache
     • npm, Cargo, Python caches
     • Trash
+    • Editor caches (VS Code, Cursor, Windsurf — caches + large extension toolchains)
+    • Browser caches (Chrome, Brave, Spotify)
+    • Orphaned app data (support dirs for uninstalled apps, installer caches)
+    • AI agent space (Claude Code temp files, Cline Puppeteer/checkpoints)
 
 EOF
         exit 0
@@ -304,13 +491,18 @@ EOF
         exit 0
     fi
 
-    # Run cleanup operations
-    cleanup_container_runtimes
-    cleanup_caches
-    cleanup_logs
-    cleanup_trash
-    cleanup_development
-    cleanup_downloads
+    # Run cleanup operations — continue even if a section fails
+    run_section() { "$@" || warn "Section '$1' encountered an error, continuing..."; }
+    run_section cleanup_container_runtimes
+    run_section cleanup_caches
+    run_section cleanup_logs
+    run_section cleanup_trash
+    run_section cleanup_development
+    run_section cleanup_editors
+    run_section cleanup_browsers
+    run_section cleanup_orphans
+    run_section cleanup_downloads
+    run_section cleanup_agent_space
 
     # Show results
     show_summary
