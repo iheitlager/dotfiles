@@ -325,6 +325,28 @@ cleanup_browsers() {
         success "Chrome cache not found"
     fi
 
+    # Chrome on-device AI model (Gemini Nano — auto-downloaded by Chrome, 8GB+)
+    local chrome_ai="/Users/iheitlager/Library/Application Support/Google/Chrome/OptGuideOnDeviceModel"
+    if [[ -d "$chrome_ai" ]]; then
+        local size=$(get_size "$chrome_ai")
+        warn "Chrome on-device AI model (Gemini Nano): $size"
+        info "Re-downloads if Chrome AI features are enabled — disable at chrome://settings/aiPage"
+        cleanup_item "Chrome AI model" "$chrome_ai" "Remove Chrome on-device AI model?"
+    else
+        success "Chrome AI model not found"
+    fi
+
+    # Chrome Service Worker cache (accumulates from every site visited)
+    local chrome_sw="/Users/iheitlager/Library/Application Support/Google/Chrome/Default/Service Worker"
+    if [[ -d "$chrome_sw" ]]; then
+        local size=$(get_size "$chrome_sw")
+        warn "Chrome Service Worker cache: $size"
+        info "Rebuilds automatically as you browse"
+        cleanup_item "Chrome Service Worker cache" "$chrome_sw" "Remove Chrome Service Worker cache?"
+    else
+        success "Chrome Service Worker cache not found"
+    fi
+
     # Brave
     for brave_cache in "/Users/iheitlager/Library/Caches/BraveSoftware/Brave-Browser" \
                        "/Users/iheitlager/Library/Application Support/BraveSoftware/Brave-Browser/Default/Cache"; do
@@ -338,6 +360,41 @@ cleanup_browsers() {
         cleanup_item "Spotify cache" "$spotify_cache" "Remove Spotify cache?"
     else
         success "Spotify cache not found"
+    fi
+}
+
+cleanup_adobe() {
+    print_header "Adobe Old Version Cleanup"
+
+    # Photoshop UXP plugin storage — keep only the latest version dir
+    local phsp_base="/Users/iheitlager/Library/Application Support/Adobe/UXP/PluginsStorage/PHSP"
+    if [[ -d "$phsp_base" ]]; then
+        local latest_ps=0
+        for vdir in "$phsp_base"/*/; do
+            local v="${vdir%/}"; v="${v##*/}"
+            [[ "$v" =~ ^[0-9]+$ ]] && [[ $v -gt $latest_ps ]] && latest_ps=$v
+        done
+        for vdir in "$phsp_base"/*/; do
+            local v="${vdir%/}"; v="${v##*/}"
+            [[ "$v" =~ ^[0-9]+$ ]] || continue
+            [[ $v -eq $latest_ps ]] && continue
+            local size=$(get_size "$vdir")
+            warn "Old Photoshop plugin storage: PS $v ($size) — current is PS $latest_ps"
+            cleanup_item "Photoshop PS $v plugin storage" "$vdir" "Remove old Photoshop PS $v plugin storage?"
+        done
+    else
+        success "No Photoshop plugin storage found"
+    fi
+
+    # Photoshop Beta UXP plugin storage
+    local phsp_beta="/Users/iheitlager/Library/Application Support/Adobe/UXP/PluginsStorage/PHSPBETA"
+    if [[ -d "$phsp_beta" ]]; then
+        local size=$(get_size "$phsp_beta")
+        warn "Photoshop Beta plugin storage: $size"
+        info "Only needed if you actively use Photoshop Beta"
+        cleanup_item "Photoshop Beta plugin storage" "$phsp_beta" "Remove Photoshop Beta plugin storage?"
+    else
+        success "No Photoshop Beta plugin storage found"
     fi
 }
 
@@ -379,6 +436,127 @@ cleanup_orphans() {
         fi
     done
     $found_orphan || success "No orphaned app data found"
+}
+
+cleanup_claude_versions() {
+    print_header "Claude Code Old Versions Cleanup"
+
+    # Auto-updater cache: ~/.local/share/claude/versions/
+    local versions_dir="$HOME/.local/share/claude/versions"
+    if [[ -d "$versions_dir" ]]; then
+        local current_version
+        current_version=$(claude --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        local old_versions=()
+        while IFS= read -r -d '' vdir; do
+            local vname="${vdir##*/}"
+            [[ "$vname" != "$current_version" ]] && old_versions+=("$vdir")
+        done < <(find "$versions_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+
+        if [[ ${#old_versions[@]} -gt 0 ]]; then
+            for vdir in "${old_versions[@]}"; do
+                local size=$(get_size "$vdir")
+                warn "Old Claude Code binary: ${vdir##*/} ($size) — current is ${current_version:-unknown}"
+                cleanup_item "Claude Code ${vdir##*/}" "$vdir" "Remove old Claude Code version ${vdir##*/}?"
+            done
+        else
+            success "No old Claude Code versions found in $versions_dir"
+        fi
+    fi
+
+    # VS Code extension old versions
+    ver_gt() {
+        # returns 0 (true) if $1 > $2 as semver
+        local IFS=.
+        local a=($1) b=($2)
+        for i in 0 1 2; do
+            [[ ${a[i]:-0} -gt ${b[i]:-0} ]] && return 0
+            [[ ${a[i]:-0} -lt ${b[i]:-0} ]] && return 1
+        done
+        return 1
+    }
+    local latest_ext=""
+    local latest_ver="0.0.0"
+    while IFS= read -r -d '' extdir; do
+        local ver
+        ver=$(basename "$extdir" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        if ver_gt "$ver" "$latest_ver"; then
+            latest_ver="$ver"
+            latest_ext="$extdir"
+        fi
+    done < <(find "$HOME/.vscode/extensions" -maxdepth 1 -type d -name "anthropic.claude-code-*" -print0 2>/dev/null)
+
+    local found_old_ext=false
+    while IFS= read -r -d '' extdir; do
+        [[ "$extdir" == "$latest_ext" ]] && continue
+        found_old_ext=true
+        local size=$(get_size "$extdir")
+        local ver
+        ver=$(basename "$extdir" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        warn "Old Claude Code VS Code extension: $ver ($size)"
+        cleanup_item "Claude Code extension $ver" "$extdir" "Remove old Claude Code extension $ver?"
+    done < <(find "$HOME/.vscode/extensions" -maxdepth 1 -type d -name "anthropic.claude-code-*" -print0 2>/dev/null)
+    $found_old_ext || success "No old Claude Code VS Code extensions found"
+}
+
+cleanup_claude_logs() {
+    print_header "Claude Code Logs & History Cleanup"
+
+    # Project conversation history (~/.claude/projects/)
+    local projects_dir="$HOME/.claude/projects"
+    if [[ -d "$projects_dir" ]]; then
+        local size=$(get_size "$projects_dir")
+        warn "Claude conversation history: $size"
+        info "JSONL logs from all past Claude Code sessions — cannot be recovered"
+        cleanup_item "Claude conversation history" "$projects_dir" "Remove all Claude conversation history?"
+    else
+        success "No Claude conversation history found"
+    fi
+
+    # Debug logs (~/.claude/debug/)
+    local debug_dir="$HOME/.claude/debug"
+    if [[ -d "$debug_dir" ]] && [[ -n "$(ls -A "$debug_dir" 2>/dev/null)" ]]; then
+        local size=$(get_size "$debug_dir")
+        warn "Claude debug logs: $size"
+        cleanup_item "Claude debug logs" "$debug_dir" "Remove Claude debug logs?"
+    else
+        success "No Claude debug logs found"
+    fi
+
+    # File edit history (~/.claude/file-history/)
+    local fh_dir="$HOME/.claude/file-history"
+    if [[ -d "$fh_dir" ]] && [[ -n "$(ls -A "$fh_dir" 2>/dev/null)" ]]; then
+        local size=$(get_size "$fh_dir")
+        warn "Claude file-history: $size"
+        cleanup_item "Claude file-history" "$fh_dir" "Remove Claude file-history?"
+    else
+        success "No Claude file-history found"
+    fi
+}
+
+cleanup_metal_caches() {
+    print_header "Metal Shader Cache Cleanup"
+
+    # Per-app Metal caches in /private/var/folders
+    local metal_count
+    metal_count=$(find /private/var/folders -name "com.apple.metal" -type d 2>/dev/null | wc -l | tr -d ' ')
+    if [[ $metal_count -gt 0 ]]; then
+        warn "Found $metal_count Metal shader cache dirs in /private/var/folders"
+        info "Rebuilt automatically on next GPU app launch"
+        if confirm "Remove Metal shader caches from /private/var/folders?"; then
+            find /private/var/folders -name "com.apple.metal" -type d -exec rm -rf {} + 2>/dev/null
+            success "Metal shader caches removed"
+        fi
+    else
+        success "No Metal shader caches found in /private/var/folders"
+    fi
+
+    # User-level Metal cache
+    local user_metal="$HOME/Library/Caches/com.apple.metal"
+    if [[ -d "$user_metal" ]]; then
+        cleanup_item "Metal shader cache (user)" "$user_metal" "Remove ~/Library/Caches/com.apple.metal?"
+    else
+        success "No user Metal shader cache found"
+    fi
 }
 
 cleanup_downloads() {
@@ -466,7 +644,12 @@ Cleans:
     • Trash
     • Editor caches (VS Code, Cursor, Windsurf — caches + large extension toolchains)
     • Browser caches (Chrome, Brave, Spotify)
+    • Adobe old Photoshop plugin storage (keeps only latest PS version)
+    • Chrome on-device AI model (Gemini Nano, 8GB+) and Service Worker cache
     • Orphaned app data (support dirs for uninstalled apps, installer caches)
+    • Old Claude Code versions (~/.local/share/claude/versions + ~/.vscode/extensions)
+    • Claude Code logs (~/.claude/projects, debug, file-history)
+    • Metal shader caches (/private/var/folders + ~/Library/Caches/com.apple.metal)
     • AI agent space (Claude Code temp files, Cline Puppeteer/checkpoints)
 
 EOF
@@ -500,7 +683,11 @@ EOF
     run_section cleanup_development
     run_section cleanup_editors
     run_section cleanup_browsers
+    run_section cleanup_adobe
     run_section cleanup_orphans
+    run_section cleanup_claude_versions
+    run_section cleanup_claude_logs
+    run_section cleanup_metal_caches
     run_section cleanup_downloads
     run_section cleanup_agent_space
 
