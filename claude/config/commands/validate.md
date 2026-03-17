@@ -329,19 +329,6 @@ With `--scope`, run only one validation dimension:
 | `tests` | Agent 3 only (test analysis, coverage, cleanup) | Before release, to assess test health |
 | `drift` | Agent 2 only (ADR drift, gap analysis) | After ADR changes, to find violations |
 
-## Integration with /ca-assurance
-
-If the `code-analyzer` MCP server is available, /validate enriches its analysis:
-
-- Use Cypher queries to verify traceability edges in the parsed graph
-- Compute scenario coverage from `TESTED_BY` edges
-- Check `IMPLEMENTED_BY` edges against `:Module` nodes (not ghost references)
-- Incorporate the ADR-0019 convergence assurance score
-
-When MCP is available, the conformance score uses graph-native data instead of
-file scanning — more reliable and deterministic. Agent 1 (link check) is largely
-replaced by Cypher queries in this mode.
-
 ## Philosophy
 
 /validate is an **interpretation engine**, not a pass/fail gate. The static tools

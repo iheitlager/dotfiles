@@ -32,7 +32,6 @@
       "Bash(pwd)",
       "Bash(which:*)",
       "Bash(cd:*)",
-      "mcp__*",
       "Bash(npm *)",
       "Bash(*-h*)"
     ],
@@ -58,6 +57,7 @@
       "Read(~/.config/secrets)"
     ]
   },
+  "model": "opus[1m]",
   "hooks": {
     "SessionStart": [
       {
@@ -83,15 +83,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/iheitlager/.claude/hooks/rtk-rewrite.sh"
-          }
-        ]
-      },
-      {
         "matcher": "Write",
         "hooks": [
           {
@@ -107,6 +98,7 @@
     "command": "~/.dotfiles/claude/config/statusline-powerline.sh"
   },
   "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true
   },
   "skipDangerousModePermissionPrompt": true,

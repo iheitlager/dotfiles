@@ -10,9 +10,7 @@ Read these ADRs if you need to understand the full metamodel. The key points are
 
 ## Steps
 
-1. **Verify `code-analyzer` MCP is connected.** If not, stop and tell the user to run `/ca-init` and restart.
-
-2. **Get project path** (cwd unless user specified). Note any analysis focus from the user's arguments.
+1. **Get project path** (cwd unless user specified). Note any analysis focus from the user's arguments.
 
 3. **Parse the project** using `parse_directory` and `get_summary` to understand the codebase structure.
 
