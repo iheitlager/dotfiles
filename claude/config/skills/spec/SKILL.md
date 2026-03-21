@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", "create proposal", "propose changes", mentions "openspec", or discusses system specifications and requirements documentation.
-version: 2.0.0
+description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", "create proposal", "propose changes", mentions "openspec", or discusses system specifications and requirements documentation. Supports functional specs (001-099) and cross-cutting concern specs (900-999).
+version: 2.1.0
 ---
 
 # OpenSpec Management Skill
@@ -172,9 +172,12 @@ OpenSpec uses a structured directory layout:
 ```
 .openspec/
 ├── specs/                          # Main specs (current truth)
-│   ├── 001-dotfiles-core/spec.md
-│   ├── 002-dotfiles-caching/spec.md
-│   └── 003-shortcuts-system/spec.md
+│   ├── 001-system-overview/spec.md   # Functional specs (001-099)
+│   ├── 002-infrastructure/spec.md
+│   ├── 012-ib-bridge/spec.md
+│   ├── 900-configuration/spec.md     # Concern specs (900-999)
+│   ├── 901-observability/spec.md
+│   └── 902-security/spec.md
 ├── adr/                            # Architectural Decision Records
 │   ├── index.md                    # Summary table of all ADRs
 │   └── 0001-<decision-name>.md    # Individual ADRs (zero-padded)
