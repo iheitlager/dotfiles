@@ -50,9 +50,9 @@ ue=32"
 # Bash history - XDG compliant
 mkdir -p "$XDG_STATE_HOME/bash" 2>/dev/null
 export HISTFILE="$XDG_STATE_HOME/bash/history"
-export HISTCONTROL=ignoreboth:erasedups
-export HISTSIZE=500
-export HISTFILESIZE=500
+export HISTCONTROL=ignoreboth
+export HISTSIZE=50000
+export HISTFILESIZE=50000
 export HISTIGNORE="&:ls:ll:la:l.:h:a:b:f:pwd:exit:c:x:clear"
 export HISTTIMEFORMAT="[%DT%T] " 
 

@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# dlog - Stream container logs through loglens TUI
+# Version: 1.3.0
+# Supports: Docker, Colima, Podman (auto-detected)
+
+set -euo pipefail
+
+DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+source "$DOTFILES/local/lib/shell-common.sh"
+
+require_cmd loglens
+
+_show_help() {
+    show_help << 'EOF'
+Usage: dlog [OPTIONS] [CONTAINER]
+
+Stream container logs through loglens. Auto-detects Docker, Colima, or Podman.
+
+  No argument    Stream all containers via compose
+  CONTAINER      Partial name match against a running container
+
+Options:
+  --since TIME   Show logs since timestamp (e.g. 1h, 30m, 2024-01-01)
+  --tail N       Start from last N lines (default: all)
+  -h, --help     Show this help
+
+Examples:
+  dlog                    # all compose services
+  dlog myapp              # single container by partial name
+  dlog myapp --tail 200   # last 200 lines then follow
+  dlog myapp --since 1h   # last hour of logs
+EOF
+}
+
+# --- Runtime detection ---
+# Sets CMD and DOCKER_HOST as needed.
+# Priority: colima (running) > podman (running) > docker
+_detect_runtime() {
+    if has_cmd colima && colima status 2>/dev/null | grep -q "colima is running"; then
+        local socket
+        socket=$(colima status 2>/dev/null | grep -o 'docker socket: [^ ]*' | awk '{print $3}')
+        socket="${socket:-${XDG_CONFIG_HOME:-$HOME/.config}/colima/default/docker.sock}"
+        export DOCKER_HOST="unix://$socket"
+        CMD=docker
+        RUNTIME=colima
+        return
+    fi
+
+    if has_cmd podman && podman machine inspect 2>/dev/null | grep -q '"State": "running"'; then
+        CMD=podman
+        RUNTIME=podman
+        return
+    fi
+
+    if has_cmd docker && docker info &>/dev/null; then
+        CMD=docker
+        RUNTIME=docker
+        return
+    fi
+
+    error "No container runtime found (tried colima, podman, docker)"
+    exit 1
+}
+
+# --- Arg parsing ---
+CONTAINER=""
+LOG_OPTS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            _show_help
+            exit 0
+            ;;
+        --since|--tail)
+            LOG_OPTS+=("$1" "$2")
+            shift 2
+            ;;
+        -*)
+            error "Unknown option: $1"
+            _show_help
+            exit 1
+            ;;
+        *)
+            CONTAINER="$1"
+            shift
+            ;;
+    esac
+done
+
+_detect_runtime
+info "Runtime: $RUNTIME"
+
+# --- Temp file + cleanup ---
+# Use a regular file (not fifo) so loglens tui -f can seek and follow properly
+LOGFILE=$(mktemp "/tmp/dlog.XXXXXX")
+LOG_PID=""
+
+cleanup() {
+    if [[ -n "$LOG_PID" ]]; then
+        kill "$LOG_PID" 2>/dev/null || true
+    else
+        jobs -p | xargs -r kill 2>/dev/null || true
+    fi
+    rm -f "$LOGFILE"
+}
+trap cleanup EXIT INT TERM
+
+# --- Stream ---
+if [[ -z "$CONTAINER" ]]; then
+    # Try compose first (works when run from a project dir with compose.yml)
+    if $CMD compose ps --quiet 2>/dev/null | grep -q .; then
+        info "Streaming all compose services → loglens"
+        $CMD compose logs -f "${LOG_OPTS[@]}" >> "$LOGFILE" 2>&1 &
+        LOG_PID=$!
+    else
+        # Fall back: stream all running containers in parallel, prefixed by name
+        mapfile -t running < <($CMD ps --format '{{.Names}}')
+        if [[ ${#running[@]} -eq 0 ]]; then
+            error "No running containers found"
+            exit 1
+        fi
+        info "Streaming ${#running[@]} containers → loglens"
+        for name in "${running[@]}"; do
+            $CMD logs -f "${LOG_OPTS[@]}" "$name" 2>&1 \
+                | awk -v c="$name" '{print "["c"] "$0}' >> "$LOGFILE" &
+        done
+        LOG_PID=""
+    fi
+else
+    # Match against container name OR image name
+    resolved=$($CMD ps --format '{{.Names}}\t{{.Image}}' \
+        | grep -m1 "$CONTAINER" \
+        | awk '{print $1}' || true)
+    if [[ -z "$resolved" ]]; then
+        error "No running container matching: $CONTAINER"
+        echo ""
+        $CMD ps --format '  {{.Names}}\t{{.Image}}\t{{.Status}}' | column -t
+        exit 1
+    fi
+    info "Streaming $resolved → loglens"
+    $CMD logs -f "${LOG_OPTS[@]}" "$resolved" >> "$LOGFILE" 2>&1 &
+    LOG_PID=$!
+fi
+
+# Brief pause so docker logs can write the first batch before loglens opens
+sleep 0.3
+
+loglens tui -f "$LOGFILE"

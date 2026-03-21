@@ -174,9 +174,8 @@ update_prompt() {
     # Tell terminal the current directory (OSC 7) for new tab/window behavior
     printf '\e]7;file://%s%s\e\\' "${HOSTNAME}" "${PWD// /%20}"
     
-    # Share history across terminals: append new commands, then reload
-    history -a  # Append new lines to history file
-    history -n  # Read new lines from history file
+    # Write new commands to history file (session-isolated; no cross-session reload)
+    history -a
 }
 
 PROMPT_COMMAND="update_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"

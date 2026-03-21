@@ -516,7 +516,14 @@ if ! sudo -v; then
 fi
 
 # start with brew itself
-source "$DOTFILES/homebrew/brew_install.sh" 2>&1 || exit 1
+printf "  [ \033[00;34m..\033[0m ] Updating Homebrew..."
+tmplog=$(mktemp)
+source "$DOTFILES/homebrew/brew_install.sh" >"$tmplog" 2>&1 || {
+    printf "\r  [ \033[00;31mFAIL\033[0m ] Updating Homebrew\n"
+    cat "$tmplog"; rm -f "$tmplog"; exit 1
+}
+rm -f "$tmplog"
+printf "\r  [ \033[00;32m✓\033[0m  ] Homebrew up to date        \n"
 
 # Clean up stale Homebrew upgrade dirs before installing
 stale_dirs=$(find /opt/homebrew/Caskroom -maxdepth 2 -type d -name '*.upgrading' 2>/dev/null)
@@ -532,27 +539,30 @@ fi
 for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
 do
     topic=$(basename $(dirname "$src"))
-    printf "  [ \033[00;34m..\033[0m ] Processing installer: %s\n" "$topic"
+    printf "  [ \033[00;34m..\033[0m ] Processing installer: %s" "$topic"
     tmplog=$(mktemp)
     if [[ "$VERBOSE" == true ]]; then
-        source "${src}" 2>&1 || { echo "❌ Failed: $topic"; exit 1; }
+        printf "\n"
+        source "${src}" 2>&1 || { printf "  [ \033[00;31mFAIL\033[0m ] Failed: %s\n" "$topic"; exit 1; }
     else
         source "${src}" >"$tmplog" 2>&1 || {
-            printf "  [ \033[00;31mFAIL\033[0m ] Error in %s:\n" "$topic"
+            printf "\r  [ \033[00;31mFAIL\033[0m ] Error in %s:\n" "$topic"
             cat "$tmplog"
             rm -f "$tmplog"
             exit 1
         }
         rm -f "$tmplog"
     fi
+    printf "\r  [ \033[00;32m✓\033[0m  ] Done: %-30s\n" "$topic"
 done
 
 # Finally, export the Brewfile
-printf "  [ \033[00;34m..\033[0m ] Exporting current Homebrew installations to Brewfile...\n"
+printf "  [ \033[00;34m..\033[0m ] Exporting Homebrew state to Brewfile..."
 if [[ "$VERBOSE" == true ]]; then
+    printf "\n"
     brew bundle dump --file="$BREWFILE" --force --verbose
 else
-    brew bundle dump --file="$BREWFILE" --force
+    brew bundle dump --file="$BREWFILE" --force 2>/dev/null
 fi
-echo "✅ Brewfile generated at $BREWFILE"
-echo "✅ All done!"
+printf "\r  [ \033[00;32m✓\033[0m  ] Brewfile saved to %s\n" "$BREWFILE"
+printf "  [ \033[00;32m✓\033[0m  ] All done!\n"

@@ -53,7 +53,13 @@ if [[ -n "$total_cost" ]]; then
 else
     input_tokens="$current_input"
     output_tokens=$(echo "$input" | jq -r '.context_window.current_usage.output_tokens // 0')
-    cost=$(awk -v input="${input_tokens:-0}" -v output="${output_tokens:-0}" 'BEGIN {printf "%.4f", (input * 3 + output * 15) / 1000000}')
+    # Model-aware pricing (per million tokens)
+    case "$model" in
+        *"opus"*)   input_rate=15;  output_rate=75  ;;
+        *"haiku"*)  input_rate=0.8; output_rate=4   ;;
+        *)          input_rate=3;   output_rate=15  ;;  # sonnet default
+    esac
+    cost=$(awk -v input="${input_tokens:-0}" -v output="${output_tokens:-0}" -v ir="$input_rate" -v or="$output_rate" 'BEGIN {printf "%.4f", (input * ir + output * or) / 1000000}')
 fi
 
 # Format context display

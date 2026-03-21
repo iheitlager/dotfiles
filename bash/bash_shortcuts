@@ -34,7 +34,7 @@ shortcut "Ctrl+_" "Undo last edit"
 
 echo ""
 echo "History:"
-shortcut "Ctrl+R" "Search command history"
+shortcut "Ctrl+R" "Search command history (fzf-powered, see fzf shortcuts)"
 shortcut "Ctrl+P" "Previous command"
 shortcut "Ctrl+N" "Next command"
 shortcut "!!" "Repeat last command"

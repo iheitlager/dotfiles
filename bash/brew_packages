@@ -13,6 +13,7 @@ brew install zoxide || brew upgrade zoxide
 brew install jless || brew upgrade jless
 brew install flock || brew upgrade flock
 brew install htop || brew upgrade htop
+brew install duf || brew upgrade duf
 
 packages=(fd jq yq git-delta fzf bat eza ripgrep tldr glow)
 for pkg in "${packages[@]}"; do

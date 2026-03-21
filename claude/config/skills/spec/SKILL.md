@@ -71,12 +71,63 @@ This distinction prevents confusion about what's current versus what's proposed.
 - [OpenSpec Repository](https://github.com/Fission-AI/OpenSpec)
 - [OpenSpec Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md)
 
+## Spec Numbering Scheme: Functional vs Concern Specs
+
+Specs are organized into **two ranges** by type:
+
+### Functional Specs (001–099)
+
+Describe **what the system does** — bounded services, modules, and features.
+
+```
+001  system-overview      Vision, goals, architecture
+002  infrastructure       Launch, schedule, shared state
+003  services             IB Gateway, CLI
+004  trading-core         Two-factor control, trade log
+005  agents               4 agents + prompt system
+006  operations           KPI metrics, paper/live transition
+007  server               Trading Engine, REST API, TUI
+008  execution            Order lifecycle, IB submission
+009  kelly                Position sizing, portfolio constraints
+011  ticker-vector        Source-tagged price subscriptions
+012  ib-bridge            ZMQ service, market data, orders
+013  ib-gateway           IBConnectionManager interface
+```
+
+### Concern Specs (900–999)
+
+Describe **cross-cutting quality attributes** — how the system does it, applied across all functional specs.
+
+```
+900  configuration        XDG layout, TOML config, service discovery, validation
+901  observability        Logging, health checks, tracing, version/config log
+902  security             Secrets management, API keys, auth, permissions
+903  resilience           Error handling, circuit breakers, reconnection policy
+904  performance          Latency budgets, throughput, resource limits
+905  testing              Strategy, coverage targets, test categories
+```
+
+### Key Distinction
+
+- A **functional spec** says "IB Bridge handles market data subscriptions"
+- A **concern spec** says "All services MUST log structured JSON on startup"
+- An **ADR** explains *why* a specific choice was made (e.g., "why TOML over YAML")
+
+Concern specs set **cross-cutting policy**; functional specs apply it to their specific service. For example, 903-resilience says "all services MUST reconnect within 30s", and 012-ib-bridge details *how* ib-bridge does it.
+
+### Numbering Rules
+
+- **001–099**: Functional specs (next available in sequence)
+- **100–899**: Reserved for future use
+- **900–999**: Concern specs (cross-cutting, non-functional)
+- When creating a spec, first determine if it's functional or a concern, then pick the correct range
+
 ## When to Use This Skill
 
 Invoke this skill when the user wants to:
 - **Browse specs**: View existing specifications interactively
 - **List specs**: See available specifications and their status
-- **Create specs**: Generate new specification files
+- **Create specs**: Generate new specification files (functional or concern)
 - **Edit specs**: Modify existing specifications
 - **Validate specs**: Check if specs follow the proper structure
 - **Format specs**: Reformat specs to match expected template
@@ -168,18 +219,30 @@ Ask the user:
 
 ### Step 2: Determine Directory Number
 
-Check existing specs to find the next number:
+First, decide if this is a **functional spec** or a **concern spec**:
+
+- **Functional** (what a service/module does): use range **001–099**
+- **Concern** (cross-cutting quality attribute): use range **900–999**
+
+Then check existing specs to find the next number in that range:
 
 ```bash
-ls ~/.dotfiles/.openspec/specs/
+ls .openspec/specs/
 ```
 
-Use the next sequential number (e.g., if last is `003-`, use `004-`).
+Examples:
+- Next functional spec after `013-` → `014-`
+- First concern spec → `900-`
+- Next concern spec after `901-` → `902-`
 
 ### Step 3: Create Directory and File
 
 ```bash
-mkdir -p ~/.dotfiles/.openspec/specs/004-system-name
+# Functional spec
+mkdir -p .openspec/specs/014-system-name
+
+# Concern spec
+mkdir -p .openspec/specs/900-configuration
 ```
 
 ### Step 4: Generate Spec File
@@ -798,11 +861,12 @@ When the user asks to format a spec, restructure it to match the template.
 6. Current Implementation (optional)
 7. Testing Requirements (optional)
 8. Dependencies (optional)
-9. Non-Functional Requirements (optional)
-10. References
-11. Internal Documentation
-12. License/Copyright
+9. References
+10. Internal Documentation
+11. License/Copyright
 ```
+
+**Note**: Non-functional / cross-cutting requirements belong in **concern specs** (900-range), not as a section within functional specs. If a functional spec needs to reference a cross-cutting policy, link to the concern spec instead of duplicating the requirement.
 
 **Note**: For delta specs in `.openspec/changes/`, use lifecycle markers: `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`
 

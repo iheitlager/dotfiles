@@ -17,5 +17,9 @@ mkcert -install
 
 brew install --cask 1password-cli || brew upgrade --cask 1password-cli
 brew install --cask pgadmin4 || brew upgrade --cask pgadmin4
+brew install --cask klogg || brew upgrade --cask klogg
+
+brew tap Caelrith/loglens
+brew install loglens || brew upgrade loglens
 
 export PATH=$TMPPATH
