@@ -11,6 +11,7 @@ Merge a GitHub PR with full pre-flight checks, clean up, and ticket verification
 ## Features
 
 - **Pre-flight checks** — Verify PR is ready (approved, checks passing, no conflicts)
+- **Changelog & version** — Update CHANGELOG.md and bump version, commit before merge
 - **Sync & clean** — Update local repo, prune stale refs, delete merged branches
 - **Return to main** — Automatically switch back to main branch
 - **Ticket verification** — Confirm linked issues will be closed
@@ -90,7 +91,57 @@ Branch to delete: feat/oauth-support
 Proceed? [Y/n]
 ```
 
-### 3. Detect Linked Issues
+### 3. Update Changelog & Version, Commit
+
+Before merging, update `CHANGELOG.md` and bump the version on the feature branch, then commit:
+
+**Determine version bump** from branch type:
+- `feat/*` → minor bump (0.X.0)
+- `fix/*` → patch bump (0.0.X)
+- All others → skip version bump (no version change needed)
+
+**Update CHANGELOG.md** — add a new section at the top with the new version and today's date, summarizing commits since the last release:
+
+```bash
+# Get commits since last tag
+git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD \
+  --pretty=format:"- %s" --no-merges
+```
+
+**Bump version** in all three locations (if applicable):
+1. `src/<package>/__init__.py` — `__version__ = "X.Y.Z"`
+2. `README.md` — version badge or `## Version: X.Y.Z`
+3. `CHANGELOG.md` — new `## [X.Y.Z] - YYYY-MM-DD` section
+
+**Commit the release prep:**
+
+```bash
+git add CHANGELOG.md README.md src/*/  # or wherever version lives
+git commit -m "chore: release vX.Y.Z"
+git push
+```
+
+If no version files exist in this project (non-Python, etc.), only update `CHANGELOG.md` and commit with `chore: update changelog`.
+
+**Output:**
+
+```
+Changelog & Version Update
+═══════════════════════════════════════════════════════════════
+
+Branch: feat/oauth-support → minor bump
+Version: 0.3.1 → 0.4.0
+
+Updated:
+  ✓ CHANGELOG.md — added [0.4.0] section
+  ✓ src/mypackage/__init__.py — bumped to 0.4.0
+  ✓ README.md — updated version badge
+
+Committed: abc1234 chore: release v0.4.0
+Pushed to origin/feat/oauth-support
+```
+
+### 5. Detect Linked Issues
 
 Find issues that will be closed by this merge:
 
@@ -119,7 +170,7 @@ If this PR should close an issue, consider:
 Closes #N"
 ```
 
-### 4. Merge the PR
+### 6. Merge the PR
 
 **Important**: `gh pr merge` fails when the base branch (e.g. `main`) is checked out in another worktree. Always use the GitHub API directly to avoid this:
 
@@ -138,7 +189,7 @@ gh api -X DELETE repos/$REPO/git/refs/heads/$BRANCH 2>/dev/null || true
 
 Do NOT use `gh pr merge` — it attempts local git operations that fail when the base branch is in use by a worktree.
 
-### 5. Sync Local Repository
+### 7. Sync Local Repository
 
 **Worktree-aware sync**: determine which worktree owns the feature branch, then operate from there.
 
@@ -169,7 +220,7 @@ else
 fi
 ```
 
-### 6. Verify Linked Issues
+### 8. Verify Linked Issues
 
 After merge, confirm issues were closed:
 
@@ -203,7 +254,7 @@ To close manually:
   gh issue close 99 --reason completed --comment "Closed via PR #123"
 ```
 
-### 7. Complete Swarm Job & Notify Agents
+### 9. Complete Swarm Job & Notify Agents
 
 After merge, update the swarm queue and signal other agents:
 
@@ -240,6 +291,9 @@ This ensures:
 PR Merged Successfully
 ═══════════════════════════════════════════════════════════════
 
+✓ CHANGELOG.md updated — [0.4.0] section added
+✓ Version bumped: 0.3.1 → 0.4.0
+✓ Release commit: abc1233 chore: release v0.4.0
 ✓ PR #123 merged into main
 ✓ Remote branch 'feat/oauth-support' deleted
 ✓ Local branch 'feat/oauth-support' deleted
@@ -274,12 +328,15 @@ Dry Run: PR #123
 ═══════════════════════════════════════════════════════════════
 
 Would perform:
-  1. Merge PR #123 into main (squash)
-  2. Delete remote branch: origin/feat/oauth-support
-  3. Delete local branch: feat/oauth-support
-  4. Switch to main branch
-  5. Pull latest changes
-  6. Prune stale refs
+  1. Update CHANGELOG.md with [0.4.0] section
+  2. Bump version: 0.3.1 → 0.4.0 (minor, feat branch)
+  3. Commit: chore: release v0.4.0
+  4. Merge PR #123 into main (squash)
+  5. Delete remote branch: origin/feat/oauth-support
+  6. Delete local branch: feat/oauth-support
+  7. Switch to main branch
+  8. Pull latest changes
+  9. Prune stale refs
 
 Issues that would close:
   #101 - Add OAuth login option
