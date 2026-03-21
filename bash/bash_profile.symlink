@@ -58,7 +58,6 @@ export HISTTIMEFORMAT="[%DT%T] "
 
 # PATH setup - only done once in login shell
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-export PATH="$PATH:/Library/TeX/texbin"  # for pdflatex/mactex
 export PATH="$HOME/.local/bin:$PATH"     # for uv and other user binaries
 #export PATH="/opt/local/bin:/opt/local/sbin:$PATH"  # MacPorts
 eval "$(/opt/homebrew/bin/brew shellenv)"  # Homebrew
