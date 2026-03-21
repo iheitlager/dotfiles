@@ -6,8 +6,6 @@
     "allow": [
       "Read",
       "Edit",
-      "Glob",
-      "Grep",
       "Bash(tmux:*)",
       "Bash(podman:*)",
       "Bash(uv:*)",
@@ -32,6 +30,7 @@
       "Bash(pwd)",
       "Bash(which:*)",
       "Bash(cd:*)",
+      "mcp__*",
       "Bash(npm *)",
       "Bash(*-h*)"
     ],
@@ -51,10 +50,7 @@
       "Write(~/.aws/*)",
       "Write(~/.config/secrets)",
       "Write(/etc/*)",
-      "Write(~/.crontab)",
-      "Read(~/.ssh/*)",
-      "Read(~/.aws/*)",
-      "Read(~/.config/secrets)"
+      "Write(~/.crontab)"
     ]
   },
   "model": "opus[1m]",
@@ -80,42 +76,18 @@
           }
         ]
       }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/iheitlager/.dotfiles/claude/hooks/auto-approve.sh"
-          }
-        ]
-      }
     ]
   },
   "statusLine": {
     "type": "command",
-    "command": "~/.dotfiles/claude/config/statusline-powerline.sh"
+    "command": "~/.claude/statusline.sh"
   },
-  "enabledPlugins": {
-    "frontend-design@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true
-    "frontend-design@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {
-    "claude-code-plugins": {
-      "source": {
-        "source": "github",
-        "repo": "anthropics/claude-code"
-      }
-    }
-  },
-  "skipDangerousModePermissionPrompt": true,
   "teammateMode": "tmux",
   "additionalDirectories": [
     ".",
     "~/.local/state/agent-context",
     "~/.dotfiles",
-    "~/wc/**"
+    "~/wc/**",
+    "/workspace/**"
   ]
 }

@@ -119,3 +119,5 @@ alias hg='history | command grep --color=auto -i -E'
 
 # Servers
 alias openclaw='ssh openclaw'
+
+alias nvim-clean-swp='rm -f ~/.local/state/nvim/swap/*.swp ~/.local/state/nvim/swap/*.swo 2>/dev/null && echo "nvim swap files cleared"'
