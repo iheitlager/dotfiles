@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# ben — personal AI assistant launcher
+# Switches to the BEN_ROOT workspace and starts Claude Code as my interactive assistant.
+
+cd "$BEN_ROOT"
+exec claude
