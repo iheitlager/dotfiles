@@ -97,16 +97,17 @@ cleanup_container_runtimes() {
         success "Docker Desktop not found (good!)"
     fi
 
-    # Podman
-    if [[ -d ~/.local/share/containers/podman ]]; then
+    # Podman (skip if brew-managed — it's intentionally installed)
+    if [[ -d ~/.local/share/containers/podman ]] && ! brew list --formula podman &>/dev/null; then
         local size=$(get_size ~/.local/share/containers/podman)
-        warn "Podman found ($size)"
-        info "You're using Colima - Podman is redundant"
+        warn "Podman data found ($size) but podman is not brew-installed"
         cleanup_item "Podman" \
                      ~/.local/share/containers/podman \
-                     "Remove Podman?"
+                     "Remove orphaned Podman data?"
+    elif [[ -d ~/.local/share/containers/podman ]]; then
+        success "Podman installed via brew, keeping"
     else
-        success "Podman not found (good!)"
+        success "Podman not found"
     fi
 
     # Docker build cache (Colima)

@@ -9,6 +9,18 @@ BREWFILE="${XDG_DATA_HOME:-$HOME/.local/share}/Brewfile"
 trap 'echo ""; echo "❌ Installation interrupted by user"; exit 130' INT
 set -e
 
+# Cache sudo credentials and keep them alive for the duration of the script
+sudo_keepalive() {
+    if ! sudo -v 2>/dev/null; then
+        echo "❌ sudo authentication failed or was cancelled"
+        exit 1
+    fi
+    # Refresh sudo timestamp in the background until this script exits
+    while true; do sudo -n true; sleep 50; kill -0 "$$" || exit; done 2>/dev/null &
+    SUDO_KEEPALIVE_PID=$!
+    trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null; echo ""; echo "❌ Installation interrupted by user"; exit 130' INT EXIT
+}
+
 print_usage() {
     local HELP="cat"
     if command -v bat >/dev/null 2>&1; then
@@ -499,6 +511,7 @@ fi
 
 # Check if Brewfile exists and --new flag is not set and --skip flag is not set
 if [[ -f "$BREWFILE" && "$USE_NEW" == false && "$SKIP_BUNDLE" == false ]]; then
+    sudo_keepalive
     echo "📦 Using existing Brewfile: $BREWFILE"
     echo "🔄 Installing packages from Brewfile..."
     if [[ "$VERBOSE" == true ]]; then
@@ -510,10 +523,7 @@ if [[ -f "$BREWFILE" && "$USE_NEW" == false && "$SKIP_BUNDLE" == false ]]; then
 fi
 
 # make sure we get the password early
-if ! sudo -v; then
-    echo "❌ sudo authentication failed or was cancelled"
-    exit 1
-fi
+sudo_keepalive
 
 # start with brew itself
 printf "  [ \033[00;34m..\033[0m ] Updating Homebrew..."
