@@ -42,6 +42,7 @@
       "Bash(diff:*)",
       "Bash(python*)",
       "Bash(pip:*)",
+      "Bash(cargo:*)",
       "Bash(brew:*)",
       "Bash(make:*)",
       "Bash(sleep:*)",
