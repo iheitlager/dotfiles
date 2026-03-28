@@ -500,7 +500,7 @@ if [[ "$EXPORT_ONLY" == true ]]; then
     if [[ "$VERBOSE" == true ]]; then
         brew bundle dump --file="$BREWFILE" --force --verbose
     else
-        brew bundle dump --file="$BREWFILE" --force
+        brew bundle dump --file="$BREWFILE" --force 2>/dev/null
     fi
     echo "✅ Brewfile generated at $BREWFILE"
     exit 0
