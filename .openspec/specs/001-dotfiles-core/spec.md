@@ -1621,7 +1621,7 @@ This section provides project-specific links for tracking and traceability.
 ### Related Specifications
 
 - [002-dotfiles-caching](../002-dotfiles-caching/spec.md) - Shell integration caching system
-- [003-shortcuts-system](../003-shortcuts-system/spec.md) - Keyboard shortcuts documentation
+- [004-shortcuts-system](../004-shortcuts-system/spec.md) - Keyboard shortcuts documentation
 
 ---
 
@@ -1639,7 +1639,7 @@ This section provides project-specific links for tracking and traceability.
 - [docs/xdg_setup.md](docs/xdg_setup.md) - XDG implementation details
 - [docs/coloring.md](docs/coloring.md) - Modern CLI tools and colors
 - [.openspec/specs/dotfiles-caching/spec.md](.openspec/specs/002-dotfiles-caching/spec.md) - Shell integration caching system
-- [.openspec/specs/shortcuts-system/spec.md](../003-shortcuts-system/spec.md) - Keyboard shortcuts system
+- [.openspec/specs/shortcuts-system/spec.md](../004-shortcuts-system/spec.md) - Keyboard shortcuts system
 
 ---
 

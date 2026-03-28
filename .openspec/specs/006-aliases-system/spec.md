@@ -293,7 +293,7 @@ This section provides project-specific links for tracking and traceability.
 
 - [001-dotfiles-core](../001-dotfiles-core/spec.md) - Core dotfiles system
 - [002-dotfiles-caching](../002-dotfiles-caching/spec.md) - Caching infrastructure used by aliases
-- [003-shortcuts-system](../003-shortcuts-system/spec.md) - Similar system for keyboard shortcuts
+- [004-shortcuts-system](../004-shortcuts-system/spec.md) - Similar system for keyboard shortcuts
 
 ---
 
@@ -307,7 +307,7 @@ This section provides project-specific links for tracking and traceability.
 
 - [Dotfiles System Core Specification](../001-dotfiles-core/spec.md) - Main dotfiles system
 - [Dotfiles Caching Specification](../002-dotfiles-caching/spec.md) - Caching system (aliases uses this)
-- [Shortcuts System Specification](../003-shortcuts-system/spec.md) - Parallel system for keyboard shortcuts
+- [Shortcuts System Specification](../004-shortcuts-system/spec.md) - Parallel system for keyboard shortcuts
 
 ---
 

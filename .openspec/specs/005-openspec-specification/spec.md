@@ -557,7 +557,7 @@ Within each, files can use:
 ### Related Specifications
 
 - [OpenSpec: Dotfiles Core](.openspec/specs/001-dotfiles-core/spec.md)
-- [OpenSpec: Shortcuts System](.openspec/specs/003-shortcuts-system/spec.md)
+- [OpenSpec: Shortcuts System](.openspec/specs/004-shortcuts-system/spec.md)
 
 ---
 
@@ -605,7 +605,7 @@ This section provides project-specific links for tracking and traceability.
 This is the meta-specification that defines the OpenSpec format itself. All other specs follow this specification:
 - [001-dotfiles-core](../001-dotfiles-core/spec.md)
 - [002-dotfiles-caching](../002-dotfiles-caching/spec.md)
-- [003-shortcuts-system](../003-shortcuts-system/spec.md)
+- [004-shortcuts-system](../004-shortcuts-system/spec.md)
 
 ---
 

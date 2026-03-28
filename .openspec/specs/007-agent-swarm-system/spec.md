@@ -692,7 +692,7 @@ Supporting files:
 
 - `~/.dotfiles/docs/agent-system.md` — Architecture and usage guide
 - Spec 001: `001-dotfiles-core` — Core dotfiles system
-- Spec 005: `005-aliases-system` — Shell aliases (includes swarm-job aliases)
+- Spec 005: `006-aliases-system` — Shell aliases (includes swarm-job aliases)
 
 ---
 
