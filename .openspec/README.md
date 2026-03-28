@@ -23,13 +23,22 @@ OpenSpec follows these core principles:
 ```
 .openspec/
 ├── README.md                    # This file
+├── architecture/                # C4 architecture models (YAML + markdown)
+├── changes/                     # Delta specs (proposals)
+├── agent-system.md              # Agent swarm system guide
+├── grounded-c4.md               # Grounded C4 design doc
+├── openspec-commands.md         # OpenSpec CLI reference
 └── specs/                       # All specifications
     ├── 001-dotfiles-core/
-    │   └── spec.md             # Core dotfiles system spec
     ├── 002-dotfiles-caching/
-    │   └── spec.md             # Caching system spec
-    └── 003-shortcuts-system/
-        └── spec.md             # Keyboard shortcuts spec
+    ├── 003-brew-management/
+    ├── 004-shortcuts-system/
+    ├── 005-openspec-specification/
+    ├── 006-aliases-system/
+    ├── 007-agent-swarm-system/
+    ├── 008-hyperlinks-system/
+    ├── 009-grounded-c4-architecture/
+    └── 010-launch-agents/
 ```
 
 Each specification follows a standard format:
@@ -210,35 +219,27 @@ spec
 
 ## Current Specifications
 
-### Dotfiles System Core
-**Location:** `specs/001-dotfiles-core/spec.md`
-**Status:** Implemented
-**Description:** Complete specification of the modular, XDG-compliant dotfiles management system with topic-based organization, automated bootstrapping, and package management.
+| # | Spec | Status | Description |
+|---|------|--------|-------------|
+| 001 | [Dotfiles Core](specs/001-dotfiles-core/spec.md) | Implemented | Topic-based organization, XDG compliance, bootstrapping |
+| 002 | [Caching System](specs/002-dotfiles-caching/spec.md) | Implemented | Mtime-based shell startup caching |
+| 003 | [Brew Management](specs/003-brew-management/spec.md) | Implemented | Hybrid imperative/declarative package management |
+| 004 | [Shortcuts System](specs/004-shortcuts-system/spec.md) | Implemented | Dynamic keyboard shortcuts discovery |
+| 005 | [OpenSpec Format](specs/005-openspec-specification/spec.md) | Implemented | Specification format, validation, traceability |
+| 006 | [Aliases System](specs/006-aliases-system/spec.md) | Implemented | Dynamic shell aliases with smart caching |
+| 007 | [Agent Swarm](specs/007-agent-swarm-system/spec.md) | Implemented | Multi-agent coordination with worktree isolation |
+| 008 | [Hyperlinks](specs/008-hyperlinks-system/spec.md) | Implemented | Terminal hyperlink integration |
+| 009 | [Grounded C4](specs/009-grounded-c4-architecture/spec.md) | Implemented | C4 architecture modeling from code |
+| 010 | [Launch Agents](specs/010-launch-agents/spec.md) | Implemented | tmux swarm session management |
 
-### Dotfiles Caching System
-**Location:** `specs/002-dotfiles-caching/spec.md`
-**Status:** Implemented
-**Description:** Mtime-based caching system for shell integrations that improves shell startup performance through aggressive caching with automatic invalidation.
+### Supporting Documents
 
-### Keyboard Shortcuts System
-**Location:** `specs/003-shortcuts-system/spec.md`
-**Status:** Implemented
-**Description:** Dynamic keyboard shortcuts documentation system that automatically discovers and displays keybindings across all dotfiles modules.
-
-### OpenSpec Specification Format
-**Location:** `specs/004-openspec-specification/spec.md`
-**Status:** Implemented
-**Description:** Structured specification format with validation rules, traceability tracking, and coverage analysis for documenting system requirements and acceptance criteria.
-
-### Aliases Documentation System
-**Location:** `specs/005-aliases-system/spec.md`
-**Status:** Implemented
-**Description:** Dynamic, modular aliases documentation system that automatically discovers and displays shell aliases across all dotfiles topics with smart caching.
-
-### Agent Swarm System
-**Location:** `specs/006-agent-swarm-system/spec.md`
-**Status:** Implemented
-**Description:** Multi-agent orchestration system for coordinating AI coding agents working in parallel on a shared repository with git worktree isolation and file-based job queue.
+| Document | Location | Purpose |
+|----------|----------|---------|
+| [Agent System Guide](agent-system.md) | `.openspec/` | Architecture and usage for agent swarm |
+| [Grounded C4 Design](grounded-c4.md) | `.openspec/` | Design doc for C4 architecture tooling |
+| [OpenSpec Commands](openspec-commands.md) | `.openspec/` | CLI reference for `spec` command |
+| [Architecture Models](architecture/) | `.openspec/architecture/` | YAML C4 models (landscape, resources, sequences) |
 
 ---
 
@@ -334,7 +335,8 @@ The system prompt includes architecture references:
 
 For understanding the dotfiles system architecture:
 - **Core system spec**: `~/.dotfiles/.openspec/specs/001-dotfiles-core/spec.md`
-- **Shortcuts system**: `~/.dotfiles/.openspec/specs/003-shortcuts-system/spec.md`
+- **Brew management**: `~/.dotfiles/.openspec/specs/003-brew-management/spec.md`
+- **Agent swarm**: `~/.dotfiles/.openspec/specs/007-agent-swarm-system/spec.md`
 - **XDG integration**: `~/.dotfiles/docs/xdg_setup.md`
 ```
 

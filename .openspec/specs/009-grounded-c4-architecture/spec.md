@@ -516,7 +516,7 @@ This specification describes the intended behavior of the Grounded C4 architectu
 
 - **Proposal**: `.openspec/changes/grounded-c4-architecture/proposal.md`
 - **Tasks**: `.openspec/changes/grounded-c4-architecture/tasks.md`
-- **Design Doc**: `docs/grounded-c4.md` (to be created)
+- **Design Doc**: `.openspec/grounded-c4.md` (to be created)
 
 ---
 

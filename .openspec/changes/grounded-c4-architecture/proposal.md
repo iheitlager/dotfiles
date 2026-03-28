@@ -328,7 +328,7 @@ Existing OpenSpec users can adopt incrementally:
 
 **Deliverables:**
 - OpenSpec specification (008-grounded-c4-architecture)
-- Design document (docs/grounded-c4.md)
+- Design document (.openspec/grounded-c4.md)
 - `arch` tool implementation (local/bin/arch)
 - Schema definitions (share/arch/schemas/)
 - Sample architecture (dotfiles system)
@@ -386,7 +386,7 @@ Existing OpenSpec users can adopt incrementally:
 ## Next Steps
 
 1. **Write OpenSpec specification** (008-grounded-c4-architecture/spec.md)
-2. **Create detailed design doc** (docs/grounded-c4.md)
+2. **Create detailed design doc** (.openspec/grounded-c4.md)
 3. **Create GitHub epic** with phased tasks
 4. **Implement Phase 1**:
    - Schema definitions
