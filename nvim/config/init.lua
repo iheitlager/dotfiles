@@ -195,9 +195,10 @@ require('lazy').setup({
         },
         indent = { enable = true },
       })
-      -- Enable treesitter-based folding
+      -- Enable treesitter-based folding (foldlevel=99 keeps all folds open by default)
       vim.opt.foldmethod = 'expr'
       vim.opt.foldexpr = 'nvim_treesitter#foldexpr()'
+      vim.opt.foldlevel = 99
     end,
   },
 

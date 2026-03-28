@@ -61,6 +61,7 @@ export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 export PATH="$HOME/.local/bin:$PATH"     # for uv and other user binaries
 #export PATH="/opt/local/bin:/opt/local/sbin:$PATH"  # MacPorts
 eval "$(/opt/homebrew/bin/brew shellenv)"  # Homebrew
+export PATH="/Library/TeX/texbin:$PATH"  # MacTeX CLI tools
 export PATH=$DOTFILES/local/bin:$PATH
 
 export MANPATH="/opt/local/share/man:$MANPATH"
