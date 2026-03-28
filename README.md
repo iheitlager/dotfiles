@@ -49,7 +49,7 @@ Multi-agent swarm for Claude Code:
 - `swarm-job` - Job queue management
 - `swarm-daemon` - Monitoring, event tracking, and analytics
 - `swarm-hook` - Claude Code hook adapter (auto-emits tool events)
-- See [docs/agent-system.md](docs/agent-system.md) for details
+- See [.openspec/agent-system.md](.openspec/agent-system.md) for details
 
 ## Topical Organization
 

@@ -298,7 +298,7 @@ Additionally, for each agent N, a separate `shell-N` window is created.
   - Capability matching guidance (model tier)
   - Peer communication via tmux send-keys (using new window addressing)
   - Git workflow instructions (rebase from main, PR on completion)
-  - Reference to `~/.dotfiles/docs/agent-system.md`
+  - Reference to `~/.dotfiles/.openspec/agent-system.md`
 
 #### Scenario: System Prompt Injection
 
@@ -690,7 +690,7 @@ Supporting files:
 
 ## Internal Documentation
 
-- `~/.dotfiles/docs/agent-system.md` — Architecture and usage guide
+- `~/.dotfiles/.openspec/agent-system.md` — Architecture and usage guide
 - Spec 001: `001-dotfiles-core` — Core dotfiles system
 - Spec 005: `006-aliases-system` — Shell aliases (includes swarm-job aliases)
 

@@ -224,7 +224,7 @@ Versioning will be added when backward compatibility becomes necessary. For now,
 
 - **JSON Schema**: https://json-schema.org/
 - **Draft 07 Spec**: https://json-schema.org/draft-07/schema
-- **Grounded C4 Design Doc**: `docs/grounded-c4.md`
+- **Grounded C4 Design Doc**: `.openspec/grounded-c4.md`
 - **OpenSpec Specification**: `.openspec/specs/008-grounded-c4-architecture/spec.md`
 
 ---
