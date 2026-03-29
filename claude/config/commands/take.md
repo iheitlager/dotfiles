@@ -8,6 +8,8 @@ Take ownership of a GitHub issue and begin implementation.
 /take             Show suggested issues to take
 ```
 
+**Epic detection:** If the issue has the `epic` label or links to sub-issues, `/take` automatically enters Epic Mode — one branch, one PR, one commit per sub-ticket.
+
 ## Pre-flight Checks (MANDATORY)
 
 Before taking any issue, run these checks in order. **Stop immediately** if any check fails.
@@ -49,11 +51,14 @@ fi
 
 # Check if on a feature branch (not main, not agent-N base)
 if [[ "$BRANCH" != "main" && ! "$BRANCH" =~ ^agent-[0-9]+$ ]]; then
+  # If on an epic branch and taking a sub-issue of that epic, continue (Epic Mode)
+  # Otherwise warn
   echo "⚠️  Currently on feature branch: $BRANCH"
   echo "  Options:"
   echo "    1. Switch to main first: git checkout main"
   echo "    2. Finish current work: /pr to create PR"
   echo "    3. Abandon branch: git checkout main && git branch -D $BRANCH"
+  echo "    4. Continue on this branch (Epic Mode — sub-ticket of current epic)"
   # ASK user what to do, or STOP
 fi
 ```
@@ -150,6 +155,20 @@ The research phase is delegated to an Explore agent, while judgment and implemen
 ### Direct Mode (default)
 
 For single-agent work. You take the issue and implement it yourself.
+
+### Epic Mode (auto-detected)
+
+For issues labeled `epic` or that have sub-issues. One branch, one PR, one commit per sub-ticket.
+
+**Detection:**
+```
+if issue has label "epic" OR issue body contains task list with #N references
+  → Epic Mode
+else
+  → Direct Mode (or Queue Mode if "queue" arg)
+```
+
+**Key principle:** The epic branch stays open across all sub-tickets. Each sub-ticket gets its own commit (not its own branch/PR). The PR is created once at the end, referencing all closed sub-issues.
 
 ### Queue Mode
 
@@ -375,6 +394,108 @@ swarm-job complete "$JOB_ID" -r "PR #$PR_NUM created"
 ```
 
 This is handled automatically by `/pr` and `/merge` commands.
+
+## Process (Epic Mode)
+
+When an epic is detected, the workflow changes: one branch holds all sub-ticket work, each sub-ticket is a commit, and one PR closes everything.
+
+### 1. Setup Epic Branch
+
+```bash
+# Create a single branch for the entire epic
+git checkout -b feat/#48-epic-short-description
+```
+
+### 2. Identify Sub-Tickets
+
+```bash
+# List sub-issues from the epic body or linked issues
+gh issue view #48
+# Parse task list or find issues referencing this epic
+gh issue list --search "epic:#48" --state open
+```
+
+Present the ordered list of sub-tickets to the user:
+```
+Epic #48: Grounded C4 Architecture Modeling System
+
+Sub-tickets (in suggested order):
+  1. #62 - Generate UML Sequence and State Diagrams
+  2. #63 - Model Dotfiles Sequences
+  3. #64 - Implement Reverse Engineering
+  4. #65 - Implement Coverage Tracking
+  5. #67 - Dependency and Impact Analysis
+
+Proceed with this order? (reorder/skip/go)
+```
+
+### 3. Work Through Sub-Tickets Sequentially
+
+For each sub-ticket on the **same branch**:
+
+1. **Research** — Explore agent for context (same as Direct Mode step 2)
+2. **Validate** — Does this sub-ticket make sense given prior work on this branch?
+3. **Implement** — Make changes on the epic branch
+4. **Test** — Run tests, verify nothing broke
+5. **Commit** — One commit per sub-ticket, referencing the sub-issue:
+   ```bash
+   git commit -m "feat: generate UML sequence diagrams (#62)"
+   ```
+6. **Close sub-ticket** — Comment and close:
+   ```bash
+   gh issue close #62 -c "Implemented in epic branch feat/#48-..., commit <sha>"
+   ```
+7. **Report progress** — Show what's done vs remaining:
+   ```
+   Epic #48 progress: [2/5]
+     ✅ #62 - Generate UML Sequence and State Diagrams
+     ✅ #63 - Model Dotfiles Sequences
+     🔄 #64 - Implement Reverse Engineering (next)
+     ⬜ #65 - Implement Coverage Tracking
+     ⬜ #67 - Dependency and Impact Analysis
+   ```
+8. **Ask before continuing** — User may want to pause, review, or reorder
+
+### 4. Finalize Epic
+
+After all sub-tickets are done (or user decides to stop):
+
+1. **Run full test suite** — All tests must pass
+2. **Push the epic branch** — `git push -u origin feat/#48-...`
+3. **Create one PR** referencing all sub-issues:
+   ```
+   gh pr create --title "feat: Grounded C4 Architecture Modeling System" --body "
+   ## Summary
+   Implements epic #48 across N sub-tickets.
+
+   ## Sub-tickets
+   - Closes #62 — Generate UML diagrams
+   - Closes #63 — Model sequences
+   - Closes #64 — Reverse engineering
+   ...
+
+   ## Test plan
+   - [ ] All existing tests pass
+   - [ ] New tests for each sub-ticket
+   "
+   ```
+4. **Close the epic** after PR is merged
+
+### Resuming an Epic
+
+If the conversation ends mid-epic (context limit, user pauses):
+- The branch and commits are preserved
+- Next session: `/take #48` detects the existing epic branch and resumes
+- Check: `git log --oneline main..HEAD` to see what's already done
+- Cross-reference with open sub-tickets to find where to continue
+
+### Epic Pre-flight (when already on an epic branch)
+
+When `/take #N` is called and you're already on an epic branch:
+1. Check if `#N` is a sub-ticket of the current epic — if yes, continue on this branch
+2. If `#N` is a different issue — warn and offer to switch or finish current epic first
+
+---
 
 ## Process (Queue Mode)
 
