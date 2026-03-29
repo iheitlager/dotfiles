@@ -126,7 +126,7 @@ update_prompt() {
         _cached_venv="$VIRTUAL_ENV"
         _cached_py_version=""
         if [[ -f "$VIRTUAL_ENV/pyvenv.cfg" ]]; then
-            _cached_py_version=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$VIRTUAL_ENV/pyvenv.cfg" | head -1)
+            _cached_py_version=$(grep '^version_info' "$VIRTUAL_ENV/pyvenv.cfg" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
         elif command -v python &> /dev/null; then
             _cached_py_version=$(python --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
         fi
