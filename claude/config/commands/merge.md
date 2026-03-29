@@ -6,11 +6,13 @@ Merge a GitHub PR with full pre-flight checks, clean up, and ticket verification
 /merge              Merge current branch's PR
 /merge #123         Merge specific PR by number
 /merge --dry-run    Show what would happen without merging
+/merge --no-fix     Skip fixing review comments (store only)
 ```
 
 ## Features
 
 - **Pre-flight checks** — Verify PR is ready (approved, checks passing, no conflicts)
+- **Review comments** — Fetch and store all review comments, then fix issues (skip with `--no-fix`)
 - **Changelog & version** — Update CHANGELOG.md and bump version, commit before merge
 - **Sync & clean** — Update local repo, prune stale refs, delete merged branches
 - **Return to main** — Automatically switch back to main branch
@@ -91,7 +93,78 @@ Branch to delete: feat/oauth-support
 Proceed? [Y/n]
 ```
 
-### 3. Update Changelog & Version, Commit
+### 3. Fetch & Address Review Comments
+
+Retrieve all review comments and inline thread comments from the PR and store them as context.
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+
+# Fetch review-level comments (changes requested, general feedback)
+gh pr view $PR --json reviews --jq '
+  .reviews[] | select(.state == "CHANGES_REQUESTED" or (.body | length > 0)) |
+  {author: .author.login, state: .state, body: .body}
+'
+
+# Fetch inline thread comments (line-level review comments)
+gh api repos/$REPO/pulls/$PR/comments --jq '
+  .[] | {path: .path, line: .original_line, body: .body, author: .user.login}
+' 2>/dev/null
+```
+
+Collect all comments into a structured list. Each item should capture: file path (if inline), line number (if inline), author, and body text.
+
+**Unless `--no-fix` is passed**, analyze each actionable comment and apply fixes:
+
+1. For each comment referencing a specific file/line — read the file, understand the feedback, apply the change
+2. For general review comments — address the concern in the relevant code
+3. After all fixes are applied, commit them:
+
+```bash
+git add -p  # stage relevant changes
+git commit -m "fix: address PR review comments"
+git push
+```
+
+Skip comments that are:
+- Already resolved (outdated diff position)
+- Praise/approval without actionable feedback
+- Questions already answered in discussion
+
+**Output (fixes applied):**
+
+```
+Review Comments
+═══════════════════════════════════════════════════════════════
+
+PR #123 — 3 review comments found:
+
+  1. @reviewer — src/auth/oauth.py:42
+     "Use constant-time comparison here to prevent timing attacks"
+     ✓ Fixed — applied hmac.compare_digest()
+
+  2. @reviewer — src/auth/oauth.py:87
+     "Missing error handling for expired tokens"
+     ✓ Fixed — added TokenExpiredError catch block
+
+  3. @reviewer — (general)
+     "LGTM, great work!"
+     → Skipped (no actionable changes)
+
+Committed: def5678 fix: address PR review comments
+Pushed to origin/feat/oauth-support
+```
+
+**Output (--no-fix):**
+
+```
+Review Comments (stored, not fixed)
+═══════════════════════════════════════════════════════════════
+
+PR #123 — 3 review comments stored. Skipping fixes (--no-fix).
+```
+
+### 4. Update Changelog & Version, Commit
 
 Before merging, update `CHANGELOG.md` and bump the version on the feature branch, then commit:
 
@@ -291,6 +364,8 @@ This ensures:
 PR Merged Successfully
 ═══════════════════════════════════════════════════════════════
 
+✓ Review comments fetched — 3 comments stored
+✓ Review fixes applied — def5678 fix: address PR review comments
 ✓ CHANGELOG.md updated — [0.4.0] section added
 ✓ Version bumped: 0.3.1 → 0.4.0
 ✓ Release commit: abc1233 chore: release v0.4.0
@@ -328,15 +403,17 @@ Dry Run: PR #123
 ═══════════════════════════════════════════════════════════════
 
 Would perform:
-  1. Update CHANGELOG.md with [0.4.0] section
-  2. Bump version: 0.3.1 → 0.4.0 (minor, feat branch)
-  3. Commit: chore: release v0.4.0
-  4. Merge PR #123 into main (squash)
-  5. Delete remote branch: origin/feat/oauth-support
-  6. Delete local branch: feat/oauth-support
-  7. Switch to main branch
-  8. Pull latest changes
-  9. Prune stale refs
+  1. Fetch & store 3 review comments from PR #123
+  2. Fix review comments (use --no-fix to skip)
+  3. Update CHANGELOG.md with [0.4.0] section
+  4. Bump version: 0.3.1 → 0.4.0 (minor, feat branch)
+  5. Commit: chore: release v0.4.0
+  6. Merge PR #123 into main (squash)
+  7. Delete remote branch: origin/feat/oauth-support
+  8. Delete local branch: feat/oauth-support
+  9. Switch to main branch
+  10. Pull latest changes
+  11. Prune stale refs
 
 Issues that would close:
   #101 - Add OAuth login option

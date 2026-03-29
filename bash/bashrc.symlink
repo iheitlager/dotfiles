@@ -90,9 +90,6 @@ if [ -n "${GHOSTTY_RESOURCES_DIR}" ]; then
     builtin source "${GHOSTTY_RESOURCES_DIR}/shell-integration/bash/ghostty.bash"
 fi
 
-# Prompt configuration
-REMOTE_PROMPT="\e[0;31m[\u@\h \W]\$ \e[m "
-
 # Cache for Python version (avoid spawning Python on every prompt)
 _cached_venv=""
 _cached_py_version=""
@@ -159,12 +156,18 @@ update_prompt() {
         fi
     fi
     
+    # SSH host indicator (shown when connected via SSH)
+    local host_info=""
+    if [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]]; then
+        host_info="${RED}[ssh:\h]${RESET} "
+    fi
+
     # Build the first line
-    local first_line="${venv_info}${python_info}"
+    local first_line="${host_info}${venv_info}${python_info}"
     if [[ -n "$git_prompt" ]]; then
         first_line="${first_line}\[${git_prompt}\]"
     fi
-    
+
     # Only show first line if there's content
     if [[ -n "$first_line" ]]; then
         PS1="${first_line}\n${CYAN}\w>${RESET} "

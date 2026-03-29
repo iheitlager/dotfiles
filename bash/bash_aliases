@@ -96,7 +96,7 @@ _mk_cddir () { mkdir -p "$@" && cd "$_" || return ; } # create a go into dir
 alias mkcd=_mk_cddir
 alias rd='rm -rf'
 
-lkill () { ps | grep -v grep | grep "$@" | awk '{print $1}' | xargs kill; }
+kill_all () { ps aux | grep "$@" | grep -v grep | awk '{print $2}' | xargs kill -9; }
 
 cheat() {
     curl -s "cheat.sh/$1" | bat --plain --language=help
