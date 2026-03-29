@@ -49,7 +49,9 @@
       "Bash(* --version)",
       "mcp__*",
       "Bash(npm *)",
-      "Bash(*-h*)"
+      "Bash(*-h*)",
+      "Bash(swarm-job:*)",
+      "Bash(swarm-daemon:*)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
