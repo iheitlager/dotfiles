@@ -224,6 +224,49 @@ require('lazy').setup({
     end,
   },
 
+  -- LSP
+  {
+    'neovim/nvim-lspconfig',
+    config = function()
+      local lspconfig = require('lspconfig')
+
+      -- Shared on_attach: keybindings available when LSP connects
+      local on_attach = function(_, bufnr)
+        local map = function(keys, func, desc)
+          vim.keymap.set('n', keys, func, { buffer = bufnr, desc = 'LSP: ' .. desc })
+        end
+
+        map('gd', vim.lsp.buf.definition, 'Go to definition')
+        map('gr', vim.lsp.buf.references, 'References')
+        map('gI', vim.lsp.buf.implementation, 'Go to implementation')
+        map('K', vim.lsp.buf.hover, 'Hover documentation')
+        map('<leader>rn', vim.lsp.buf.rename, 'Rename symbol')
+        map('<leader>ca', vim.lsp.buf.code_action, 'Code action')
+        map('<leader>D', vim.lsp.buf.type_definition, 'Type definition')
+        map('gD', vim.lsp.buf.declaration, 'Go to declaration')
+      end
+
+      -- Python
+      lspconfig.pyright.setup({ on_attach = on_attach })
+
+      -- Lua (neovim config aware)
+      lspconfig.lua_ls.setup({
+        on_attach = on_attach,
+        settings = {
+          Lua = {
+            runtime = { version = 'LuaJIT' },
+            diagnostics = { globals = { 'vim' } },
+            workspace = { library = vim.api.nvim_get_runtime_file('', true), checkThirdParty = false },
+            telemetry = { enable = false },
+          },
+        },
+      })
+
+      -- Bash
+      lspconfig.bashls.setup({ on_attach = on_attach })
+    end,
+  },
+
   -- Git signs in gutter
   {
     'lewis6991/gitsigns.nvim',
