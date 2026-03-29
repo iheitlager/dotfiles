@@ -224,48 +224,8 @@ require('lazy').setup({
     end,
   },
 
-  -- LSP
-  {
-    'neovim/nvim-lspconfig',
-    config = function()
-      local lspconfig = require('lspconfig')
-
-      -- Shared on_attach: keybindings available when LSP connects
-      local on_attach = function(_, bufnr)
-        local map = function(keys, func, desc)
-          vim.keymap.set('n', keys, func, { buffer = bufnr, desc = 'LSP: ' .. desc })
-        end
-
-        map('gd', vim.lsp.buf.definition, 'Go to definition')
-        map('gr', vim.lsp.buf.references, 'References')
-        map('gI', vim.lsp.buf.implementation, 'Go to implementation')
-        map('K', vim.lsp.buf.hover, 'Hover documentation')
-        map('<leader>rn', vim.lsp.buf.rename, 'Rename symbol')
-        map('<leader>ca', vim.lsp.buf.code_action, 'Code action')
-        map('<leader>D', vim.lsp.buf.type_definition, 'Type definition')
-        map('gD', vim.lsp.buf.declaration, 'Go to declaration')
-      end
-
-      -- Python
-      lspconfig.pyright.setup({ on_attach = on_attach })
-
-      -- Lua (neovim config aware)
-      lspconfig.lua_ls.setup({
-        on_attach = on_attach,
-        settings = {
-          Lua = {
-            runtime = { version = 'LuaJIT' },
-            diagnostics = { globals = { 'vim' } },
-            workspace = { library = vim.api.nvim_get_runtime_file('', true), checkThirdParty = false },
-            telemetry = { enable = false },
-          },
-        },
-      })
-
-      -- Bash
-      lspconfig.bashls.setup({ on_attach = on_attach })
-    end,
-  },
+  -- LSP (provides server configs for vim.lsp.config)
+  { 'neovim/nvim-lspconfig', lazy = true },
 
   -- Git signs in gutter
   {
@@ -314,6 +274,43 @@ require('lazy').setup({
   -- lazy.nvim options
   checker = { enabled = false },  -- Don't auto-check for updates
 })
+
+-- LSP configuration (nvim 0.11+ native API)
+-- Keybindings: set once when any LSP attaches
+vim.api.nvim_create_autocmd('LspAttach', {
+  callback = function(ev)
+    local map = function(keys, func, desc)
+      vim.keymap.set('n', keys, func, { buffer = ev.buf, desc = 'LSP: ' .. desc })
+    end
+    map('gd', vim.lsp.buf.definition, 'Go to definition')
+    map('gr', vim.lsp.buf.references, 'References')
+    map('gI', vim.lsp.buf.implementation, 'Go to implementation')
+    map('K', vim.lsp.buf.hover, 'Hover documentation')
+    map('<leader>rn', vim.lsp.buf.rename, 'Rename symbol')
+    map('<leader>ca', vim.lsp.buf.code_action, 'Code action')
+    map('<leader>D', vim.lsp.buf.type_definition, 'Type definition')
+    map('gD', vim.lsp.buf.declaration, 'Go to declaration')
+  end,
+})
+
+-- Server configs
+vim.lsp.config('pyright', {})
+
+vim.lsp.config('lua_ls', {
+  settings = {
+    Lua = {
+      runtime = { version = 'LuaJIT' },
+      diagnostics = { globals = { 'vim' } },
+      workspace = { library = vim.api.nvim_get_runtime_file('', true), checkThirdParty = false },
+      telemetry = { enable = false },
+    },
+  },
+})
+
+vim.lsp.config('bashls', {})
+
+-- Enable servers
+vim.lsp.enable({ 'pyright', 'lua_ls', 'bashls' })
 
 -- Claude AI integration (uses ~/.dotfiles/local/bin/ai)
 local claude = {}
