@@ -47,6 +47,10 @@ uw=31:\
 ux=32:\
 ue=32"
 
+# tmux - XDG compliant (socket + internal logs land here)
+mkdir -p "$XDG_STATE_HOME/tmux" 2>/dev/null
+export TMUX_TMPDIR="$XDG_STATE_HOME/tmux"
+
 # Bash history - XDG compliant
 mkdir -p "$XDG_STATE_HOME/bash" 2>/dev/null
 export HISTFILE="$XDG_STATE_HOME/bash/history"

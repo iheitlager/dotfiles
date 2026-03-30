@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.9.1
+# Version: 0.9.2
 #
 # Changelog:
+# 0.9.2 Default -n 2 to sonnet/sonnet (use --opus for opus distribution)
 # 0.9.1 Default -n 2 to opus/opus; fix window switch landing on left (claude) pane
 # 0.9.0 Add disk health check: warn/clean runaway Claude tmp output files on startup
 # 0.8.1 Set Ghostty window title for workspace and swarm modes
@@ -264,9 +265,9 @@ get_model() {
         fi
     fi
 
-    # Claude models: 2-agent default is opus/opus; --opus enables opus for larger configs
+    # Claude models: default is sonnet; --opus enables opus for larger configs
     if [[ "$count" -eq 2 ]]; then
-        echo "opus"
+        echo "sonnet"
         return
     fi
     if [[ "$OPUS_MODE" == true ]]; then
