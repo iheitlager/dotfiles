@@ -104,6 +104,15 @@ When posting comments to GitHub issues or PRs using `gh issue comment` or `gh pr
 
 This ensures comments posted through your account are clearly identified as AI-generated analysis.
 
+### After Investigation
+
+After completing any investigation, analysis, or research task, **always suggest creating GitHub issues/tickets** before proposing implementation or PRs. This ensures findings are tracked, prioritized, and visible to others.
+
+**Workflow:**
+1. Summarize findings clearly
+2. Propose ticket(s) to capture the work items discovered
+3. Ask if the user wants to create the ticket(s) using `/issue` before proceeding with implementation
+
 ### Feature Development Workflow
 
 #### Starting a New Feature

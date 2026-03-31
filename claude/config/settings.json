@@ -114,6 +114,5 @@
     "~/.dotfiles",
     "~/wc/**",
     "/workspace/**"
-  ],
-  "model": "opus[1m]"
+  ]
 }
