@@ -16,9 +16,15 @@ brew install htop || brew upgrade htop
 brew install duf || brew upgrade duf
 
 packages=(fd jq yq git-delta fzf bat eza ripgrep tldr glow)
+
 for pkg in "${packages[@]}"; do
     brew install "$pkg" || brew upgrade "$pkg"
 done
 
+# Dev tools
+dev_packages=(shellcheck shfmt)
+for pkg in "${dev_packages[@]}"; do
+    brew install "$pkg" || brew upgrade "$pkg"
+done
 
 export PATH=$TMPPATH

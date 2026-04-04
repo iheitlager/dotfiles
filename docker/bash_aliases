@@ -7,7 +7,7 @@
 # clean all docker files
 _docker_clean() {
 	echo "Cleaning up Docker resources..."
-	docker images | grep "localhost:" | awk '{print $$3}' | xargs docker rmi -f 2>/dev/null || true
+	docker images | grep "localhost:" | awk '{print $3}' | xargs docker rmi -f 2>/dev/null || true
 	docker rm -f $(docker ps -aq) 2>/dev/null || true
 	docker rmi -f $(docker images -aq) 2>/dev/null || true
 	docker volume prune -f 2>/dev/null || true

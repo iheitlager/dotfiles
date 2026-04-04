@@ -33,6 +33,7 @@
       "Bash(du:*)",
       "Bash(df:*)",
       "Bash(rm -f:*)",
+      "Bash(rm -rf /Users/*/wc/*)",
       "Bash(ln:*)",
       "Bash(touch:*)",
       "Bash(chmod:*)",
@@ -56,7 +57,6 @@
       "Bash(jq:*)"
     ],
     "deny": [
-      "Bash(rm -rf:*)",
       "Bash(curl|*sh:*)",
       "Bash(wget|*sh:*)",
       "Bash(*>/dev/tcp/*)",
@@ -74,6 +74,7 @@
       "Write(~/.crontab)"
     ]
   },
+  "model": "opus[1m]",
   "hooks": {
     "SessionStart": [
       {
@@ -105,7 +106,8 @@
   "enabledPlugins": {
     "frontend-design@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "lua-lsp@claude-plugins-official": true
   },
   "teammateMode": "tmux",
   "additionalDirectories": [

@@ -9,15 +9,6 @@ TPM_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/plugins/tpm"
 # Ensure XDG state dir exists (socket + internal server logs land here via TMUX_TMPDIR)
 mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/tmux"
 
-# Install tmux wrapper that enables internal server logging (-v flag)
-WRAPPER="$HOME/.local/bin/tmux"
-cat > "$WRAPPER" << 'EOF'
-#!/usr/bin/env bash
-exec /opt/homebrew/bin/tmux -v "$@"
-EOF
-chmod +x "$WRAPPER"
-echo "  tmux wrapper installed at $WRAPPER (enables -v server logging)"
-
 # Install TPM (Tmux Plugin Manager)
 if [ ! -d "$TPM_DIR" ]; then
     echo "  Installing TPM (Tmux Plugin Manager)..."

@@ -181,23 +181,17 @@ require('lazy').setup({
   -- Treesitter for better syntax highlighting
   {
     'nvim-treesitter/nvim-treesitter',
-    branch = 'master',  -- Use stable master branch with old API and YAML support
+    branch = 'main',
     lazy = false,
     build = ':TSUpdate',
     config = function()
-      require('nvim-treesitter.configs').setup({
-        ensure_installed = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown' },
-        sync_install = false,
+      require('nvim-treesitter').setup({
+        ensure_install = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown', 'markdown_inline' },
         auto_install = true,
-        highlight = {
-          enable = true,
-          additional_vim_regex_highlighting = false,
-        },
-        indent = { enable = true },
       })
       -- Enable treesitter-based folding (foldlevel=99 keeps all folds open by default)
       vim.opt.foldmethod = 'expr'
-      vim.opt.foldexpr = 'nvim_treesitter#foldexpr()'
+      vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
       vim.opt.foldlevel = 99
     end,
   },
