@@ -15,6 +15,8 @@ starttime=$(date +"%s")
 FORCE_GIT=false
 SKIP_BREW=false
 
+MACHINE_PROFILE_FILE="$HOME/.config/dotfiles/machine_profile"
+
 # Show help using bat if available (pattern from local/lib/shell-common.sh)
 _show_help() {
     if command -v bat &>/dev/null; then
@@ -32,9 +34,10 @@ Usage: bootstrap [OPTIONS]
   configures git, installs Homebrew packages, and links dotfiles.
 
 OPTIONS
-  -g, --git       Force regeneration of ~/.local/gitconfig
-      --no-brew   Skip Homebrew package installation
-  -h, --help      Show this help message
+  -g, --git              Force regeneration of ~/.local/gitconfig
+      --no-brew          Skip Homebrew package installation
+  -p, --profile PROFILE  Set machine profile: laptop, workstation, or auto
+  -h, --help             Show this help message
 
 EOF
 }
@@ -75,6 +78,63 @@ success () {
 fail () {
   printf "\r\033[2K  [\033[0;31mFAIL\033[0m] $1\n"
   echo ''
+}
+
+# Resolve machine profile: laptop or workstation
+_resolve_auto_profile () {
+  local hw_model
+  hw_model=$(sysctl -n hw.model 2>/dev/null || echo "")
+  if [[ "$hw_model" == Macmini* ]]; then
+    echo "workstation"
+  else
+    echo "laptop"
+  fi
+}
+
+setup_machine_profile () {
+  # Already set via environment — honour it and persist if new
+  if [ -n "$MACHINE_PROFILE" ]; then
+    if [ "$MACHINE_PROFILE" = "auto" ]; then
+      MACHINE_PROFILE=$(_resolve_auto_profile)
+      success "machine profile auto-detected: $MACHINE_PROFILE"
+    else
+      success "machine profile from environment: $MACHINE_PROFILE"
+    fi
+    mkdir -p "$(dirname "$MACHINE_PROFILE_FILE")"
+    echo "$MACHINE_PROFILE" > "$MACHINE_PROFILE_FILE"
+    export MACHINE_PROFILE
+    return
+  fi
+
+  # Already persisted from a previous run
+  if [ -f "$MACHINE_PROFILE_FILE" ]; then
+    MACHINE_PROFILE=$(cat "$MACHINE_PROFILE_FILE")
+    success "machine profile loaded: $MACHINE_PROFILE"
+    export MACHINE_PROFILE
+    return
+  fi
+
+  # Ask the user
+  echo ""
+  user "  What is the role of this machine?\n"
+  printf "    1) laptop      (default: sleep/standby enabled)\n"
+  printf "    2) workstation (always-on: no sleep, wake-on-LAN)\n"
+  printf "    3) auto-detect (Mac mini → workstation, otherwise laptop)\n"
+  printf "\n"
+  user "  Enter choice [1/2/3, default: 1]: "
+  read -r profile_choice
+
+  case "$profile_choice" in
+    2) MACHINE_PROFILE="workstation" ;;
+    3) MACHINE_PROFILE=$(_resolve_auto_profile)
+       success "auto-detected profile: $MACHINE_PROFILE" ;;
+    *) MACHINE_PROFILE="laptop" ;;
+  esac
+
+  mkdir -p "$(dirname "$MACHINE_PROFILE_FILE")"
+  echo "$MACHINE_PROFILE" > "$MACHINE_PROFILE_FILE"
+  success "machine profile set: $MACHINE_PROFILE (saved to $MACHINE_PROFILE_FILE)"
+  export MACHINE_PROFILE
 }
 
 # Create XDG Base Directory structure
@@ -372,6 +432,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_BREW=true
       shift
       ;;
+    -p|--profile)
+      MACHINE_PROFILE="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -384,6 +448,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 setup_xdg_dirs
+setup_machine_profile
 purge_stale_symlinks
 validate_config_structure
 setup_gitconfig $FORCE_GIT
