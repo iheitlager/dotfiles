@@ -1,0 +1,5 @@
+# Pandoc defaults
+# XDG location: ~/.config/pandoc/defaults.yaml
+# Apply with: pandoc --defaults defaults
+
+standalone: true
