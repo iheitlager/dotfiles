@@ -126,6 +126,14 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
+-- Enable treesitter highlighting for filetypes not auto-detected
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'ebnf',
+  callback = function()
+    vim.treesitter.start()
+  end,
+})
+
 -- Bootstrap lazy.nvim plugin manager
 local lazypath = vim.fn.stdpath('data') .. '/lazy/lazy.nvim'
 if not vim.loop.fs_stat(lazypath) then
@@ -186,9 +194,11 @@ require('lazy').setup({
     build = ':TSUpdate',
     config = function()
       require('nvim-treesitter').setup({
-        ensure_install = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown', 'markdown_inline' },
+        ensure_install = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown', 'markdown_inline', 'ebnf' },
         auto_install = true,
       })
+      -- Link .ebnf files to the ebnf treesitter parser
+      vim.filetype.add({ extension = { ebnf = 'ebnf' } })
       -- Enable treesitter-based folding (foldlevel=99 keeps all folds open by default)
       vim.opt.foldmethod = 'expr'
       vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
