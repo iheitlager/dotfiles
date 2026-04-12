@@ -128,7 +128,7 @@ vim.api.nvim_create_autocmd('FileType', {
 
 -- Enable treesitter highlighting for filetypes not auto-detected
 vim.api.nvim_create_autocmd('FileType', {
-  pattern = 'ebnf',
+  pattern = { 'ebnf', 'mvl' },
   callback = function()
     vim.treesitter.start()
   end,
@@ -204,6 +204,13 @@ require('lazy').setup({
       vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
       vim.opt.foldlevel = 99
     end,
+  },
+
+  -- MVL (Minimum Verification Language) syntax support (loaded from local repo)
+  {
+    dir = vim.fn.expand('~/wc/mvl_language/etc/nvim-mvl'),
+    lazy = false,
+    dependencies = { 'nvim-treesitter/nvim-treesitter' },
   },
 
   -- Indent guides (essential for YAML)

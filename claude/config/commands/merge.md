@@ -1,4 +1,9 @@
-Merge a GitHub PR with full pre-flight checks, clean up, and ticket verification.
+---
+model: haiku
+---
+Merge a GitHub PR after review findings have already been documented and fixed.
+
+Assumes the workflow: `/pr` (document) → `/fix` (fix findings) → `/merge` (this).
 
 ## Usage
 
@@ -6,17 +11,7 @@ Merge a GitHub PR with full pre-flight checks, clean up, and ticket verification
 /merge              Merge current branch's PR
 /merge #123         Merge specific PR by number
 /merge --dry-run    Show what would happen without merging
-/merge --no-fix     Skip fixing review comments (store only)
 ```
-
-## Features
-
-- **Pre-flight checks** — Verify PR is ready (approved, checks passing, no conflicts)
-- **Review comments** — Fetch and store all review comments, then fix issues (skip with `--no-fix`)
-- **Changelog & version** — Update CHANGELOG.md and bump version, commit before merge
-- **Sync & clean** — Update local repo, prune stale refs, delete merged branches
-- **Return to main** — Automatically switch back to main branch
-- **Ticket verification** — Confirm linked issues will be closed
 
 ## Process
 
@@ -32,43 +27,19 @@ gh pr view 123 --json number,title,headRefName,baseRefName
 
 ### 2. Pre-flight Checks
 
-Run all checks before proceeding:
-
 ```bash
 gh pr view $PR --json mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isDraft
 ```
 
-**Required conditions:**
+| Check | Must Be |
+|-------|---------|
+| `isDraft` | `false` |
+| `mergeable` | `MERGEABLE` |
+| `mergeStateStatus` | `CLEAN` or `UNSTABLE` |
+| `reviewDecision` | `APPROVED` (if required) |
+| `statusCheckRollup` | All `SUCCESS` or `NEUTRAL` |
 
-| Check | Command | Must Be |
-|-------|---------|---------|
-| Not a draft | `isDraft` | `false` |
-| Mergeable | `mergeable` | `MERGEABLE` |
-| Merge state | `mergeStateStatus` | `CLEAN` or `UNSTABLE` |
-| Reviews | `reviewDecision` | `APPROVED` (if required) |
-| CI checks | `statusCheckRollup` | All `SUCCESS` or `NEUTRAL` |
-
-**Output on issues:**
-
-```
-Pre-flight Check Failed
-═══════════════════════════════════════════════════════════════
-
-PR #123: feat(auth): add OAuth support
-
-✗ Draft PR — cannot merge drafts
-✗ Merge conflicts — rebase required
-✗ Reviews: Changes requested (2 pending comments)
-✗ CI: 1 failing check (test-unit)
-
-Resolution:
-  gh pr ready 123              # Mark as ready
-  git fetch && git rebase      # Fix conflicts
-  Address review comments      # Then re-request review
-  Fix failing tests            # Push to re-run CI
-
-Run /merge again when resolved.
-```
+Stop and report if any check fails — do not proceed.
 
 **Output when ready:**
 
@@ -80,100 +51,21 @@ PR #123: feat(auth): add OAuth support
 
 ✓ Not a draft
 ✓ No merge conflicts
-✓ Reviews: Approved (2 approvals)
-✓ CI: All checks passing (5/5)
+✓ Approved
+✓ CI passing (5/5)
 
-Linked issues that will close:
-  #101 - Add OAuth login option
-  #98  - Support third-party authentication
-
-Merge method: squash (default)
+Linked issues that will close: #101, #98
 Branch to delete: feat/oauth-support
 
 Proceed? [Y/n]
 ```
 
-### 3. Fetch & Address Review Comments
+### 3. Update Changelog & Version, Commit
 
-Retrieve all review comments and inline thread comments from the PR and store them as context.
-
-```bash
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-
-# Fetch review-level comments (changes requested, general feedback)
-gh pr view $PR --json reviews --jq '
-  .reviews[] | select(.state == "CHANGES_REQUESTED" or (.body | length > 0)) |
-  {author: .author.login, state: .state, body: .body}
-'
-
-# Fetch inline thread comments (line-level review comments)
-gh api repos/$REPO/pulls/$PR/comments --jq '
-  .[] | {path: .path, line: .original_line, body: .body, author: .user.login}
-' 2>/dev/null
-```
-
-Collect all comments into a structured list. Each item should capture: file path (if inline), line number (if inline), author, and body text.
-
-**Unless `--no-fix` is passed**, analyze each actionable comment and apply fixes:
-
-1. For each comment referencing a specific file/line — read the file, understand the feedback, apply the change
-2. For general review comments — address the concern in the relevant code
-3. After all fixes are applied, commit them:
-
-```bash
-git add -p  # stage relevant changes
-git commit -m "fix: address PR review comments"
-git push
-```
-
-Skip comments that are:
-- Already resolved (outdated diff position)
-- Praise/approval without actionable feedback
-- Questions already answered in discussion
-
-**Output (fixes applied):**
-
-```
-Review Comments
-═══════════════════════════════════════════════════════════════
-
-PR #123 — 3 review comments found:
-
-  1. @reviewer — src/auth/oauth.py:42
-     "Use constant-time comparison here to prevent timing attacks"
-     ✓ Fixed — applied hmac.compare_digest()
-
-  2. @reviewer — src/auth/oauth.py:87
-     "Missing error handling for expired tokens"
-     ✓ Fixed — added TokenExpiredError catch block
-
-  3. @reviewer — (general)
-     "LGTM, great work!"
-     → Skipped (no actionable changes)
-
-Committed: def5678 fix: address PR review comments
-Pushed to origin/feat/oauth-support
-```
-
-**Output (--no-fix):**
-
-```
-Review Comments (stored, not fixed)
-═══════════════════════════════════════════════════════════════
-
-PR #123 — 3 review comments stored. Skipping fixes (--no-fix).
-```
-
-### 4. Update Changelog & Version, Commit
-
-Before merging, update `CHANGELOG.md` and bump the version on the feature branch, then commit:
-
-**Determine version bump** from branch type:
+Determine version bump from branch type:
 - `feat/*` → minor bump (0.X.0)
 - `fix/*` → patch bump (0.0.X)
-- All others → skip version bump (no version change needed)
-
-**Update CHANGELOG.md** — add a new section at the top with the new version and today's date, summarizing commits since the last release:
+- All others → skip version bump
 
 ```bash
 # Get commits since last tag
@@ -181,45 +73,22 @@ git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-paren
   --pretty=format:"- %s" --no-merges
 ```
 
-**Bump version** in all three locations (if applicable):
+Update `CHANGELOG.md` and bump version in:
 1. `src/<package>/__init__.py` — `__version__ = "X.Y.Z"`
 2. `README.md` — version badge or `## Version: X.Y.Z`
 3. `CHANGELOG.md` — new `## [X.Y.Z] - YYYY-MM-DD` section
 
-**Commit the release prep:**
+If no version files exist, only update `CHANGELOG.md`.
 
 ```bash
-git add CHANGELOG.md README.md src/*/  # or wherever version lives
+git add CHANGELOG.md README.md src/*/
 git commit -m "chore: release vX.Y.Z"
 git push
 ```
 
-If no version files exist in this project (non-Python, etc.), only update `CHANGELOG.md` and commit with `chore: update changelog`.
-
-**Output:**
-
-```
-Changelog & Version Update
-═══════════════════════════════════════════════════════════════
-
-Branch: feat/oauth-support → minor bump
-Version: 0.3.1 → 0.4.0
-
-Updated:
-  ✓ CHANGELOG.md — added [0.4.0] section
-  ✓ src/mypackage/__init__.py — bumped to 0.4.0
-  ✓ README.md — updated version badge
-
-Committed: abc1234 chore: release v0.4.0
-Pushed to origin/feat/oauth-support
-```
-
-### 5. Detect Linked Issues
-
-Find issues that will be closed by this merge:
+### 4. Detect Linked Issues
 
 ```bash
-# From PR body and commits
 gh pr view $PR --json body,commits --jq '
   [.body, (.commits[].messageBody // "")] |
   join(" ") |
@@ -228,63 +97,41 @@ gh pr view $PR --json body,commits --jq '
 ' | sort -u
 ```
 
-**Keywords that auto-close:**
-- `Closes #N`, `Close #N`
-- `Fixes #N`, `Fix #N`
-- `Resolves #N`, `Resolve #N`
+Warn if no linked issues found.
 
-If no linked issues found, warn:
+### 5. Merge the PR
 
-```
-Warning: No linked issues detected.
-If this PR should close an issue, consider:
-  gh pr edit 123 --body "$(gh pr view 123 --json body -q .body)
-
-Closes #N"
-```
-
-### 6. Merge the PR
-
-**Important**: `gh pr merge` fails when the base branch (e.g. `main`) is checked out in another worktree. Always use the GitHub API directly to avoid this:
+Always use the GitHub API — `gh pr merge` fails with worktrees:
 
 ```bash
-# Get the repo name
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 
-# Merge via API (works even with worktrees)
 gh api -X PUT repos/$REPO/pulls/$PR/merge \
   -f merge_method=merge
 
-# Delete remote branch via API
+# Delete remote branch
 BRANCH=$(gh pr view $PR --json headRefName -q .headRefName)
 gh api -X DELETE repos/$REPO/git/refs/heads/$BRANCH 2>/dev/null || true
 ```
 
-Do NOT use `gh pr merge` — it attempts local git operations that fail when the base branch is in use by a worktree.
-
-### 7. Sync Local Repository
-
-**Worktree-aware sync**: determine which worktree owns the feature branch, then operate from there.
+### 6. Sync Local Repository
 
 ```bash
 BRANCH=$(gh pr view $PR --json headRefName -q .headRefName)
 
-# Find the worktree that has this branch checked out (if any)
+# Find worktree with this branch checked out
 WORKTREE=$(git worktree list --porcelain | grep -B2 "branch refs/heads/$BRANCH" | grep "^worktree" | awk '{print $2}')
 
-# Fetch and prune from any worktree (they share the object store)
 git fetch --prune
 
-# Sync the base branch in whichever worktree has it (or current if none)
+# Pull main in whichever worktree has it
 BASE_WORKTREE=$(git worktree list --porcelain | grep -B2 "branch refs/heads/main" | grep "^worktree" | awk '{print $2}')
 if [[ -n "$BASE_WORKTREE" ]]; then
   git -C "$BASE_WORKTREE" pull origin main
 fi
 
-# Delete local feature branch — force-delete needed after squash merge
+# Delete local feature branch
 if [[ -n "$WORKTREE" ]]; then
-  # Branch is checked out in a worktree; can't delete it — skip or use agent branch
-  echo "Note: $BRANCH is checked out in worktree $WORKTREE — checkout agent branch first"
   AGENT_BRANCH=$(git -C "$WORKTREE" branch --show-current | grep agent || echo "main")
   git -C "$WORKTREE" checkout "$AGENT_BRANCH" 2>/dev/null && \
     git branch -D "$BRANCH" 2>/dev/null || true
@@ -293,70 +140,20 @@ else
 fi
 ```
 
-### 8. Verify Linked Issues
-
-After merge, confirm issues were closed:
+### 7. Verify Linked Issues
 
 ```bash
-# Check each linked issue
 for ISSUE in $LINKED_ISSUES; do
-  gh issue view $ISSUE --json state,stateReason -q '
-    "Issue #\(.number): \(.state) (\(.stateReason // "N/A"))"
-  '
+  gh issue view $ISSUE --json number,state,stateReason -q \
+    '"Issue #\(.number): \(.state) (\(.stateReason // "N/A"))"'
 done
 ```
 
-**Expected output:**
-
-```
-Verifying linked issues...
-  ✓ Issue #101: CLOSED (completed)
-  ✓ Issue #98: CLOSED (completed)
-```
-
-**If an issue didn't close** (wrong keyword, different repo, etc.):
-
-```
-Warning: Issue #99 is still OPEN
-This may happen if:
-  - The issue is in a different repository
-  - The closing keyword was malformed
-  - GitHub's linking didn't trigger
-
-To close manually:
-  gh issue close 99 --reason completed --comment "Closed via PR #123"
-```
-
-### 9. Complete Swarm Job & Notify Agents
-
-After merge, update the swarm queue and signal other agents:
+If an issue is still open, offer to close it manually:
 
 ```bash
-# Complete any swarm job associated with this PR's issues (Phase 2)
-for ISSUE in $LINKED_ISSUES; do
-  JOB_ID=$(swarm-job list active 2>/dev/null | grep "#$ISSUE" | awk '{print $1}')
-  if [[ -n "$JOB_ID" ]]; then
-    # Record PR merged event (Phase 2)
-    swarm-daemon hook JOB_PR_MERGED "$JOB_ID" "$PR"
-  fi
-done
-
-# Signal other agents to sync (reactive action - Phase 2)
-# Note: This can also be handled by swarm-daemon automatically
-if tmux has-session -t "claude-$PROJECT" 2>/dev/null; then
-  # Get all panes and notify them
-  for pane in $(tmux list-panes -t "claude-$PROJECT:agents" -F '#{pane_index}'); do
-    tmux send-keys -t "claude-$PROJECT:agents.$pane" \
-      "[sync] main updated via PR #$PR - run: git fetch && git rebase origin/main" Enter
-  done
-fi
+gh issue close $ISSUE --reason completed --comment "Closed via PR #$PR"
 ```
-
-This ensures:
-- Swarm queue reflects completed work
-- Other agents know to sync their branches
-
----
 
 ## Output
 
@@ -364,37 +161,23 @@ This ensures:
 PR Merged Successfully
 ═══════════════════════════════════════════════════════════════
 
-✓ Review comments fetched — 3 comments stored
-✓ Review fixes applied — def5678 fix: address PR review comments
 ✓ CHANGELOG.md updated — [0.4.0] section added
 ✓ Version bumped: 0.3.1 → 0.4.0
 ✓ Release commit: abc1233 chore: release v0.4.0
 ✓ PR #123 merged into main
 ✓ Remote branch 'feat/oauth-support' deleted
 ✓ Local branch 'feat/oauth-support' deleted
-✓ Switched to main
-✓ Pulled latest changes
-✓ Pruned stale remote refs
-✓ Swarm job completed (if applicable)
-✓ Notified agents to sync (if in swarm mode)
-
-Commit: abc1234 feat(auth): add OAuth support (#123)
+✓ main pulled and up to date
+✓ Stale refs pruned
 
 Linked Issues:
   ✓ #101 closed (completed)
   ✓ #98 closed (completed)
 
 Repository is clean and up to date.
-
-Next:
-  /pr list          See remaining PRs
-  /changelog        Update changelog for release
-  /version          Check version consistency
 ```
 
-## Dry Run Mode
-
-With `--dry-run`, show everything that would happen without executing:
+## Dry Run
 
 ```
 /merge --dry-run
@@ -403,66 +186,25 @@ Dry Run: PR #123
 ═══════════════════════════════════════════════════════════════
 
 Would perform:
-  1. Fetch & store 3 review comments from PR #123
-  2. Fix review comments (use --no-fix to skip)
-  3. Update CHANGELOG.md with [0.4.0] section
-  4. Bump version: 0.3.1 → 0.4.0 (minor, feat branch)
-  5. Commit: chore: release v0.4.0
-  6. Merge PR #123 into main (squash)
-  7. Delete remote branch: origin/feat/oauth-support
-  8. Delete local branch: feat/oauth-support
-  9. Switch to main branch
-  10. Pull latest changes
-  11. Prune stale refs
+  1. Update CHANGELOG.md + bump version to 0.4.0
+  2. Commit: chore: release v0.4.0
+  3. Merge PR #123 into main
+  4. Delete remote branch: origin/feat/oauth-support
+  5. Delete local branch: feat/oauth-support
+  6. Pull main, prune stale refs
 
-Issues that would close:
-  #101 - Add OAuth login option
-  #98  - Support third-party authentication
+Issues that would close: #101, #98
 
 No changes made. Run without --dry-run to execute.
 ```
 
 ## Edge Cases
 
-**On the branch being merged:**
-Automatically switches to main first before deleting.
+**Local branch has unpushed commits:** warn and ask before deleting.
 
-**Local branch has unpushed commits:**
-```
-Warning: Local branch has commits not in the PR:
-  abc1234 WIP: debugging
-  def5678 temp changes
+**PR from fork:** skip remote branch deletion (no permission).
 
-These will be lost. Options:
-  1. Delete anyway (lose commits)
-  2. Keep local branch
-  3. Cancel merge
-
-Choose [1/2/3]:
-```
-
-**PR from fork:**
-```
-Note: PR is from a fork (user/repo).
-Remote branch deletion will be skipped (no permission).
-```
-
-**Protected branch rules:**
-If squash isn't allowed, fall back to merge commit:
-```
-Note: Squash merge not allowed by branch protection.
-Using merge commit instead.
-```
-
-## Merge Methods
-
-| Method | Flag | When to Use |
-|--------|------|-------------|
-| **Merge** | `merge_method=merge` | Default. Preserves full history. |
-| **Squash** | `merge_method=squash` | Single commit. Clean history. |
-| **Rebase** | `merge_method=rebase` | Linear history. Small changes. |
-
-Override default: `/merge #123 --merge` or `/merge #123 --rebase`
+**Protected branch / squash not allowed:** fall back to merge commit.
 
 ## Safety
 
@@ -471,4 +213,3 @@ Override default: `/merge #123 --merge` or `/merge #123 --rebase`
 - Never merges with unresolved conflicts
 - Never force-deletes unmerged local branches
 - Always confirms before proceeding
-- Dry-run available to preview actions
