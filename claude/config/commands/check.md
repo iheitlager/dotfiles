@@ -74,12 +74,15 @@ Agent tool:
     3. Run type checking:
        - Python: uv run pyright src/
        - TypeScript: npx tsc --noEmit
+       - Rust: cargo check
     4. Check formatting:
        - Python: uv run ruff format --check src/ tests/
        - Node: npm run format:check (if available)
+       - Rust: cargo fmt --check
     5. Run tests (optional, if quick):
        - Python: uv run pytest tests/ -x --tb=short
        - Node: npm test
+       - Rust: cargo test
 
     Compile results into a structured report:
     - Total issues by severity
@@ -133,6 +136,22 @@ pyright src/
 ruff format --check src/ tests/
 ```
 
+### Rust
+
+```bash
+# Compile check (fast)
+cargo check
+
+# Linting
+cargo clippy -- -D warnings
+
+# Format check
+cargo fmt --check
+
+# Tests
+cargo test
+```
+
 ### Makefile Projects
 
 ```bash
@@ -142,6 +161,21 @@ make test    # Include test run
 ```
 
 ## Interpreting Results
+
+### Cargo/Clippy Output (Rust)
+
+```
+error[E0502]: cannot borrow `x` as mutable because it is also borrowed as immutable
+  --> src/main.rs:12:5
+   |
+11 |     let r = &x;
+12 |     x.push(1);  ← error here
+```
+
+**Severity mapping:**
+- `error[EXXXX]` — Compile errors (must fix)
+- `warning[clippy::*]` — Clippy lints (treat as errors with `-D warnings`)
+- `note:` — Informational context
 
 ### Ruff Output
 

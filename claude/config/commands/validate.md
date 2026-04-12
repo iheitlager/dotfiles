@@ -174,17 +174,20 @@ Task tool:
     1. Run tests and collect results:
        - If `make test` exists: make test
        - Else Python: uv run pytest tests/ -x --tb=short -q
+       - Else Rust: cargo test
        - Else Node: npm test
        Report: pass/fail count, any failures with details
 
     2. Run coverage (if available):
        - Python: uv run pytest --cov=src/ --cov-report=term-missing -q
+       - Rust: cargo llvm-cov --summary-only 2>/dev/null || cargo tarpaulin --out Stdout 2>/dev/null
        - Report overall coverage % and list uncovered modules
 
     3. Run linting and type checks:
        - Python: uv run ruff check src/ tests/ && uv run pyright src/
+       - Rust: cargo clippy -- -D warnings && cargo fmt --check
        - Node: npx eslint src/ && npx tsc --noEmit
-       Report: issues by severity (ruff and pyright separately)
+       Report: issues by severity
 
     4. Identify test quality issues:
        - Tests with TODO/FIXME markers

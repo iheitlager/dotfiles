@@ -347,15 +347,18 @@ Before preparing for review, **tests must pass**:
 
 ```bash
 # Run tests (use project's test command)
-uv run pytest tests/ -x --tb=short   # Python
-npm test                              # Node
 make test                             # If Makefile exists
+uv run pytest tests/ -x --tb=short   # Python
+cargo test                            # Rust
+npm test                              # Node
 ```
 
 **Coverage requirements:**
 - New code should have test coverage
 - Bug fixes should include a regression test
-- Check coverage if available: `uv run pytest --cov=src/`
+- Check coverage if available:
+  - Python: `uv run pytest --cov=src/`
+  - Rust: `cargo llvm-cov 2>/dev/null || cargo tarpaulin`
 
 **If tests fail:**
 ```

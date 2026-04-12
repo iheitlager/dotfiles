@@ -73,15 +73,28 @@ git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-paren
   --pretty=format:"- %s" --no-merges
 ```
 
-Update `CHANGELOG.md` and bump version in:
+Update `CHANGELOG.md` and bump version in the appropriate locations for the project type:
+
+**Python:**
 1. `src/<package>/__init__.py` — `__version__ = "X.Y.Z"`
+2. `pyproject.toml` — `version = "X.Y.Z"`
+3. `README.md` — version badge or `## Version: X.Y.Z`
+4. `CHANGELOG.md` — new `## [X.Y.Z] - YYYY-MM-DD` section
+
+**Rust:**
+1. `Cargo.toml` — `version = "X.Y.Z"` (workspace root if applicable)
 2. `README.md` — version badge or `## Version: X.Y.Z`
 3. `CHANGELOG.md` — new `## [X.Y.Z] - YYYY-MM-DD` section
 
 If no version files exist, only update `CHANGELOG.md`.
 
 ```bash
-git add CHANGELOG.md README.md src/*/
+# Python
+git add CHANGELOG.md README.md src/*/ pyproject.toml
+
+# Rust
+git add CHANGELOG.md README.md Cargo.toml Cargo.lock
+
 git commit -m "chore: release vX.Y.Z"
 git push
 ```

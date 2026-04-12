@@ -21,10 +21,11 @@ grep -r "version" pyproject.toml package.json Cargo.toml
 grep -r "## Version" README.md
 ```
 
-**Check for:**
-- [ ] `src/*/__init__.py` — `__version__ = "X.Y.Z"`
-- [ ] `pyproject.toml` — `version = "X.Y.Z"`
-- [ ] `package.json` — `"version": "X.Y.Z"`
+**Check for (use whichever apply to the project):**
+- [ ] `src/*/__init__.py` — `__version__ = "X.Y.Z"` *(Python)*
+- [ ] `pyproject.toml` — `version = "X.Y.Z"` *(Python)*
+- [ ] `Cargo.toml` — `version = "X.Y.Z"` *(Rust; check workspace root)*
+- [ ] `package.json` — `"version": "X.Y.Z"` *(Node)*
 - [ ] `README.md` — Version badge or header
 - [ ] All versions match
 
@@ -65,6 +66,9 @@ git describe --tags --always
 ```bash
 # Python
 uv pip list --outdated 2>/dev/null || pip list --outdated
+
+# Rust
+cargo outdated 2>/dev/null
 
 # Node
 npm outdated 2>/dev/null

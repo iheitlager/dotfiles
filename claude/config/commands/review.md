@@ -64,13 +64,12 @@ If no issues are linked, note "No linked issues found" and proceed.
 Read `CLAUDE.md` (or `.dotfiles/claude/config/CLAUDE.md`) and include in every agent prompt:
 
 ```
-Project conventions:
-- Python 3.12+, ruff (linting), pyright (types), pytest (>80% coverage), uv (package manager)
-- Imports sorted with isort
-- Type hints required on all public functions
-- ADRs in .openspec/adr/, specs in .openspec/specs/
-- Conventional commits (feat/fix/chore/refactor/docs)
-- No markdown files unless explicitly requested
+Project conventions (apply what's relevant to this project's language):
+- Python: ruff (linting), pyright (types), pytest (>80% coverage), uv, isort, type hints required
+- Rust: clippy -D warnings, rustfmt, cargo test, cargo check
+- All: ADRs in .openspec/adr/, specs in .openspec/specs/
+- All: Conventional commits (feat/fix/chore/refactor/docs)
+- All: No markdown files unless explicitly requested
 ```
 
 ### 3. Determine Applicable Agents
@@ -98,11 +97,11 @@ Agent tool:
   prompt: |
     Review PR #$PR: $TITLE
 
-    Project conventions:
-    - Python 3.12+, ruff, pyright, pytest (>80% coverage), uv
-    - Type hints required on all public functions
-    - Conventional commits; no gratuitous markdown files
-    - ADRs document architectural decisions (.openspec/adr/)
+    Project conventions (apply what's relevant to this project's language):
+    - Python: ruff, pyright, pytest (>80% coverage), uv, isort, type hints required
+    - Rust: clippy -D warnings, rustfmt, cargo test, cargo check
+    - All: Conventional commits; no gratuitous markdown files
+    - All: ADRs document architectural decisions (.openspec/adr/)
 
     Requirements (from linked issues):
     $REQUIREMENTS_CONTEXT
