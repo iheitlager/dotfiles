@@ -1,3 +1,6 @@
+---
+model: sonnet
+---
 Run code quality checks (linting, type checking, formatting) and interpret results.
 
 ## Usage
@@ -5,14 +8,14 @@ Run code quality checks (linting, type checking, formatting) and interpret resul
 ```
 /check                Run all checks
 /check lint           Run linter only (ruff)
-/check types          Run type checker only (mypy)
+/check types          Run type checker only (pyright)
 /check format         Check formatting (ruff format --check)
 /check <file>         Check specific file or directory
 ```
 
 ## Agent Strategy
 
-This skill can run autonomously via a Bash agent, making it suitable for background execution or quick status checks.
+This skill can run autonomously via a background agent, making it suitable for background execution or quick status checks.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -26,7 +29,7 @@ This skill can run autonomously via a Bash agent, making it suitable for backgro
 │                                                             │
 │  Option B: Thorough (background agent)                      │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │ Bash Agent (background)                             │   │
+│  │ general-purpose Agent (background)                  │   │
 │  │                                                     │   │
 │  │ - Run all linters                                   │   │
 │  │ - Run type checker                                  │   │
@@ -49,17 +52,17 @@ Run checks directly and report results:
 ```bash
 # Detect project type and run appropriate checks
 uv run ruff check src/ tests/ && \
-uv run mypy src/ && \
+uv run pyright src/ && \
 uv run ruff format --check src/ tests/
 ```
 
 ### Thorough Mode (background)
 
-For comprehensive checks, spawn a background Bash agent:
+For comprehensive checks, spawn a background general-purpose agent:
 
 ```
-Task tool:
-  subagent_type: Bash
+Agent tool:
+  subagent_type: general-purpose
   run_in_background: true
   prompt: |
     Run comprehensive code quality checks for this project.
@@ -69,7 +72,7 @@ Task tool:
        - Python: uv run ruff check src/ tests/ (or ruff if no uv)
        - Node: npm run lint (if available)
     3. Run type checking:
-       - Python: uv run mypy src/
+       - Python: uv run pyright src/
        - TypeScript: npx tsc --noEmit
     4. Check formatting:
        - Python: uv run ruff format --check src/ tests/
@@ -113,7 +116,7 @@ ls Cargo.toml 2>/dev/null
 uv run ruff check src/ tests/
 
 # Type checking
-uv run mypy src/
+uv run pyright src/
 
 # Format check
 uv run ruff format --check src/ tests/
@@ -126,7 +129,7 @@ uv run ruff check --select I src/ tests/
 
 ```bash
 ruff check src/ tests/
-mypy src/
+pyright src/
 ruff format --check src/ tests/
 ```
 
@@ -155,18 +158,19 @@ src/models.py:12:5: B006 Do not use mutable data structures for argument default
 - `I` — Import sorting issues
 - `W` — Warnings
 
-### Mypy Output
+### Pyright Output
 
 ```
-src/api.py:42: error: Argument 1 to "process" has incompatible type "str"; expected "int"
-src/models.py:15: error: "User" has no attribute "full_name"
+src/api.py:42:10 - error: Argument of type "str" is not assignable to parameter of type "int" (reportArgumentType)
+src/models.py:15:12 - error: Cannot access attribute "full_name" for class "User" (reportAttributeAccessIssue)
+src/utils.py:8:5 - warning: Type of "x" is partially unknown (reportUnknownVariableType)
 ```
 
 **Common issues:**
-- Type mismatches — Check function signatures
-- Missing attributes — Typo or wrong type
-- Optional access — Need `if x is not None` check
-- Import errors — Missing type stubs
+- `reportArgumentType` — Type mismatch in function call
+- `reportAttributeAccessIssue` — Typo or wrong type
+- `reportOptionalMemberAccess` — Need `if x is not None` check
+- `reportMissingModuleSource` — Missing type stubs
 
 ## Output Format
 
@@ -190,12 +194,12 @@ Linting (ruff)
   Auto-fixable: 4/5
   Run: uv run ruff check --fix src/
 
-Type Checking (mypy)
+Type Checking (pyright)
 ────────────────────────────────────────────────────────────────
 ✗ 2 errors found
 
-  src/api.py:42     Incompatible type "str"; expected "int"
-  src/models.py:15  "User" has no attribute "full_name"
+  src/api.py:42:10  Argument of type "str" is not assignable to parameter of type "int"
+  src/models.py:15  Cannot access attribute "full_name" for class "User"
 
 Formatting
 ────────────────────────────────────────────────────────────────
@@ -235,12 +239,12 @@ uv run ruff format src/
 
 Use the refactor-helper agent for complex type fixes:
 ```
-Task tool:
+Agent tool:
   subagent_type: refactor-helper
   prompt: |
     Fix these type errors:
-    - src/api.py:42 — Incompatible type "str"; expected "int"
-    - src/models.py:15 — "User" has no attribute "full_name"
+    - src/api.py:42 — Argument of type "str" is not assignable to parameter of type "int"
+    - src/models.py:15 — Cannot access attribute "full_name" for class "User"
 
     Investigate each error and suggest minimal fixes.
 ```
@@ -248,10 +252,10 @@ Task tool:
 ## Configuration Detection
 
 Check for existing config:
-- `pyproject.toml` — `[tool.ruff]`, `[tool.mypy]`
+- `pyproject.toml` — `[tool.ruff]`, `[tool.pyright]`
 - `ruff.toml` — Ruff-specific config
-- `mypy.ini` — Mypy-specific config
-- `.flake8` — Legacy (suggest migration)
+- `pyrightconfig.json` — Pyright-specific config
+- `.flake8` — Legacy (suggest migration to ruff)
 
 Report if no config found:
 > "No ruff config found. Consider adding `[tool.ruff]` to pyproject.toml for consistent settings."
