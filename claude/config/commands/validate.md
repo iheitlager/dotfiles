@@ -1,3 +1,6 @@
+---
+model: sonnet
+---
 Validate codebase health: link checking, drift detection, gap analysis, test cleanup, and conformance scoring.
 
 An open inspection of all artifacts — specs, code, tests, ADRs — run any time, independent of PRs or branches. The static tools produce findings; /validate interprets them.
@@ -60,6 +63,17 @@ ls src/ 2>/dev/null                # Source code
 ls pyproject.toml Makefile 2>/dev/null  # Build config
 ```
 
+**Check for existing make targets first** — if the project has a Makefile, prefer
+these over reimplementing the same logic:
+
+```bash
+grep -E '^(assurance|compliance|test|lint|typecheck):' Makefile 2>/dev/null
+```
+
+- If `make assurance` exists: run it and use its output as input to Agent 1
+- If `make compliance` exists: run it and use its output as input to Agents 1+2
+- If `make test` exists: run it instead of spawning a separate test agent step
+
 Adapt the validation to what the project actually has. A project with no OpenSpec
 skips spec traceability. A project with no ADRs skips drift detection. Report what
 was checked and what was skipped.
@@ -95,6 +109,8 @@ Task tool:
     4. Test → Code: For test files:
        - Does every test file correspond to a source module?
        - Are there test files testing code that no longer exists?
+       - Exclude infrastructure files from orphan detection:
+         conftest.py, fixtures/, helpers/, factories/, test_utils.py, setup files
 
     Report:
     - VALID links (confirmed both ends exist)
@@ -125,13 +141,25 @@ Task tool:
     6. What is tested but NOT specified?
        (test files covering code with no spec reference)
     7. Are there source modules with no spec and no tests? (dark zones)
-    8. Are there safety/security properties implied by specs but with no evidence?
+
+    Security gap detection:
+    8. For each spec or ADR that mentions auth, permissions, encryption, tokens,
+       secrets, or data validation — is there evidence of corresponding tests or
+       implementation? Quote the exact spec/ADR text, then state what is missing.
+       Do not claim a security gap without quoting a specific requirement.
+
+    ADR drift rules:
+    - Before claiming a violation, quote the EXACT text from the ADR that prescribes
+      the pattern (e.g., "ADR-0012 §3: 'All DB access MUST go through the repository
+      layer'"). Then cite the specific file:line that violates it.
+    - If you cannot find a clear prescriptive statement in the ADR, do not report drift.
+    - Mark ADRs as SUPERSEDED if their status field says so — skip drift checks for those.
 
     Report each finding with:
     - Category: DRIFT | SPEC_GAP | TEST_GAP | DARK_ZONE | SECURITY_GAP
     - Severity: critical | warning | info
     - File and line reference
-    - Description
+    - Description (include quoted ADR/spec text for DRIFT and SECURITY_GAP findings)
     - Suggested remediation
 ```
 
@@ -144,29 +172,30 @@ Task tool:
     Scope: <full project or narrowed path>
 
     1. Run tests and collect results:
-       - If Makefile exists with test target: make test
+       - If `make test` exists: make test
        - Else Python: uv run pytest tests/ -x --tb=short -q
        - Else Node: npm test
        Report: pass/fail count, any failures with details
 
     2. Run coverage (if available):
        - Python: uv run pytest --cov=src/ --cov-report=term-missing -q
-       - Report overall coverage and uncovered modules
+       - Report overall coverage % and list uncovered modules
 
     3. Run linting and type checks:
-       - Python: uv run ruff check src/ tests/ && uv run mypy src/
+       - Python: uv run ruff check src/ tests/ && uv run pyright src/
        - Node: npx eslint src/ && npx tsc --noEmit
-       Report: issues by severity
+       Report: issues by severity (ruff and pyright separately)
 
     4. Identify test quality issues:
        - Tests with TODO/FIXME markers
        - Overly broad assertions (assert True, expect(true))
-       - Empty test bodies or skipped tests
-       - Temporary fixtures or helpers that should be cleaned up
+       - Empty test bodies or skipped tests (@pytest.mark.skip, xit)
        - Duplicate or near-duplicate test cases
 
-    5. If mutation testing is available (mutmut, stryker):
-       - Run and report mutation score
+    5. Check CHANGELOG currency:
+       - Get commits since last CHANGELOG entry: git log --oneline
+       - Does CHANGELOG.md exist? Is it updated for recent feat/fix commits?
+       - List any feat/fix commits not reflected in CHANGELOG
 
     Output a structured summary of all findings.
 ```
@@ -291,19 +320,21 @@ With `--quick`, skip deep analysis agents and run deterministic checks only:
 
 ```bash
 # Tests pass?
-uv run pytest tests/ -x --tb=short -q || make test
+make test 2>/dev/null || uv run pytest tests/ -x --tb=short -q
 
 # Linting clean?
 uv run ruff check src/ tests/
 
 # Types clean?
-uv run mypy src/
+uv run pyright src/
 
-# Spec links exist? (quick file existence check)
-grep -r "Implementation:" .openspec/specs/ 2>/dev/null | while read line; do
-  FILE=$(echo "$line" | grep -oP '`[^`]+`' | tr -d '`')
-  [ -f "$FILE" ] && echo "✓ $FILE" || echo "✗ $FILE (missing)"
-done
+# Spec links exist? (macOS-compatible file existence check)
+grep -r "Implementation:" .openspec/specs/ 2>/dev/null \
+  | grep -o '`[^`]*`' \
+  | tr -d '`' \
+  | while IFS= read -r file; do
+      [ -f "$file" ] && echo "✓ $file" || echo "✗ $file (missing)"
+    done
 ```
 
 Quick mode produces a simplified pass/fail without scoring:
@@ -315,6 +346,7 @@ Quick Validation                            <project-name>
 ✓ Lint: clean
 ✗ Types: 1 error (src/api/routes.py:45)
 ✓ Spec links: 14/16 valid (2 broken)
+⚠ CHANGELOG: 3 feat/fix commits not reflected
 
 Status: ISSUES FOUND — run /validate for full report
 ```
