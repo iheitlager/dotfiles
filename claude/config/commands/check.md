@@ -1,5 +1,5 @@
 ---
-model: sonnet
+model: haiku
 ---
 Run code quality checks (linting, type checking, formatting) and interpret results.
 
