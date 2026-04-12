@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.9.2
+# Version: 0.9.3
 #
 # Changelog:
+# 0.9.3 Add --main flag: adds a final shell window in the main repo directory
 # 0.9.2 Default -n 2 to sonnet/sonnet (use --opus for opus distribution)
 # 0.9.1 Default -n 2 to opus/opus; fix window switch landing on left (claude) pane
 # 0.9.0 Add disk health check: warn/clean runaway Claude tmp output files on startup
@@ -87,6 +88,7 @@ EQUAL_DISTRIBUTION=false
 DAEMON_MODE=false
 OPUS_MODE=false
 CLASSIC_MODE=false
+MAIN_WINDOW=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
@@ -178,6 +180,7 @@ Options:
     -o, --classic      Use classic multi-pane layout (all agents in one window)
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
+    --main             Add a final shell window in the main repo directory
     -v, --verbose      Print commands being executed
     -f, --force        Force restart or clean (skips prompts, auto-cleans disk)
     --yolo             Skip permission prompts (Claude agents only)
@@ -715,6 +718,13 @@ create_tmux_layout_new() {
         echo -e "${GREEN}✓ Swarm daemon started${NC}"
     fi
 
+    # Add main window (shell in main repo) if --main flag set
+    if [[ "$MAIN_WINDOW" == true ]]; then
+        tmux new-window -t "$SESSION" -n "main" -c "$REPO_ROOT"
+        sleep 0.2
+        echo -e "${GREEN}✓ Main window ready${NC}"
+    fi
+
     tmux select-window -t "$SESSION:agent-1"
     tmux select-pane -t "$SESSION:agent-1.1"
 
@@ -960,6 +970,9 @@ cmd_start() {
         echo "Navigation:"
         echo "  Ctrl-b 1-$AGENT_COUNT      Agent windows (claude│shell)"
         echo "  Ctrl-b $((AGENT_COUNT+1))         Daemon window"
+        if [[ "$MAIN_WINDOW" == true ]]; then
+        echo "  Ctrl-b $((AGENT_COUNT+2))         Main window (shell in $REPO_NAME)"
+        fi
         echo "  Alt ←→          Switch pane within window"
     fi
     echo "  Alt ↑↓←→        Switch pane"
@@ -1312,6 +1325,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --yolo)
             SKIP_PERMISSIONS="--dangerously-skip-permissions"
+            shift
+            ;;
+        --main)
+            MAIN_WINDOW=true
             shift
             ;;
         -d|--daemon)
