@@ -1,3 +1,7 @@
+---
+model: claude-haiku-4-5-20251001
+---
+
 Clean up merged git branches (both local and remote).
 
 ## Usage
@@ -52,7 +56,21 @@ Protected (will not delete):
   main, master, develop, current branch
 ```
 
-### 4. Confirm and Delete
+### 4. Sync Worktree Branch with Main
+
+If running inside a git worktree (i.e. the current branch is an `agent-XX` branch), after deletion sync the worktree branch with main and check it out:
+
+```bash
+# Detect worktree base branch (e.g. agent-1)
+CURRENT=$(git branch --show-current)
+if [[ "$CURRENT" =~ ^agent-[0-9]+$ ]]; then
+    git fetch origin
+    git rebase origin/main
+    echo "✓ Synced $CURRENT with origin/main"
+fi
+```
+
+### 5. Confirm and Delete
 
 Ask for confirmation before any deletion.
 

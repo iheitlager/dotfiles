@@ -398,6 +398,6 @@ keymap('v', '<leader>ad', function() claude.show('Add documentation/comments to 
 vim.opt.runtimepath:prepend(vim.fn.expand('~/wc/sheerpower-worktree/agent-1/etc/nvim'))
 
 -- MVL language support (nvim-mvl)
-vim.opt.runtimepath:prepend(vim.fn.expand("~/wc/mvl_language-worktree/agent-1/etc/nvim-mvl"))
+vim.opt.runtimepath:prepend(vim.fn.expand("~/wc/mvl_language/etc/nvim-mvl"))
 require("mvl").setup()
 vim.api.nvim_create_autocmd("FileType", { pattern = "mvl", callback = function() vim.treesitter.start() end })
