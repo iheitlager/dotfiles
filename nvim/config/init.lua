@@ -128,7 +128,7 @@ vim.api.nvim_create_autocmd('FileType', {
 
 -- Enable treesitter highlighting for filetypes not auto-detected
 vim.api.nvim_create_autocmd('FileType', {
-  pattern = { 'ebnf', 'mvl' },
+  pattern = { 'ebnf', 'mvl', 'turtle' },
   callback = function()
     vim.treesitter.start()
   end,
@@ -194,11 +194,13 @@ require('lazy').setup({
     build = ':TSUpdate',
     config = function()
       require('nvim-treesitter').setup({
-        ensure_install = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown', 'markdown_inline', 'ebnf' },
+        ensure_install = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown', 'markdown_inline', 'ebnf', 'turtle' },
         auto_install = true,
       })
       -- Link .ebnf files to the ebnf treesitter parser
       vim.filetype.add({ extension = { ebnf = 'ebnf' } })
+      -- Link .ttl files to the turtle treesitter parser (Turtle RDF syntax)
+      vim.filetype.add({ extension = { ttl = 'turtle' } })
       -- Enable treesitter-based folding (foldlevel=99 keeps all folds open by default)
       vim.opt.foldmethod = 'expr'
       vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
