@@ -55,8 +55,19 @@ if ! declare -f _dotfiles_cached_source &>/dev/null; then
         local cache="$XDG_CACHE_HOME/dotfiles/${type}.sh"
         mkdir -p "$XDG_CACHE_HOME/dotfiles"
         
-        # Regenerate cache if missing or dotfiles dir is newer
+        # Regenerate cache if missing, dotfiles dir is newer, or any source file is newer
+        local _needs_regen=false
         if [[ ! -f "$cache" ]] || [[ "$DOTFILES" -nt "$cache" ]]; then
+            _needs_regen=true
+        else
+            for _f in $DOTFILES/*/"$type"; do
+                if [[ -f "$_f" ]] && [[ "$_f" -nt "$cache" ]]; then
+                    _needs_regen=true
+                    break
+                fi
+            done
+        fi
+        if [[ "$_needs_regen" == true ]]; then
             # Concatenate all module files with origin comments
             : >| "$cache"  # Truncate/create (>| overrides noclobber)
             for f in $DOTFILES/*/"$type"; do
