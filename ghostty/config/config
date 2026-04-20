@@ -77,8 +77,9 @@ cursor-style-blink = false
 # =============================================================================
 copy-on-select = true
 mouse-hide-while-typing = true
+mouse-scroll-multiplier = 1
 confirm-close-surface = false
-scrollback-limit = 10000
+scrollback-limit = 50000
 
 # Shell integration (automatic with bash/zsh/fish)
 shell-integration = detect
