@@ -82,7 +82,9 @@ Run `make assurance` to validate spec coverage, `make compliance` for full pipel
 ## Claude Code Workflow Preferences
 
 ### Planning and Execution
-- Plan complex tasks and explore the codebase thoughtfully
+- **Plan before implementing.** For any non-trivial change (>1 file or >20 lines), present a 3-5 line plan before implementing. State: what files change, what the approach is, what could go wrong. Wait for approval. Trivial changes (one-liner, typo, config) just do it.
+- **Simplicity first.** Minimum code that solves today's problem. No speculative abstractions, no Strategy patterns for one implementation, no config for one value. If a senior engineer would say "this is overcomplicated" — simplify. Refactor later when the second use case actually arrives, not before.
+- **Surgical changes.** Touch only what the task requires. Don't reformat adjacent code, don't add type hints to untouched functions, don't change quote styles. Your mess, your cleanup. Their mess, their decision. The diff should trace entirely to the request. Smaller diffs = faster review = faster ship.
 - Read files before modifying them
 - Use TodoWrite to track progress on multi-step work
 - Think through architectural decisions carefully

@@ -2,12 +2,12 @@
 model: claude-haiku-4-5-20251001
 ---
 
-Clean up merged git branches (both local and remote).
+Clean up merged git branches (both local and remote), then sync all worktrees and main with origin.
 
 ## Usage
 
 ```
-/purge                Clean both local and remote merged branches
+/purge                Clean branches + sync all worktrees
 /purge local          Clean only local merged branches
 /purge remote         Clean only remote merged branches
 /purge --dry-run      Show what would be deleted without deleting
@@ -25,14 +25,14 @@ This removes remote-tracking references to deleted branches.
 
 ### 2. Find Merged Branches
 
-**Local merged branches:**
+**Local merged branches** (excluding protected and worktree base branches):
 ```bash
-git branch --merged main | grep -vE '^\*|main|master|develop'
+git branch --merged main | grep -vE '^\*|main|master|develop|agent-[0-9]+'
 ```
 
 **Remote merged branches:**
 ```bash
-git branch -r --merged origin/main | grep -vE 'main|master|develop|HEAD'
+git branch -r --merged origin/main | grep -vE 'main|master|develop|HEAD|agent-[0-9]+'
 ```
 
 ### 3. Show Preview
@@ -53,24 +53,10 @@ Remote branches to delete (2):
   origin/fix/header-alignment   merged 2 weeks ago
 
 Protected (will not delete):
-  main, master, develop, current branch
+  main, master, develop, agent-XX branches, current branch
 ```
 
-### 4. Sync Worktree Branch with Main
-
-If running inside a git worktree (i.e. the current branch is an `agent-XX` branch), after deletion sync the worktree branch with main and check it out:
-
-```bash
-# Detect worktree base branch (e.g. agent-1)
-CURRENT=$(git branch --show-current)
-if [[ "$CURRENT" =~ ^agent-[0-9]+$ ]]; then
-    git fetch origin
-    git rebase origin/main
-    echo "✓ Synced $CURRENT with origin/main"
-fi
-```
-
-### 5. Confirm and Delete
+### 4. Confirm and Delete
 
 Ask for confirmation before any deletion.
 
@@ -84,13 +70,48 @@ git branch -d <branch>
 git push origin --delete <branch>
 ```
 
+If a branch is "not fully merged" but you confirm it should be deleted (e.g., it was squash-merged), force delete it:
+```bash
+git branch -D <branch>
+```
+
+### 5. Sync Main and All Worktrees
+
+After branch cleanup, find all worktrees and rebase each onto origin/main:
+
+```bash
+# List all worktrees
+git worktree list
+```
+
+For each worktree (including the main repo):
+1. If it's on `main` — rebase onto `origin/main`
+2. If it's on an `agent-XX` branch — rebase onto `origin/main`
+3. Skip worktrees with uncommitted changes (warn the user)
+
+```bash
+# For each worktree path discovered above:
+cd <worktree-path>
+BRANCH=$(git branch --show-current)
+if git diff --quiet && git diff --cached --quiet; then
+    git fetch origin
+    git rebase origin/main
+    echo "✓ Synced $BRANCH in <worktree-path>"
+else
+    echo "⚠ Skipped $BRANCH in <worktree-path> — uncommitted changes"
+fi
+```
+
+Then go back to the original directory.
+
 ## Safety Checks
 
 **Never delete:**
 - Current branch (`*` in branch list)
 - `main`, `master`, `develop` branches
+- `agent-XX` worktree base branches
 - Branches with uncommitted work
-- Unmerged branches (use `-d` not `-D`)
+- Unmerged branches (use `-d` not `-D`, ask user before force-deleting)
 
 **Warn before deleting:**
 - Branches less than 1 day old
@@ -115,12 +136,20 @@ Deleted remote branches: 2
 Skipped: 0
 Errors: 0
 
+Worktree Sync Summary
+═══════════════════════════════════════════════════════════════
+
+  ✓ main        /path/to/repo               → rebased on origin/main
+  ✓ agent-1     /path/to/worktree/agent-1   → rebased on origin/main
+  ✓ agent-2     /path/to/worktree/agent-2   → rebased on origin/main
+  ⚠ agent-3     /path/to/worktree/agent-3   → skipped (uncommitted changes)
+
 Your repository is clean!
 ```
 
 ## Examples
 
-**Quick cleanup:**
+**Full cleanup (branches + sync all worktrees):**
 ```
 /purge
 ```
@@ -147,7 +176,13 @@ Your repository is clean!
 ```
 error: The branch 'feat/x' is not fully merged.
 ```
-This means the branch has commits not in main. Check if work was lost or use `git branch -D` manually if certain.
+This can happen with squash-merges. Check `git log main..feat/x` — if empty, it's safe to force-delete with `git branch -D feat/x`. Ask the user before proceeding.
+
+**Rebase conflict in worktree:**
+```
+CONFLICT (content): Merge conflict in src/foo.py
+```
+Stop the rebase (`git rebase --abort`), report the conflict to the user, and skip that worktree.
 
 **Permission denied on remote:**
 ```

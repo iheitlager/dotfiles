@@ -85,7 +85,6 @@ AGENT_COUNT=2
 FORCE=false
 VERBOSE=false
 EQUAL_DISTRIBUTION=false
-DAEMON_MODE=false
 OPUS_MODE=false
 CLASSIC_MODE=false
 MAIN_WINDOW=false
@@ -176,8 +175,7 @@ Commands:
 
 Options:
     -n COUNT           Number of agents: 2, 3, 4, or 6 (default: 2)
-    -d, --daemon       Run task-watcher daemon (monitors queue, notifies agents)
-    -o, --classic      Use classic multi-pane layout (all agents in one window)
+-o, --classic      Use classic multi-pane layout (all agents in one window)
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
     --main             Add a final shell window in the main repo directory
@@ -187,9 +185,9 @@ Options:
     -h, --help         Show this help message
 
 Layouts (default):
-    2 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  daemon
-    3 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  agent-3 [claude│shell]  daemon
-    4 agents        agent-1..4 [claude│shell each]  daemon
+    2 agents        agent-1 [claude│shell]  agent-2 [claude│shell]
+    3 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  agent-3 [claude│shell]
+    4 agents        agent-1..4 [claude│shell each]
 
 Layouts (--classic / -o):
     2 agents        agents: agent-1 │ agent-2   +  shell-1  shell-2
@@ -205,8 +203,7 @@ Clients & Models:
 Examples:
     launch-agents                   Smart default: start or attach
     launch-agents -n 4 start        Start 4 agents
-    launch-agents -d start          Start with task-watcher daemon
-    launch-agents workspace         Simple workspace (claude + shell)
+launch-agents workspace         Simple workspace (claude + shell)
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
     launch-agents clean             Remove merged worktrees
@@ -489,84 +486,9 @@ Users may talk to you directly. When receiving a request:
 
 2. Decide:
    - Small task + you match capability → do it directly
-   - Large task → break into subtasks, create job files
-   - Wrong capability tier → create a job for a better-suited agent
-
-## Job Queue
-
-Use \`swarm-job\` for all job operations:
-
-\`\`\`bash
-# List all jobs (pending/active/done)
-swarm-job list
-
-# List only pending jobs with scores
-swarm-job list pending
-
-# Claim best matching job for your model tier
-swarm-job claim
-
-# Claim specific job
-swarm-job claim job-1737372800-12345
-
-# Complete a job
-swarm-job complete job-1737372800-12345
-swarm-job complete job-1737372800-12345 -r "merged to main"
-
-# Create a new job for others
-swarm-job new "Job title" -p high -c complex
-\`\`\`
-
-## Polling
-
-Check for new jobs periodically. When idle:
-\`\`\`bash
-# Check every 30-60 seconds when not busy
-swarm-job list pending
-\`\`\`
-
-The swarm-daemon will also send notifications via tmux when:
-- New jobs are available for your tier
-- Jobs you depend on are completed (unblocked)
-
-## Capability Matching
-
-Your model tier: $model
-- opus (tier 3): complex tasks, architecture, debugging
-- sonnet (tier 2): moderate tasks, standard features
-- haiku (tier 1): simple tasks, docs, formatting
-
-Claim jobs at or below your tier. Higher-tier agents can help clear simpler jobs.
-
-## Job File Format
-
-\`\`\`yaml
-id: job-1737372800-12345
-created: <ISO timestamp>
-created_by: agent-$agent
-priority: low | medium | high | urgent
-complexity: simple | moderate | complex
-recommended_model: haiku | sonnet | opus
-title: <short title>
-description: |
-  <detailed description>
-depends_on: []
-claimed_by: null
-claimed_at: null
-completed_at: null
-result: null
-\`\`\`
-
-Job files live in \`$SHARED_CONTEXT/jobs/pending/\`, \`jobs/active/\`, and \`jobs/done/\`.
+   - Large task → break into subtasks
 
 ## Peer Communication
-
-Check swarm activity:
-\`\`\`bash
-swarm-daemon log              # View recent events (preferred)
-swarm-daemon log -f           # Follow events in real-time
-tail -30 $SHARED_CONTEXT/events.log  # Direct file access (alternative)
-\`\`\`
 
 Signal another agent via tmux:
 \`\`\`bash
@@ -586,8 +508,8 @@ tmux send-keys -t $SESSION:agent-N.1 Enter
 
 Close the swarm:
 If the customer types shut down, gracefully wind down:
-1. Finish current job
-2. Exit process (shutdown logged automatically)
+1. Finish current task
+2. Exit
 \`\`\`bash
 launch-agents stop
 \`\`\`
@@ -602,19 +524,8 @@ For each job:
 1. Ensure branch is up to date: \`git fetch && git rebase origin/main\`
 2. Create a feature branch: \`git checkout -b feat/my-feature\`
 3. Make changes and commit with clear messages
-4. Create PR: use \`/pr\` skill, then signal the swarm:
-   \`\`\`bash
-   swarm-daemon hook JOB_PR_READY <job-id> <pr-number>
-   \`\`\`
-5. After merge: use \`/merge\` skill, then signal the swarm:
-   \`\`\`bash
-   swarm-daemon hook JOB_PR_MERGED <job-id>
-   \`\`\`
-6. Mark job complete: \`swarm-job complete <job-id>\`
-
-Note: Tool use events (Read, Edit, Write, Bash, etc.) are emitted automatically
-by the Claude Code hooks in \`~/.dotfiles/claude/config/settings.json\` — no
-manual calls needed for those.
+4. Create PR: use \`/pr\` skill
+5. After merge: use \`/merge\` skill
 
 IMPORTANT: Never create PRs or push \`agent-N\` branches. Always work on a
 feature branch (\`feat/\`, \`fix/\`, \`refactor/\`, etc.) branched from \`agent-$agent\`.
@@ -676,7 +587,6 @@ _start_agent_pane() {
 
 create_tmux_layout_new() {
     # New default layout: one window per agent, each split left (claude) | right (shell)
-    # Plus a daemon window at the end.
     local count=$1
 
     echo -e "${BLUE}Creating per-agent tmux layout for $count agents...${NC}"
@@ -709,14 +619,6 @@ create_tmux_layout_new() {
         # Leave focus on left pane (claude) so switching to this window lands there
         tmux select-pane -t "$SESSION:$win.1"
     done
-
-    # Always add daemon window (starts swarm-daemon only if -d flag)
-    tmux new-window -t "$SESSION" -n "daemon" -c "$REPO_ROOT"
-    sleep 0.2
-    if [[ "$DAEMON_MODE" == true ]]; then
-        tmux send-keys -t "$SESSION:daemon" "swarm-daemon daemon" C-m
-        echo -e "${GREEN}✓ Swarm daemon started${NC}"
-    fi
 
     # Add main window (shell in main repo) if --main flag set
     if [[ "$MAIN_WINDOW" == true ]]; then
@@ -784,14 +686,6 @@ create_tmux_layout_classic() {
             tmux send-keys -t "$SESSION:shell-$i" "source .venv/bin/activate" C-m
         fi
     done
-
-    # Add daemon window if daemon mode enabled
-    if [[ "$DAEMON_MODE" == true ]]; then
-        tmux new-window -t "$SESSION" -n "daemon" -c "$REPO_ROOT"
-        sleep 0.2
-        tmux send-keys -t "$SESSION:daemon" "swarm-daemon daemon" C-m
-        echo -e "${GREEN}✓ Swarm daemon started${NC}"
-    fi
 
     tmux select-window -t "$SESSION:agents"
     tmux select-pane -t "$SESSION:agents.1"
@@ -1331,11 +1225,7 @@ while [[ $# -gt 0 ]]; do
             MAIN_WINDOW=true
             shift
             ;;
-        -d|--daemon)
-            DAEMON_MODE=true
-            shift
-            ;;
-        -h|--help)
+-h|--help)
             print_usage
             exit 0
             ;;
