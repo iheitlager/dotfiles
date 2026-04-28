@@ -465,7 +465,7 @@ create_agent_instructions() {
     cat > "$worktree_path/AGENTS.md" << EOF
 # Agent Instructions
 
-You are agent-$agent running $model (via $client) in a peer swarm for project: $REPO_NAME
+You are agent-$agent running $model (via $client) for project: $REPO_NAME
 
 ## Identity
 
@@ -473,54 +473,12 @@ You are agent-$agent running $model (via $client) in a peer swarm for project: $
 - Client: $client
 - Model: $model
 - Worktree: $worktree_path
-- Shared state: $SHARED_CONTEXT
-
-## Receiving Orders
-
-Users may talk to you directly. When receiving a request:
-
-1. Assess complexity:
-   - Simple: docs, formatting, simple tests
-   - Moderate: standard features, refactors
-   - Complex: architecture, tricky bugs, design
-
-2. Decide:
-   - Small task + you match capability → do it directly
-   - Large task → break into subtasks
-
-## Peer Communication
-
-Signal another agent via tmux:
-\`\`\`bash
-# IMPORTANT: Must be TWO separate commands - first types text, second submits
-# Each agent is in its own window: $SESSION:agent-N.1 (left/claude pane)
-tmux send-keys -t $SESSION:agent-N.1 "Message here" Enter
-tmux send-keys -t $SESSION:agent-N.1 Enter
-\`\`\`
-
-Alternative (if the agent appears stuck in idle/Enchanting state):
-\`\`\`bash
-# Send Escape first to break idle state, then message with separate Enter
-tmux send-keys -t $SESSION:agent-N.1 Escape
-tmux send-keys -t $SESSION:agent-N.1 "Message here" Enter
-tmux send-keys -t $SESSION:agent-N.1 Enter
-\`\`\`
-
-Close the swarm:
-If the customer types shut down, gracefully wind down:
-1. Finish current task
-2. Exit
-\`\`\`bash
-launch-agents stop
-\`\`\`
-
-Pane mapping: each agent has its own window $SESSION:agent-N, claude is pane 1 (left), shell is pane 2 (right)
 
 ## Git Workflow
 
 You work on branch: agent-$agent
 
-For each job:
+For each task:
 1. Ensure branch is up to date: \`git fetch && git rebase origin/main\`
 2. Create a feature branch: \`git checkout -b feat/my-feature\`
 3. Make changes and commit with clear messages
@@ -529,21 +487,6 @@ For each job:
 
 IMPORTANT: Never create PRs or push \`agent-N\` branches. Always work on a
 feature branch (\`feat/\`, \`fix/\`, \`refactor/\`, etc.) branched from \`agent-$agent\`.
-
-## Principles
-
-- No hierarchy — all agents are peers
-- Match job complexity to your capability
-- One active job at a time
-- Signal completion clearly
-- Help clear simple jobs if queue is empty
-
-## Documentation
-
-For detailed architecture, security considerations, and advanced usage:
-\`\`\`bash
-cat ~/.dotfiles/docs/agent-system.md
-\`\`\`
 EOF
 }
 
