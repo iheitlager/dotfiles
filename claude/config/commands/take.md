@@ -3,9 +3,8 @@ Take ownership of a GitHub issue and begin implementation.
 ## Usage
 
 ```
-/take #123        Single agent: take and implement directly
-/take #123 queue  Multi-agent: load issue into swarm queue as task(s)
-/take             Show suggested issues to take
+/take #123  Take and implement directly
+/take       Show suggested issues to take
 ```
 
 **Epic detection:** If the issue has the `epic` label or links to sub-issues, `/take` automatically enters Epic Mode — one branch, one PR, one commit per sub-ticket.
@@ -27,10 +26,6 @@ Before taking any issue, run these checks in order. **Stop immediately** if any 
 │  2. Sync with main                                          │
 │     ├─ git fetch origin                                     │
 │     └─ git rebase origin/main                               │
-│                     │                                       │
-│  3. Atomic queue registration (swarm-job take)              │
-│     ├─ Issue already in queue? ─── Show who, STOP           │
-│     └─ Not in queue? ─── Create + claim atomically          │
 │                     │                                       │
 │  ✓ Ready to proceed                                         │
 └─────────────────────────────────────────────────────────────┘
@@ -77,36 +72,6 @@ git rebase origin/main
     git rebase --abort   # Cancel and keep your changes
     git rebase --continue # After fixing conflicts
 ```
-
-### Check 3: Atomic Queue Registration
-
-Use `swarm-job take` which atomically:
-- Checks if issue already has a job (pending or active)
-- Creates the job
-- Claims it immediately
-
-```bash
-JOB_OUTPUT=$(swarm-job take $ISSUE_NUM -t "$TITLE" -p $PRIORITY -c $COMPLEXITY)
-JOB_ID=$(echo "$JOB_OUTPUT" | grep "Job ID:" | awk '{print $3}')
-
-# Record job claim event (Phase 2)
-swarm-daemon hook JOB_CLAIMED "$JOB_ID" --issue $ISSUE_NUM --title "$TITLE"
-```
-
-**If already taken:**
-```
-✗ Issue #123 already in queue
-
-  Job: job-1737500000
-  Title: Fix login redirect
-  Claimed by: agent-2
-
-Options:
-  - Claim existing: swarm-job claim job-1737500000
-  - Choose different issue
-```
-
-This is atomic (uses `flock`) so no race conditions between agents.
 
 ---
 
@@ -165,35 +130,10 @@ For issues labeled `epic` or that have sub-issues. One branch, one PR, one commi
 if issue has label "epic" OR issue body contains task list with #N references
   → Epic Mode
 else
-  → Direct Mode (or Queue Mode if "queue" arg)
+  → Direct Mode
 ```
 
 **Key principle:** The epic branch stays open across all sub-tickets. Each sub-ticket gets its own commit (not its own branch/PR). The PR is created once at the end, referencing all closed sub-issues.
-
-### Queue Mode
-
-For multi-agent swarms. Loads the issue into the swarm queue so any capable agent can claim it.
-
-```bash
-# Queue mode creates swarm job(s) from the issue:
-swarm-job new "Issue title" \
-  -p <priority from labels> \
-  -c <complexity estimate> \
-  -d "From #123: <issue description summary>"
-```
-
-**Priority mapping from labels:**
-- `priority:urgent`, `critical`, `P0` → urgent
-- `priority:high`, `important`, `P1` → high
-- `priority:low`, `minor`, `P3` → low
-- Default → medium
-
-**Complexity estimation:**
-- Small issues, docs, typos → simple (haiku)
-- Standard features, bug fixes → moderate (sonnet)
-- Architecture, multi-file, design → complex (opus)
-
-**Output:** Reports created job ID and suggests `swarm-job list` to verify.
 
 ## Process (Direct Mode)
 
@@ -388,16 +328,6 @@ Run `/check` to verify linting, types, and formatting as well.
 - Reference the issue: `fix: resolve hover bug in sidebar (#123)`
 - Summarize what was done and any follow-up needed
 
-### 8. Complete Swarm Job
-
-After PR is created or merged, mark the job as done:
-
-```bash
-swarm-job complete "$JOB_ID" -r "PR #$PR_NUM created"
-```
-
-This is handled automatically by `/pr` and `/merge` commands.
-
 ## Process (Epic Mode)
 
 When an epic is detected, the workflow changes: one branch holds all sub-ticket work, each sub-ticket is a commit, and one PR closes everything.
@@ -497,62 +427,6 @@ If the conversation ends mid-epic (context limit, user pauses):
 When `/take #N` is called and you're already on an epic branch:
 1. Check if `#N` is a sub-ticket of the current epic — if yes, continue on this branch
 2. If `#N` is a different issue — warn and offer to switch or finish current epic first
-
----
-
-## Process (Queue Mode)
-
-### 1. Fetch & Validate Issue
-
-```bash
-gh issue view #N
-```
-
-- Confirm the issue is actionable (not stale, not blocked)
-- Check for linked PRs (maybe already in progress)
-
-### 2. Research via Agent (optional for complex issues)
-
-For complex issues, spawn an Explore agent first to inform task breakdown:
-
-```
-Task tool:
-  subagent_type: Explore
-  prompt: |
-    Analyze issue #N for task decomposition:
-
-    1. What distinct pieces of work does this require?
-    2. What are the dependencies between them?
-    3. Which parts could be parallelized?
-    4. Estimate complexity of each part (simple/moderate/complex)
-```
-
-### 3. Create Swarm Job(s)
-
-For simple issues — one job:
-```bash
-swarm-job new "Issue title" -p medium -c moderate \
-  -d "From #123: <brief description>"
-```
-
-For complex issues — break into subtasks:
-```bash
-swarm-job new "Design API interface (#123)" -p high -c complex
-swarm-job new "Implement API handler (#123)" -p high -c moderate -D job-XXX
-swarm-job new "Add API tests (#123)" -p medium -c simple -D job-YYY
-```
-
-### 4. Report
-
-Output the created job(s):
-```
-Queued issue #123 as swarm job(s):
-  job-1737500000 [high/complex] Design API interface
-  job-1737500001 [high/moderate] Implement API handler (blocked by above)
-  job-1737500002 [medium/simple] Add API tests (blocked by above)
-
-Run: swarm-job list pending
-```
 
 ## Philosophy
 
