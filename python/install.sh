@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-source "$(dirname "$0")/bash_env"
+source "$(dirname "${BASH_SOURCE[0]}")/bash_env"
 
 if [ ! -d $WORKON_DIR ] ; then
     echo "  Creating an empty Virtual env directory"

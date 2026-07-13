@@ -32,6 +32,7 @@ Usage: dot [COMMAND] [OPTIONS]
 
 COMMANDS:
     install <topic>   Run install.sh for a specific topic (e.g., vim, osx, vscode)
+    brew <topic>      Run brew_packages for a specific topic (e.g., ocaml, python)
     list              List available topics with install.sh scripts
     status            Show installation status and outdated packages
     invalidate        Clear dotfiles caches (bash_env, bash_aliases, etc.)
@@ -52,6 +53,7 @@ Example:
     dot                           # Install using existing Brewfile
     dot install vim               # Run vim/install.sh
     dot install osx               # Run osx/install.sh
+    dot brew ocaml                # Run ocaml/brew_packages
     dot list                      # Show available topics
     dot status                    # Show what's installed and outdated
     dot invalidate                # Clear dotfiles caches
@@ -90,6 +92,32 @@ if [[ $# -gt 0 ]]; then
             else
                 echo "❌ No install.sh found for topic '$TOPIC'"
                 echo "   Expected: $INSTALL_SCRIPT"
+                echo "   Run 'dot list' to see available topics"
+                exit 1
+            fi
+            ;;
+        brew)
+            if [[ -z $DOTFILES ]]; then
+                echo "❌ DOTFILES variable not set, exiting"
+                exit 1
+            fi
+            if [[ -z $2 ]]; then
+                echo "❌ Usage: dot brew <topic>"
+                echo "   Run 'dot list' to see available topics"
+                exit 1
+            fi
+            TOPIC="$2"
+            BREW_SCRIPT="$DOTFILES/$TOPIC/brew_packages"
+            if [[ -f "$BREW_SCRIPT" ]]; then
+                echo "🍺 Running brew_packages for '$TOPIC'..."
+                source "$BREW_SCRIPT"
+                echo "📝 Exporting Homebrew state to Brewfile..."
+                brew bundle dump --file="$BREWFILE" --force 2>/dev/null
+                echo "✅ Done brewing '$TOPIC' — Brewfile updated"
+                exit 0
+            else
+                echo "❌ No brew_packages found for topic '$TOPIC'"
+                echo "   Expected: $BREW_SCRIPT"
                 echo "   Run 'dot list' to see available topics"
                 exit 1
             fi

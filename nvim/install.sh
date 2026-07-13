@@ -7,10 +7,10 @@ set -e
 # XDG directories
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-DOTFILES="${DOTFILES:-$(cd "$(dirname "$0")/.." && pwd)}"
+DOTFILES="${DOTFILES:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 # Get script directory
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NVIM_CONFIG="$SCRIPT_DIR/config"
 
 echo "  Setting up Neovim..."
