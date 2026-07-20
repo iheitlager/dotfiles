@@ -1,0 +1,59 @@
+;;
+;; claude.sb — macOS seatbelt profile for running Claude in a project sandbox
+;;
+;; Strategy:
+;;   - Allow all system reads (libs, binaries, network, keychain, etc.)
+;;   - Restrict home directory: read CWD + ~/wc + ~/papers, write CWD only
+;;
+;; Usage (via sb-claude alias):
+;;   sandbox-exec \
+;;     -D HOME=$HOME \
+;;     -D CWD=$(pwd) \
+;;     -D WC=$HOME/wc \
+;;     -D PAPERS=$HOME/papers \
+;;     -D CLAUDE=$HOME/.claude \
+;;     -D CLAUDE_XDG=$HOME/.config/claude \
+;;     -D CLAUDE_JSON=$HOME/.claude.json \
+;;     -f ~/.dotfiles/local/lib/claude.sb claude
+
+(version 1)
+(allow default)
+
+;; ── Restrict reads inside home ────────────────────────────────────────────────
+(deny file-read* (subpath (param "HOME")))
+
+;; Project trees (read)
+(allow file-read* (subpath (param "CWD")))
+(allow file-read* (subpath (param "WC")))
+(allow file-read* (subpath (param "PAPERS")))
+
+;; Claude state (read)
+(allow file-read* (subpath (param "CLAUDE")))
+(allow file-read* (subpath (param "CLAUDE_XDG")))
+(allow file-read* (literal (param "CLAUDE_JSON")))
+
+;; git & gh auth (read)
+(allow file-read* (subpath (param "GH")))
+(allow file-read* (literal (param "GITCONFIG")))
+(allow file-read* (subpath (param "SSH")))
+
+;; Temp dirs (read)
+(allow file-read* (subpath "/private/tmp"))
+(allow file-read* (subpath "/tmp"))
+(allow file-read* (subpath "/private/var/folders"))
+
+;; ── Restrict writes inside home ───────────────────────────────────────────────
+(deny file-write* (subpath (param "HOME")))
+
+;; CWD only (write)
+(allow file-write* (subpath (param "CWD")))
+
+;; Claude state (write)
+(allow file-write* (subpath (param "CLAUDE")))
+(allow file-write* (subpath (param "CLAUDE_XDG")))
+(allow file-write* (literal (param "CLAUDE_JSON")))
+
+;; Temp dirs (write)
+(allow file-write* (subpath "/private/tmp"))
+(allow file-write* (subpath "/tmp"))
+(allow file-write* (subpath "/private/var/folders"))

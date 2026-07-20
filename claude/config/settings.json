@@ -57,7 +57,8 @@
       "Bash(npm *)",
       "Bash(*-h*)",
       "Bash(curl:*)",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "Bash(pandoc:*)"
     ],
     "deny": [
       "Bash(curl|*sh:*)",
@@ -75,16 +76,20 @@
       "Write(~/.config/secrets)",
       "Write(/etc/*)",
       "Write(~/.crontab)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
-  "model": "opus[1m]",
+  "model": "opus",
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh"
   },
   "enabledPlugins": {},
-  "effortLevel": "medium",
+  "effortLevel": "high",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
   "teammateMode": "tmux",
+  "skipAutoPermissionPrompt": true,
   "additionalDirectories": [
     ".",
     "~/.local/state/agent-context",

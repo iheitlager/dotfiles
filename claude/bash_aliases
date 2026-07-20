@@ -69,6 +69,10 @@ agent-no() {
 # Usage: ai "explain this", ai -f file.py "review", ai --cmd "find large files"
 
 
+# Claude native sandbox (macOS seatbelt)
+# Write: CWD only. Read: CWD, ~/wc, ~/papers
+alias sb-claude='sandbox-exec -D HOME=$HOME -D CWD=$(pwd) -D WC=$HOME/wc -D PAPERS=$HOME/papers -D CLAUDE=$HOME/.claude -D CLAUDE_XDG=$HOME/.config/claude -D CLAUDE_JSON=$HOME/.claude.json -D GH=$HOME/.config/gh -D GITCONFIG=$HOME/.gitconfig -D SSH=$HOME/.ssh -f $HOME/.dotfiles/local/lib/claude.sb claude'
+
 # Claude sandbox container aliases
 # claude-sandbox command is in local/bin/claude-sandbox
 alias cs='claude-sandbox'

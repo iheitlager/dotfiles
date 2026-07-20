@@ -89,6 +89,17 @@ Run `make assurance` to validate spec coverage, `make compliance` for full pipel
 - Use TodoWrite to track progress on multi-step work
 - Think through architectural decisions carefully
 
+### Bugs and Test Failures: Own Them, Fix Them
+
+**NEVER excuse yourself out of fixing a bug.** "This failure pre-exists on main" is not an acceptable response — it's an excuse. If you see a failing test or a bug, fix it. That is the job.
+
+Rules:
+- **Fix bugs you find, regardless of origin.** Pre-existing bugs are still bugs. You are on this branch, you have the context, fix it now.
+- **You may note origin once** — briefly, factually: "this bug was already on main." Then fix it anyway.
+- **Never use bug origin as a reason to skip fixing.** "Not introduced by our branch" is not a reason to leave it broken.
+- **If a fix is out of scope or risky**, say so and ask — but propose a fix, don't just move on.
+- **Test failures block the PR.** All failures must be resolved before merge, regardless of who introduced them.
+
 ### Bash and Git Usage
 - **Use Bash commands freely** for tests, builds, dependency installation, git status checks, etc.
 - **Use Git operations freely** (commits, pushing, creating branches, rebasing) as natural parts of the workflow

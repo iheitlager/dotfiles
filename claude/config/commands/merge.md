@@ -39,6 +39,23 @@ gh pr view $PR --json mergeable,mergeStateStatus,reviewDecision,statusCheckRollu
 | `reviewDecision` | `APPROVED` (if required) |
 | `statusCheckRollup` | All `SUCCESS` or `NEUTRAL` |
 
+If `mergeStateStatus` is `UNSTABLE` (checks still running), wait for CI before proceeding:
+
+```bash
+# Wait strategy: sleep 3 min upfront (CI typically takes 3-5 min), then poll every 30s.
+# Do NOT poll in a tight loop from the start — it adds noise and wastes time.
+sleep 180
+for i in {1..10}; do
+  STATUS=$(gh pr view $PR --json statusCheckRollup -q \
+    '[.statusCheckRollup[] | select(.status != "COMPLETED")] | length')
+  [[ "$STATUS" == "0" ]] && break
+  echo "Still waiting... ($i/10)"
+  sleep 30
+done
+gh pr view $PR --json statusCheckRollup -q \
+  '.statusCheckRollup[] | "\(.name): \(.status) (\(.conclusion))"'
+```
+
 Stop and report if any check fails — do not proceed.
 
 **Output when ready:**
@@ -60,18 +77,30 @@ Branch to delete: feat/oauth-support
 Proceed? [Y/n]
 ```
 
-### 3. Update Changelog & Version, Commit
+### 3. Rebase on Main, Then Update Changelog & Version
+
+**Always rebase before writing the version bump.** Other PRs may have merged since
+you started — if you bump to X.85 before rebasing and main already has X.85, you get a
+conflict and a wasted CI run.
+
+```bash
+# 1. Discard any local Cargo.lock drift before rebase
+git restore Cargo.lock 2>/dev/null || true
+
+# 2. Rebase on main
+git fetch origin
+git rebase origin/main
+
+# 3. Read the CURRENT version from main, then increment
+# (do not assume you know the version — another PR may have bumped it)
+CURRENT=$(grep '^version' Cargo.toml | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+echo "Current version on main: $CURRENT"
+```
 
 Determine version bump from branch type:
 - `feat/*` → minor bump (0.X.0)
 - `fix/*` → patch bump (0.0.X)
-- All others → skip version bump
-
-```bash
-# Get commits since last tag
-git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD \
-  --pretty=format:"- %s" --no-merges
-```
+- All others → skip version bump entirely (no release commit)
 
 Update `CHANGELOG.md` and bump version in the appropriate locations for the project type:
 
@@ -95,7 +124,9 @@ git add CHANGELOG.md README.md src/*/ pyproject.toml
 # Rust
 git add CHANGELOG.md README.md Cargo.toml Cargo.lock
 
-git commit -m "chore: release vX.Y.Z"
+# Use --no-verify: release commit only touches CHANGELOG/version files, not code.
+# Running the full test suite here is wasteful and adds ~60s per commit.
+git commit --no-verify -m "chore: release vX.Y.Z"
 git push
 ```
 

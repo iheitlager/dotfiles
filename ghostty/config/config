@@ -18,6 +18,7 @@ adjust-cell-height = 10%
 background = 1e1e2e
 foreground = cdd6f4
 
+
 # Normal colors
 palette = 0=#45475a
 palette = 1=#f38ba8
@@ -119,3 +120,7 @@ keybind = super+two=goto_tab:2
 keybind = super+three=goto_tab:3
 keybind = super+four=goto_tab:4
 keybind = super+five=goto_tab:5
+
+
+# theme = Catppuccin Mocha
+theme = Builtin Tango Light
