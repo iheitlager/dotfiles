@@ -1,0 +1,23 @@
+# Pandoc PDF defaults
+# XDG location: ~/.local/share/pandoc/defaults/pdf.yaml
+# Invoke: pandoc --defaults pdf IN.md -o OUT.pdf
+#
+# Font: STIX Two Text — Palatino-adjacent, full Unicode math coverage,
+#       ships with macOS. Companion math font: STIX Two Math.
+# Filter: unicode-to-latex.lua handles any remaining Unicode gaps
+#         context-awarely (skips Code/CodeBlock/RawInline).
+
+standalone: true
+pdf-engine: xelatex
+
+variables:
+  mainfont: "STIX Two Text"
+  mathfont: "STIX Two Math"
+  geometry: "margin=20mm"
+  colorlinks: true
+  linkcolor: NavyBlue
+  urlcolor: NavyBlue
+  toccolor: NavyBlue
+
+filters:
+  - unicode-to-latex.lua
