@@ -3,11 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-# brew installer helper, normally run this from 'dot'
-# check: http://docs.python-guide.org/en/latest/starting/install/osx/
-TMPPATH=$PATH
-PATH=/usr/local/bin:$PATH
-
-brew install --cask claude-code || brew upgrade --cask claude-code
-
-export PATH=$TMPPATH
+# Install Claude Code via native binary installer (npm is deprecated, brew cask has version lag)
+# See: https://github.com/anthropics/claude-code#get-started
+curl -fsSL https://claude.ai/install.sh | bash

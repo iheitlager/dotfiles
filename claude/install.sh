@@ -17,5 +17,3 @@ for dir in "$XDG_CONFIG_HOME/claude"/*/; do
     [ -d "$dir" ] && ln -sfn "$dir" "$HOME/.claude/$(basename "$dir")"
 done
 
-# make this smarter
-ln -sf /opt/homebrew/bin/claude ~/.local/bin/claude
