@@ -63,6 +63,16 @@ local map = {
   ["—"] = [[\textemdash{}]],
 }
 
+-- Box-drawing chars aren't in the monospace font used for verbatim/code
+-- environments, and LaTeX macros don't expand there, so fall back to
+-- plain ASCII instead of the \ensuremath map above.
+local box_map = {
+  ["─"] = "-", ["━"] = "-",
+  ["│"] = "|", ["┃"] = "|",
+  ["┌"] = "+", ["┐"] = "+", ["└"] = "+", ["┘"] = "+",
+  ["├"] = "+", ["┤"] = "+", ["┬"] = "+", ["┴"] = "+", ["┼"] = "+",
+}
+
 local function rewrite(text)
   local parts = {}
   local buf = ""
@@ -86,4 +96,24 @@ function Str(el)
   if #parts == 0 then return pandoc.Str("") end
   if #parts == 1 then return parts[1] end
   return parts
+end
+
+local function rewrite_box_chars(text)
+  local out = {}
+  for char in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+    out[#out+1] = box_map[char] or char
+  end
+  return table.concat(out)
+end
+
+function Code(el)
+  if FORMAT ~= "latex" then return end
+  el.text = rewrite_box_chars(el.text)
+  return el
+end
+
+function CodeBlock(el)
+  if FORMAT ~= "latex" then return end
+  el.text = rewrite_box_chars(el.text)
+  return el
 end
