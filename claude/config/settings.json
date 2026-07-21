@@ -71,11 +71,11 @@
       "Bash(crontab:*)",
       "Bash(*LaunchAgents*)",
       "Bash(*LaunchDaemons*)",
-      "Write(~/.ssh/*)",
-      "Write(~/.aws/*)",
-      "Write(~/.config/secrets)",
-      "Write(/etc/*)",
-      "Write(~/.crontab)"
+      "Edit(~/.ssh/*)",
+      "Edit(~/.aws/*)",
+      "Edit(~/.config/secrets)",
+      "Edit(/etc/*)",
+      "Edit(~/.crontab)"
     ],
     "defaultMode": "auto"
   },
