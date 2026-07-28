@@ -84,7 +84,7 @@ cleanup_container_runtimes() {
     if [[ -d ~/Library/Containers/com.docker.docker ]]; then
         local size=$(get_size ~/Library/Containers/com.docker.docker)
         warn "Docker Desktop found ($size)"
-        info "You're using Colima - Docker Desktop is redundant"
+        info "Docker Desktop is redundant if you're using Podman or Colima"
         if osascript -e 'application "Docker Desktop" is running' 2>/dev/null | grep -q true; then
             info "Docker Desktop is running — quitting it first..."
             osascript -e 'quit app "Docker Desktop"' 2>/dev/null || true
@@ -108,6 +108,18 @@ cleanup_container_runtimes() {
         success "Podman installed via brew, keeping"
     else
         success "Podman not found"
+    fi
+
+    # Podman build cache
+    if has_cmd podman && podman machine inspect 2>/dev/null | grep -q '"State": "running"'; then
+        info "Checking Podman build cache..."
+        if confirm "Clean Podman build cache?"; then
+            podman builder prune -af 2>/dev/null && success "Podman build cache cleaned" || error "Failed to clean Podman build cache"
+        fi
+
+        if confirm "Remove unused Podman images?"; then
+            podman image prune -af 2>/dev/null && success "Unused Podman images removed" || error "Failed to remove Podman images"
+        fi
     fi
 
     # Docker build cache (Colima)
@@ -636,8 +648,8 @@ Examples:
     deepclean --analysis-only    # Just analyze, don't clean
 
 Cleans:
-    • Redundant container runtimes (Docker Desktop, Podman)
-    • Docker build cache and unused images
+    • Redundant container runtimes (Docker Desktop)
+    • Podman and Docker build cache and unused images
     • User caches (~/Library/Caches)
     • Log files (~/Library/Logs, /private/var/db/diagnostics)
     • Homebrew cache

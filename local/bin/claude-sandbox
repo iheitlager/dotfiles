@@ -2,22 +2,12 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Runtime detection: prefer colima (docker) on macOS, fall back to podman.
+# Runtime detection: prefer podman on macOS, fall back to colima (docker).
 # Auto-starts the runtime if it's installed but not running.
 # ---------------------------------------------------------------------------
 RUNTIME=""
 
-if command -v colima >/dev/null 2>&1; then
-  if ! colima status >/dev/null 2>&1; then
-    echo "claude-sandbox: colima not running — starting..." >&2
-    colima start >&2 || true
-  fi
-  if docker info >/dev/null 2>&1; then
-    RUNTIME=docker
-  fi
-fi
-
-if [ -z "$RUNTIME" ] && command -v podman >/dev/null 2>&1; then
+if command -v podman >/dev/null 2>&1; then
   if ! podman info >/dev/null 2>&1; then
     machine=$(podman machine list --noheading --format '{{.Name}}' 2>/dev/null | head -1)
     if [ -n "$machine" ]; then
@@ -30,10 +20,20 @@ if [ -z "$RUNTIME" ] && command -v podman >/dev/null 2>&1; then
   fi
 fi
 
+if [ -z "$RUNTIME" ] && command -v colima >/dev/null 2>&1; then
+  if ! colima status >/dev/null 2>&1; then
+    echo "claude-sandbox: colima not running — starting..." >&2
+    colima start >&2 || true
+  fi
+  if docker info >/dev/null 2>&1; then
+    RUNTIME=docker
+  fi
+fi
+
 if [ -z "$RUNTIME" ]; then
   echo "claude-sandbox: no container runtime available." >&2
-  echo "  • colima (recommended): brew install colima && colima start" >&2
-  echo "  • podman:               podman machine init && podman machine start" >&2
+  echo "  • podman (recommended): podman machine init && podman machine start" >&2
+  echo "  • colima:               brew install colima && colima start" >&2
   exit 1
 fi
 

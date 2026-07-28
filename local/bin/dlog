@@ -4,7 +4,7 @@
 
 # dlog - Stream container logs through loglens TUI
 # Version: 1.3.0
-# Supports: Docker, Colima, Podman (auto-detected)
+# Supports: Podman, Colima, Docker (auto-detected)
 
 set -euo pipefail
 
@@ -37,8 +37,14 @@ EOF
 
 # --- Runtime detection ---
 # Sets CMD and DOCKER_HOST as needed.
-# Priority: colima (running) > podman (running) > docker
+# Priority: podman (running) > colima (running) > docker
 _detect_runtime() {
+    if has_cmd podman && podman machine inspect 2>/dev/null | grep -q '"State": "running"'; then
+        CMD=podman
+        RUNTIME=podman
+        return
+    fi
+
     if has_cmd colima && colima status 2>/dev/null | grep -q "colima is running"; then
         local socket
         socket=$(colima status 2>/dev/null | grep -o 'docker socket: [^ ]*' | awk '{print $3}')
@@ -49,19 +55,13 @@ _detect_runtime() {
         return
     fi
 
-    if has_cmd podman && podman machine inspect 2>/dev/null | grep -q '"State": "running"'; then
-        CMD=podman
-        RUNTIME=podman
-        return
-    fi
-
     if has_cmd docker && docker info &>/dev/null; then
         CMD=docker
         RUNTIME=docker
         return
     fi
 
-    error "No container runtime found (tried colima, podman, docker)"
+    error "No container runtime found (tried podman, colima, docker)"
     exit 1
 }
 

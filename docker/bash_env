@@ -4,6 +4,18 @@
 # Docker XDG compliant
 export DOCKER_CONFIG="$XDG_CONFIG_HOME/docker"
 
-# Colima uses XDG_CONFIG_HOME by default for its socket
-# Point Docker CLI to Colima's socket (when colima is running)
-export DOCKER_HOST="unix://$XDG_CONFIG_HOME/colima/default/docker.sock"
+# Point the Docker CLI at whichever runtime is active.
+# Podman is primary; Colima (XDG_CONFIG_HOME-based socket) is a supported fallback.
+_docker_host_socket() {
+    local podman_socket
+    if command -v podman >/dev/null 2>&1; then
+        podman_socket=$(podman machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null)
+        if [ -n "$podman_socket" ] && [ -S "$podman_socket" ]; then
+            echo "$podman_socket"
+            return
+        fi
+    fi
+    echo "$XDG_CONFIG_HOME/colima/default/docker.sock"
+}
+export DOCKER_HOST="unix://$(_docker_host_socket)"
+unset -f _docker_host_socket

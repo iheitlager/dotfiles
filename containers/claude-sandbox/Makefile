@@ -1,7 +1,7 @@
 .PHONY: build clean help
 
 IMAGE   := claude-sandbox:local
-RUNTIME := $(shell colima status >/dev/null 2>&1 && echo docker || (podman info >/dev/null 2>&1 && echo podman) || echo none)
+RUNTIME := $(shell podman info >/dev/null 2>&1 && echo podman || (colima status >/dev/null 2>&1 && echo docker) || echo none)
 
 help:
 	@echo "Claude Sandbox - Containerfile build"
@@ -20,7 +20,7 @@ help:
 	@echo "  claude-sandbox ~/a ~/b -- --resume     Multiple workspaces + claude flags"
 
 build:
-	@[ "$(RUNTIME)" = "none" ] && echo "No container runtime available. Install colima or podman." && exit 1 || true
+	@[ "$(RUNTIME)" = "none" ] && echo "No container runtime available. Install podman or colima." && exit 1 || true
 	$(RUNTIME) build -t $(IMAGE) -f Containerfile .
 
 clean:

@@ -480,7 +480,7 @@ The system MUST provide comprehensive status information about the dotfiles inst
 │   └── swarm-daemon/
 ├── containers/             # Container tools
 │   └── bash_aliases
-├── docker/                 # Docker/Colima setup
+├── docker/                 # Docker CLI setup (Podman primary, Colima fallback)
 │   ├── bash_aliases
 │   ├── bash_env
 │   ├── brew_packages

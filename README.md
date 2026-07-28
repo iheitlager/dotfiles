@@ -86,7 +86,7 @@ Use `xdg-info` to inspect XDG paths and app compliance.
 ├── bash/           # Shell configuration
 ├── claude/         # Claude Code config, agents, skills
 ├── config/         # XDG configs (ghostty, bat, ripgrep, tmux)
-├── docker/         # Docker/Colima setup
+├── docker/         # Docker CLI setup (Podman primary, Colima fallback)
 ├── git/            # Git config and aliases
 ├── local/bin/      # Custom scripts (dot, launch-agents)
 ├── osx/            # macOS-specific settings
