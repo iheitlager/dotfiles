@@ -4,6 +4,10 @@
 # Docker XDG compliant
 export DOCKER_CONFIG="$XDG_CONFIG_HOME/docker"
 
+# podman-compose builds services in parallel by default, interleaving
+# per-step build output from multiple services into an unreadable mess.
+export COMPOSE_PARALLEL_LIMIT=1
+
 # Point the Docker CLI at whichever runtime is active.
 # Podman is primary; Colima (XDG_CONFIG_HOME-based socket) is a supported fallback.
 _docker_host_socket() {
