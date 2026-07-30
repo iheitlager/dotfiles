@@ -72,9 +72,21 @@ Project conventions (apply what's relevant to this project's language):
 - All: No markdown files unless explicitly requested
 ```
 
-### 3. Determine Applicable Agents
+### 4. Determine Applicable Agents
 
-Based on changed files and diff content:
+**If an aspect was given on the command line** (`code`, `security`, `tests`, `docs`, `types`, `simplify`),
+launch only the matching agent below and skip the table entirely:
+
+| Aspect | Agent |
+|--------|-------|
+| `code` | `code-reviewer` |
+| `security` | `security-reviewer` |
+| `tests` | `test-writer` |
+| `docs` | `docs-generator` |
+| `types` | `type-design-analyzer` |
+| `simplify` | `refactor-helper` |
+
+**Otherwise** (no aspect, or `all`), select based on changed files and diff content:
 
 | Condition | Agent |
 |-----------|-------|
@@ -83,19 +95,29 @@ Based on changed files and diff content:
 | Test files changed OR logic-heavy diff | `test-writer` — coverage gaps, missing edge cases, test quality |
 | Docstrings/comments added or modified | `docs-generator` — comment accuracy, docstring rot, outdated docs |
 | Type annotations added or modified | `type-design-analyzer` — invariants, encapsulation, type correctness |
-| Diff > 50 lines | `refactor-helper` — code smells, simplification, duplication |
+| Diff > 150 lines | `refactor-helper` — code smells, simplification, duplication |
 
 Run all applicable agents in parallel.
 
-### 4. Launch Agents
+### 5. Launch Agents
 
-Pass each agent the PR diff, context, and project conventions:
+Pass each agent the PR diff, context, and project conventions. **Everything the agent needs is in
+this prompt** — it must not spend time re-deriving it:
 
 ```
 Agent tool:
   subagent_type: code-reviewer   (or other applicable agent)
   prompt: |
     Review PR #$PR: $TITLE
+
+    Constraints:
+    - The diff below is complete and final — do NOT run `gh pr diff`, `gh pr view`, or any other
+      `gh` command to re-fetch it.
+    - Do NOT run tests, builds, linters, or install dependencies. Do NOT explore the repo beyond
+      what's needed to understand the lines actually changed (e.g. checking a call site or an
+      imported type). This is a read-only review of the diff below, not a build/test pass.
+    - Stay within a few minutes of work. If you find yourself running a Bash command other than
+      Read/Grep-style lookups against files already in the diff, stop and review what you have.
 
     Project conventions (apply what's relevant to this project's language):
     - Python: ruff, pyright, pytest (>80% coverage), uv, isort, type hints required
@@ -121,7 +143,7 @@ Agent tool:
     Focus only on the changed code, not the entire codebase.
 ```
 
-### 5. Aggregate & Present
+### 6. Aggregate & Present
 
 Combine agent results into a unified report, deduplicating overlapping findings:
 
@@ -169,7 +191,7 @@ Strengths
 Summary: 0 critical, 2 warnings, 3 suggestions, 1 unaddressed requirement
 ```
 
-### 6. Document Findings in the PR (automatic)
+### 7. Document Findings in the PR (automatic)
 
 After presenting the report, **always** post findings as a PR comment without asking:
 
@@ -193,7 +215,7 @@ gh pr comment $PR --body "$(cat <<'EOF'
 ...
 
 ---
-🤖 *Review by Claude*
+🤖 *Analysis by Claude*
 EOF
 )"
 ```
