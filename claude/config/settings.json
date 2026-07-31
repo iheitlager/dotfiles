@@ -94,5 +94,6 @@
     "~/.dotfiles",
     "~/wc/**",
     "/workspace/**"
-  ]
+  ],
+  "tui": "fullscreen"
 }

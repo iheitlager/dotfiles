@@ -2,6 +2,9 @@
 # Copyright 2026 Ilja Heitlager
 # SPDX-License-Identifier: Apache-2.0
 
+# Install or update Claude CLI
+curl -fsSL https://claude.ai/install.sh | bash
+
 # Setup XDG compliant Claude config directory and symlinks
 mkdir -p "$HOME/.claude"
 
