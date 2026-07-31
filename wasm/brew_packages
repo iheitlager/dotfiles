@@ -8,5 +8,6 @@ TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
 brew install wasmtime || brew upgrade wasmtime
+brew install wasmer || brew upgrade wasmer
 
 export PATH=$TMPPATH
