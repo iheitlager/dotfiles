@@ -511,7 +511,10 @@ _start_agent_pane() {
             tmux send-keys -t "$target" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
             tmux send-keys -t "$target" "clear" C-m
             debug "tmux send-keys -t $target 'claude --model $model ...' C-m"
-            tmux send-keys -t "$target" "claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+            # Short argv only — full instructions live in AGENTS.md (read on demand).
+            # Long --append-system-prompt text creates \012 escapes in pane commands
+            # that compound exponentially via tmux's args_escape on hook passes.
+            tmux send-keys -t "$target" "claude --model $model --add-dir . --append-system-prompt 'Agent agent-$agent ($client/$model) for $REPO_NAME. Branch: agent-$agent. Read AGENTS.md for workflow.' $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
             ;;
         copilot)
             tmux send-keys -t "$target" "export COPILOT_MODEL=$model" C-m
@@ -695,19 +698,12 @@ cmd_workspace() {
     tmux send-keys -t "$ws_session:workspace.1" "export WORKSPACE_SESSION='$ws_session'" C-m
     tmux send-keys -t "$ws_session:workspace.1" "clear" C-m
 
-    # Build agent prompt with session info
-    local agent_prompt=""
-    if [[ -f "$agent_spec" ]]; then
-        # Replace $WORKSPACE_SESSION placeholder with actual session name
-        agent_prompt=$(sed "s|\$WORKSPACE_SESSION|$ws_session|g" "$agent_spec")
-    fi
-
-    # Start claude on the left pane with workspace agent instructions
+    # Start claude on the left pane — short argv only (see _start_agent_pane comment)
     local ws_model="sonnet"
     [[ "$OPUS_MODE" == true ]] && ws_model="opus"
 
-    if [[ -n "$agent_prompt" ]]; then
-        tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt \"\$(sed 's|\\\$WORKSPACE_SESSION|$ws_session|g' '$agent_spec')\" $SKIP_PERMISSIONS" C-m
+    if [[ -f "$agent_spec" ]]; then
+        tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt 'Workspace session: $ws_session. Read $agent_spec for workspace instructions.' $SKIP_PERMISSIONS" C-m
     else
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . $SKIP_PERMISSIONS" C-m
     fi
@@ -745,10 +741,8 @@ cmd_workspace() {
     echo "  Ctrl-b d        Detach"
     echo ""
 
-    # Set Ghostty window title (immediate + persist via tmux @title for reattach)
-    local ws_title="workspace · $(basename "$PWD")"
-    tmux set -t "$ws_session" @title "$ws_title"
-    printf '\e]0;%s\a' "$ws_title"
+    # Set terminal window title via OSC escape (direct to terminal, not tmux command queue).
+    printf '\e]0;workspace · %s\a' "$(basename "$PWD")"
 
     tmux attach -t "$ws_session"
 }
@@ -817,10 +811,9 @@ cmd_start() {
     echo "  Ctrl-b d        Detach"
     echo ""
 
-    # Set Ghostty window title (immediate + persist via tmux @title for reattach)
-    local swarm_title="swarm · $REPO_NAME ($AGENT_COUNT agents)"
-    tmux set -t "$SESSION" @title "$swarm_title"
-    printf '\e]0;%s\a' "$swarm_title"
+    # Set terminal window title via OSC escape (direct to terminal, not tmux command queue).
+    # Previously also did `tmux set @title` which triggers after-set-option hooks — removed.
+    printf '\e]0;swarm · %s (%s agents)\a' "$REPO_NAME" "$AGENT_COUNT"
 
     tmux attach -t "$SESSION"
 }
