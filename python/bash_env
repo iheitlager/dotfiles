@@ -22,6 +22,10 @@ export MPLCONFIGDIR="$XDG_CONFIG_HOME/matplotlib"
 export UV_CACHE_DIR="$XDG_CACHE_HOME/uv"
 export UV_DATA_DIR="$XDG_DATA_HOME/uv"
 
+# mise - already XDG compliant by default (~/.config/mise, ~/.local/share/mise)
+# Activates shims + env hooks for mise-managed runtimes (python, node, etc.)
+_dotfiles_cached_eval mise mise activate bash
+
 # Jupyter - XDG compliant
 export JUPYTER_CONFIG_DIR="$XDG_CONFIG_HOME/jupyter"
 export JUPYTER_DATA_DIR="$XDG_DATA_HOME/jupyter"
