@@ -12,6 +12,7 @@ brew install python || brew upgrade python
 brew install pipx || brew upgrade pipx
 brew install virtualenv || brew upgrade virtualenv
 brew install uv || brew upgrade uv
+brew install mise || brew upgrade mise
 # we rely on uv noe
 # brew install python@3.13 || brew upgrade python@3.13
 # brew install python@3.14 || brew upgrade python@3.14
