@@ -1,3 +1,6 @@
+---
+model: haiku
+---
 Validate version consistency and release readiness across the project.
 
 ## Usage
