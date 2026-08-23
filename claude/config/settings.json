@@ -110,8 +110,11 @@
     "type": "command",
     "command": "~/.claude/statusline.sh"
   },
-  "enabledPlugins": {},
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true
+  },
   "effortLevel": "low",
+  "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
   "theme": "dark",
   "teammateMode": "tmux",
@@ -123,5 +126,5 @@
     "~/wc/**",
     "/workspace/**"
   ],
-  "tui": "fullscreen"
+  "model": "opus"
 }
