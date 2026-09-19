@@ -20,7 +20,4 @@ brew install --cask pgadmin4 || brew upgrade --cask pgadmin4
 brew install --cask klogg || brew upgrade --cask klogg
 brew install --cask font-jetbrains-mono || brew upgrade --cask font-jetbrains-mono
 
-brew tap Caelrith/loglens
-brew install loglens || brew upgrade loglens
-
 export PATH=$TMPPATH
