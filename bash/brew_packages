@@ -27,4 +27,8 @@ for pkg in "${dev_packages[@]}"; do
     brew install "$pkg" || brew upgrade "$pkg"
 done
 
+brew tap aisk/tap
+brew trust --tap aisk/tap
+brew install aisk/tap/timeout || brew upgrade aisk/tap/timeout
+
 export PATH=$TMPPATH
