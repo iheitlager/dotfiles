@@ -37,31 +37,37 @@
       "Bash(cd:*)",
       "Bash(du:*)",
       "Bash(df:*)",
-      "Bash(rm -f:*)",
       "Bash(rm -rf /Users/*/wc/*)",
       "Bash(ln:*)",
       "Bash(touch:*)",
-      "Bash(chmod:*)",
       "Bash(basename:*)",
       "Bash(dirname:*)",
       "Bash(realpath:*)",
       "Bash(diff:*)",
       "Bash(python*)",
-      "Bash(pip:*)",
+      "Bash(pip list*)",
+      "Bash(pip show*)",
+      "Bash(pip freeze*)",
+      "Bash(pip check*)",
       "Bash(cargo:*)",
       "Bash(brew:*)",
       "Bash(make:*)",
       "Bash(sleep:*)",
       "Bash(* --version)",
-      "Bash(npm *)",
+      "Bash(npm run *)",
+      "Bash(npm ci)",
+      "Bash(npm test*)",
+      "Bash(npm list*)",
+      "Bash(npm outdated*)",
+      "Bash(npm view*)",
       "Bash(*-h*)",
       "Bash(curl:*)",
       "Bash(jq:*)",
       "Bash(pandoc:*)"
     ],
     "deny": [
-      "Bash(curl|*sh:*)",
-      "Bash(wget|*sh:*)",
+      "Bash(curl|*sh*)",
+      "Bash(wget|*sh*)",
       "Bash(*>/dev/tcp/*)",
       "Bash(*base64*decode*)",
       "Bash(chmod 777:*)",
@@ -96,7 +102,6 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
   "skillOverrides": {
     "assurance-criteria": "off",
     "feature-model": "off",
@@ -111,7 +116,16 @@
     "command": "~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "mcqf@sbp-mcqf": true
+  },
+  "extraKnownMarketplaces": {
+    "sbp-mcqf": {
+      "source": {
+        "source": "git",
+        "url": "git@sbp.gitlab.schubergphilis.com:vpf-data-ai/tools/mcqf-skill.git"
+      }
+    }
   },
   "effortLevel": "low",
   "tui": "fullscreen",
@@ -119,6 +133,44 @@
   "theme": "dark",
   "teammateMode": "tmux",
   "skipAutoPermissionPrompt": true,
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(gh pr merge*)",
+      "Bash(gh api -X PUT repos/*/pulls/*/merge*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(rm -rf ~/wc/my-brain/log/*)"
+    ],
+    "environment": [
+      "### Org-wide",
+      "**Organization**: None configured",
+      "**Primary use of Claude Code**: personal knowledge-base management and software development (this repo is a personal life-management/knowledge system, plus an MVL/Pony-related compiler project referenced in docs)",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: Private (iheitlager/my-brain, confirmed via gh)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: `.env` (gitignored, see .env.example: TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY, GMAIL_APP_PASSWORD); repo also uses git-crypt to encrypt domain files at rest",
+      "**Default / protected branches**: Default branch `main`; no branch protection rules listed via gh (rulesets not queryable here — presence of rulesets cannot be ruled out)",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine (Mac Mini, per CLAUDE.md cron references) with open internet",
+      "**Source control**: The trusted repo (iheitlager/my-brain) and its origin remote (github.com:iheitlager/my-brain.git) only — private repo",
+      "**Trusted internal domains**: None configured",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: None configured",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: `finance/`, `health/`, `personal/` (encrypted), `lifestyle/` (encrypted), `family/` domain files — personal data about the user (Ilja) and family; `.env` and `.env.example` — credentials; share only with the user themselves as cleared audience",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: personal digital-twin knowledge management (Ben) plus development work on MVL/compiler and finance/study agents, routine under this repo",
+      "**Trusted repo**: /Users/iheitlager/wc/my-brain (working directory) and its origin remote github.com:iheitlager/my-brain.git — private, so confidential personal material may be committed there, but content ported from outside this session's repo is not this repo's own work",
+      "**Org-specific CLIs**: None configured (uv, ruff, pyright, ripgrep are personal tooling preferences, not org-mandated)"
+    ]
+  },
   "additionalDirectories": [
     ".",
     "~/.local/state/agent-context",

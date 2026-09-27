@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.9.3
+# Version: 0.9.4
 #
 # Changelog:
+# 0.9.4 Add --no-monitors flag; allow -n 1
 # 0.9.3 Add --main flag: adds a final shell window in the main repo directory
 # 0.9.2 Default -n 2 to sonnet/sonnet (use --opus for opus distribution)
 # 0.9.1 Default -n 2 to opus/opus; fix window switch landing on left (claude) pane
@@ -88,6 +89,7 @@ EQUAL_DISTRIBUTION=false
 OPUS_MODE=false
 CLASSIC_MODE=false
 MAIN_WINDOW=false
+NO_MONITORS=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
@@ -174,11 +176,12 @@ Commands:
     info            Show status of agents, models, and tasks
 
 Options:
-    -n COUNT           Number of agents: 2, 3, 4, or 6 (default: 2)
+    -n COUNT           Number of agents: 1, 2, 3, 4, or 6 (default: 2)
 -o, --classic      Use classic multi-pane layout (all agents in one window)
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
     --main             Add a final shell window in the main repo directory
+    --no-monitors      Skip the ctop/htop monitors window (workspace command only)
     -v, --verbose      Print commands being executed
     -f, --force        Force restart or clean (skips prompts, auto-cleans disk)
     --yolo             Skip permission prompts (Claude agents only)
@@ -223,7 +226,7 @@ get_client() {
     local count=$2
 
     case $count in
-        2|3|4)
+        1|2|3|4)
             echo "claude"
             ;;
         6)
@@ -708,14 +711,16 @@ cmd_workspace() {
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . $SKIP_PERMISSIONS" C-m
     fi
 
-    # Create second window: monitors (ctop | htop)
-    tmux new-window -t "$ws_session" -n "monitors" -c "$PWD"
-    tmux split-window -h -t "$ws_session:monitors" -c "$PWD"
-    tmux select-layout -t "$ws_session:monitors" even-horizontal
+    # Create second window: monitors (ctop | htop), unless --no-monitors
+    if [[ "$NO_MONITORS" != true ]]; then
+        tmux new-window -t "$ws_session" -n "monitors" -c "$PWD"
+        tmux split-window -h -t "$ws_session:monitors" -c "$PWD"
+        tmux select-layout -t "$ws_session:monitors" even-horizontal
 
-    # Start ctop (left) and htop (right) in monitors window
-    tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect --format "{{.ConnectionInfo.PodmanSocket.Path}}" 2>/dev/null)" command ctop" C-m
-    tmux send-keys -t "$ws_session:monitors.2" "htop" C-m
+        # Start ctop (left) and htop (right) in monitors window
+        tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect --format "{{.ConnectionInfo.PodmanSocket.Path}}" 2>/dev/null)" command ctop" C-m
+        tmux send-keys -t "$ws_session:monitors.2" "htop" C-m
+    fi
 
     # Select workspace window, left pane (claude)
     tmux select-window -t "$ws_session:workspace"
@@ -730,12 +735,16 @@ cmd_workspace() {
     echo "  Left pane:  claude ($ws_model)"
     echo "  Right pane: shell"
     echo ""
-    echo "Window 2 (monitors):"
-    echo "  Left pane:  ctop"
-    echo "  Right pane: htop"
-    echo ""
+    if [[ "$NO_MONITORS" != true ]]; then
+        echo "Window 2 (monitors):"
+        echo "  Left pane:  ctop"
+        echo "  Right pane: htop"
+        echo ""
+    fi
     echo "Navigation:"
-    echo "  Ctrl-b 1/2      Switch window"
+    if [[ "$NO_MONITORS" != true ]]; then
+        echo "  Ctrl-b 1/2      Switch window"
+    fi
     echo "  Alt ←→          Switch pane"
     echo "  Ctrl-b z        Zoom pane"
     echo "  Ctrl-b d        Detach"
@@ -1121,11 +1130,11 @@ cmd_info() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         -n)
-            if [[ "$2" =~ ^[2-6]$ ]]; then
+            if [[ "$2" =~ ^[1-6]$ ]]; then
                 AGENT_COUNT=$2
                 shift 2
             else
-                echo -e "${RED}Error: -n requires 2, 3, 4, or 6${NC}"
+                echo -e "${RED}Error: -n requires 1, 2, 3, 4, or 6${NC}"
                 exit 1
             fi
             ;;
@@ -1159,6 +1168,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --main)
             MAIN_WINDOW=true
+            shift
+            ;;
+        --no-monitors)
+            NO_MONITORS=true
             shift
             ;;
 -h|--help)
