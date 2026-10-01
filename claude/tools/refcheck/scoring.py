@@ -4,6 +4,9 @@ from difflib import SequenceMatcher
 
 from tools.refcheck.models import ReferenceQuery
 
+# Minimum score for a search hit to count as the queried paper
+MIN_TITLE_SIMILARITY = 0.75
+
 
 def title_similarity(query_text: str, candidate: str) -> float:
     """Score how well query_text matches a candidate title.

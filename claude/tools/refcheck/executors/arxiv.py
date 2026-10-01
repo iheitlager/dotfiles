@@ -11,7 +11,7 @@ import httpx
 
 from tools.refcheck.executors.base import BaseExecutor
 from tools.refcheck.models import ReferenceQuery, ReferenceResult
-from tools.refcheck.scoring import best_similarity
+from tools.refcheck.scoring import MIN_TITLE_SIMILARITY, best_similarity
 
 ARXIV_API = "http://export.arxiv.org/api/query"
 REQUEST_TIMEOUT = 15
@@ -151,7 +151,7 @@ class ArxivExecutor(BaseExecutor):
                     best_score = score
                     best_entry = entry
 
-        if best_entry is None or best_score < 0.4:
+        if best_entry is None or best_score < MIN_TITLE_SIMILARITY:
             return None
 
         # Extract fields
