@@ -8,7 +8,7 @@ import httpx
 
 from tools.refcheck.executors.base import BaseExecutor
 from tools.refcheck.models import ReferenceQuery, ReferenceResult
-from tools.refcheck.scoring import best_similarity
+from tools.refcheck.scoring import MIN_TITLE_SIMILARITY, best_similarity
 
 OPENALEX_API = "https://api.openalex.org"
 USER_AGENT = "my-brain-refcheck/1.0 (mailto:i.heitlager@tue.nl)"
@@ -60,7 +60,7 @@ class OpenAlexExecutor(BaseExecutor):
                     best_score = score
                     best = work
 
-            if best is None or best_score < 0.5:
+            if best is None or best_score < MIN_TITLE_SIMILARITY:
                 return None
 
             # Extract fields

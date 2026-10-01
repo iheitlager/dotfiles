@@ -1,0 +1,33 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "httpx",
+# ]
+# ///
+#
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+#
+# refcheck - Check that cited papers actually exist
+# Version: 1.0.0
+#
+# Thin launcher for claude/tools/refcheck, so the tool runs from anywhere
+# with its dependencies declared above.
+#
+# Usage:
+#   refcheck "Kambhampati 2024 LLMs can't plan"
+#   refcheck --doi "10.48550/arXiv.2402.01817"
+#   refcheck --title "Chain-of-thought prompting" --author Wei --year 2022
+#   refcheck --bib references.bib --rate-limit 1.0
+
+import os
+import sys
+from pathlib import Path
+
+dotfiles = Path(os.environ.get("DOTFILES", Path.home() / ".dotfiles"))
+sys.path.insert(0, str(dotfiles / "claude"))
+
+from tools.refcheck.check_reference import main
+
+main()

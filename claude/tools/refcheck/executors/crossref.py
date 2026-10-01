@@ -8,7 +8,7 @@ import httpx
 
 from tools.refcheck.executors.base import BaseExecutor
 from tools.refcheck.models import ReferenceQuery, ReferenceResult
-from tools.refcheck.scoring import best_similarity
+from tools.refcheck.scoring import MIN_TITLE_SIMILARITY, best_similarity
 
 CROSSREF_API = "https://api.crossref.org"
 POLITE_EMAIL = "i.heitlager@tue.nl"
@@ -69,7 +69,7 @@ class CrossrefExecutor(BaseExecutor):
                     best_score = score
                     best = item
 
-            if best is None or best_score < 0.5:
+            if best is None or best_score < MIN_TITLE_SIMILARITY:
                 return None
 
             # Extract fields

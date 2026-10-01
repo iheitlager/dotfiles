@@ -8,10 +8,10 @@ Chain order (first successful hit wins):
   4. Semantic Scholar title+year search
 
 Usage:
-  uv run python tools/refcheck/check_reference.py "Kambhampati 2024 LLMs can't plan"
-  uv run python tools/refcheck/check_reference.py --doi "10.48550/arXiv.2402.01817"
-  uv run python tools/refcheck/check_reference.py --title "Chain-of-thought prompting" --author "Wei" --year 2022
-  uv run python tools/refcheck/check_reference.py --bib references.bib --rate-limit 1.0
+  refcheck "Kambhampati 2024 LLMs can't plan"
+  refcheck --doi "10.48550/arXiv.2402.01817"
+  refcheck --title "Chain-of-thought prompting" --author "Wei" --year 2022
+  refcheck --bib references.bib --rate-limit 1.0
 """
 
 import argparse

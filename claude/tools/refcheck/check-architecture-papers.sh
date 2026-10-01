@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Validate all papers referenced in study/architecture_value_research.md
-# Usage: ./tools/refcheck/check-architecture-papers.sh [--rate-limit N]
+# Usage: check-architecture-papers.sh [--rate-limit N]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
-CHECK="uv run python ${SCRIPT_DIR}/check_reference.py"
+CHECK="refcheck"
 RATE="${1:---rate-limit}"
 RATE_VAL="${2:-0.5}"
 

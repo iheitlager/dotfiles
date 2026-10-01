@@ -174,7 +174,7 @@ Run the reference checker on each paper:
 
 ```bash
 for each paper in top_20:
-  uv run python ~/.dotfiles/claude/tools/refcheck/check_reference.py \
+  refcheck \
     --title "$TITLE" \
     --author "$FIRST_AUTHOR" \
     --year $YEAR

@@ -8,7 +8,7 @@ import httpx
 
 from tools.refcheck.executors.base import BaseExecutor
 from tools.refcheck.models import ReferenceQuery, ReferenceResult
-from tools.refcheck.scoring import best_similarity
+from tools.refcheck.scoring import MIN_TITLE_SIMILARITY, best_similarity
 
 S2_API = "https://api.semanticscholar.org/graph/v1"
 REQUEST_TIMEOUT = 15
@@ -60,7 +60,7 @@ class SemanticScholarExecutor(BaseExecutor):
                     best_score = score
                     best = paper
 
-            if best is None or best_score < 0.5:
+            if best is None or best_score < MIN_TITLE_SIMILARITY:
                 return None
 
             title = best.get("title", "")
