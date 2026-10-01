@@ -102,6 +102,7 @@
     ],
     "defaultMode": "auto"
   },
+  "model": "opus",
   "skillOverrides": {
     "assurance-criteria": "off",
     "feature-model": "off",
@@ -177,6 +178,5 @@
     "~/.dotfiles",
     "~/wc/**",
     "/workspace/**"
-  ],
-  "model": "opus"
+  ]
 }

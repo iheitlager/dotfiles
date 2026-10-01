@@ -3,7 +3,7 @@ Explain the current git diff in plain language.
 ## Usage
 
 ```
-/diff           Explain unstaged changes
+/gd             Explain unstaged changes
 ai --diff       Same, one-shot
 ```
 
