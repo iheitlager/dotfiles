@@ -22,4 +22,3 @@ _docker_host_socket() {
     echo "$XDG_CONFIG_HOME/colima/default/docker.sock"
 }
 export DOCKER_HOST="unix://$(_docker_host_socket)"
-unset -f _docker_host_socket

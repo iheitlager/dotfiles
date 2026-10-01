@@ -10,4 +10,8 @@ PATH=/usr/local/bin:$PATH
 brew install wasmtime || brew upgrade wasmtime
 brew install wasmer || brew upgrade wasmer
 
+brew tap spinframework/tap
+brew trust --tap spinframework/tap
+brew install spinframework/tap/spin || brew upgrade spinframework/tap/spin
+
 export PATH=$TMPPATH

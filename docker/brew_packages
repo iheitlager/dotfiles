@@ -15,5 +15,9 @@ brew install colima || brew upgrade colima
 brew install podman || brew upgrade podman
 brew install podman-compose || brew upgrade podman-compose
 brew install ctop || brew upgrade ctop
+brew install kubernetes-cli || brew upgrade kubernetes-cli
+brew install wasmedge || brew upgrade wasmedge
+# Note: crun/crun-wasm is a Linux-only OCI runtime — it has to be installed
+# inside the podman machine VM (via `podman machine ssh`), not on the macOS host.
 
 export PATH=$TMPPATH

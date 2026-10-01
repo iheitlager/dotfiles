@@ -2,8 +2,8 @@
 # Copyright 2026 Ilja Heitlager
 # SPDX-License-Identifier: Apache-2.0
 
-# dlog - Stream container logs through loglens TUI
-# Version: 1.3.0
+# dlog - Stream container logs via tail -f
+# Version: 1.4.0
 # Supports: Podman, Colima, Docker (auto-detected)
 
 set -euo pipefail
@@ -11,13 +11,11 @@ set -euo pipefail
 DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 source "$DOTFILES/local/lib/shell-common.sh"
 
-require_cmd loglens
-
 _show_help() {
     show_help << 'EOF'
 Usage: dlog [OPTIONS] [CONTAINER]
 
-Stream container logs through loglens. Auto-detects Docker, Colima, or Podman.
+Stream container logs via tail -f. Auto-detects Docker, Colima, or Podman.
 
   No argument    Stream all containers via compose
   CONTAINER      Partial name match against a running container
@@ -95,7 +93,6 @@ _detect_runtime
 info "Runtime: $RUNTIME"
 
 # --- Temp file + cleanup ---
-# Use a regular file (not fifo) so loglens tui -f can seek and follow properly
 LOGFILE=$(mktemp "/tmp/dlog.XXXXXX")
 LOG_PID=""
 
@@ -113,7 +110,7 @@ trap cleanup EXIT INT TERM
 if [[ -z "$CONTAINER" ]]; then
     # Try compose first (works when run from a project dir with compose.yml)
     if $CMD compose ps --quiet 2>/dev/null | grep -q .; then
-        info "Streaming all compose services → loglens"
+        info "Streaming all compose services → tail"
         $CMD compose logs -f "${LOG_OPTS[@]}" >> "$LOGFILE" 2>&1 &
         LOG_PID=$!
     else
@@ -123,7 +120,7 @@ if [[ -z "$CONTAINER" ]]; then
             error "No running containers found"
             exit 1
         fi
-        info "Streaming ${#running[@]} containers → loglens"
+        info "Streaming ${#running[@]} containers → tail"
         for name in "${running[@]}"; do
             $CMD logs -f "${LOG_OPTS[@]}" "$name" 2>&1 \
                 | awk -v c="$name" '{print "["c"] "$0}' >> "$LOGFILE" &
@@ -141,12 +138,12 @@ else
         $CMD ps --format '  {{.Names}}\t{{.Image}}\t{{.Status}}' | column -t
         exit 1
     fi
-    info "Streaming $resolved → loglens"
+    info "Streaming $resolved → tail"
     $CMD logs -f "${LOG_OPTS[@]}" "$resolved" >> "$LOGFILE" 2>&1 &
     LOG_PID=$!
 fi
 
-# Brief pause so docker logs can write the first batch before loglens opens
+# Brief pause so docker logs can write the first batch before tail opens
 sleep 0.3
 
-loglens tui -f "$LOGFILE"
+tail -f "$LOGFILE"

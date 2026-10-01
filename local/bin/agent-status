@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# agent-status
+# Version: 0.1.0
+#
+# Changelog:
+# 0.1.0 Initial version: worktree/PR/CI overview (#93)
+#
+# Usage: agent-status [OPTIONS]
+# Run from within a git repo (main checkout or an agent-N worktree)
+
+set -e
+
+# Colors — only when stdout is a TTY (unlike launch-agents, which always colors)
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    BOLD='\033[1m'
+    NC='\033[0m'
+else
+    RED=''; GREEN=''; YELLOW=''; BLUE=''; BOLD=''; NC=''
+fi
+
+WATCH=false
+ALL_REPOS=false
+NO_GH=false
+
+show_version() {
+    local version=$(grep -m1 '^# Version:' "$0" | sed 's/.*Version: //')
+    echo -e "${BOLD}agent-status${NC} version ${GREEN}$version${NC}"
+}
+
+print_usage() {
+    local help_cmd="cat"
+    command -v bat &>/dev/null && help_cmd="bat --plain --language=help"
+
+    $help_cmd << 'EOF'
+Usage: agent-status [OPTIONS]
+
+Overview of every agent worktree in a repo: what each agent is working on,
+how far it is from main, and whether its PR is about to merge.
+
+Options:
+    --watch         Refresh every 15s
+    --all           Every repo under ~/wc with a <repo>-worktree sibling
+    --no-gh         Local git state only, skip PR/CI lookups
+    --version       Show version
+    -h, --help      Show this help message
+EOF
+}
+
+# Resolve REPO_ROOT/REPO_NAME/WORKTREE_ROOT for the repo containing $1 (default: cwd)
+resolve_repo() {
+    local start_dir="${1:-$PWD}"
+    local root
+    root=$(git -C "$start_dir" rev-parse --show-toplevel 2>/dev/null) || return 1
+
+    local local_repo_name=$(basename "$root")
+    local local_repo_parent=$(dirname "$root")
+    local local_repo_grandparent=$(dirname "$local_repo_parent")
+
+    if [[ "$local_repo_parent" =~ ^(.+)-worktree$ ]]; then
+        REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+        REPO_PARENT="$local_repo_grandparent"
+        REPO_ROOT="$REPO_PARENT/$REPO_NAME"
+        WORKTREE_ROOT="$local_repo_parent"
+    elif [[ "$local_repo_name" =~ ^(.+)-worktree$ ]]; then
+        REPO_NAME=$(basename "${BASH_REMATCH[1]}")
+        REPO_PARENT=$(dirname "$root")
+        REPO_ROOT="$REPO_PARENT/$REPO_NAME"
+        WORKTREE_ROOT="$root"
+    else
+        REPO_NAME="$local_repo_name"
+        REPO_PARENT=$(dirname "$root")
+        REPO_ROOT="$root"
+        WORKTREE_ROOT="$REPO_PARENT/${REPO_NAME}-worktree"
+    fi
+}
+
+# Parse an issue number out of a branch name: feat/#9-foo, fix/30-bar, agent-1
+parse_issue_number() {
+    local branch="$1"
+    if [[ "$branch" =~ \#([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    elif [[ "$branch" =~ /([0-9]+)- ]]; then
+        echo "${BASH_REMATCH[1]}"
+    fi
+}
+
+# Cache of "issue_number title" across a single run (and across --watch iterations)
+declare -A ISSUE_TITLE_CACHE
+
+issue_title() {
+    local num="$1"
+    [[ "$NO_GH" == true ]] && return
+    [[ -z "$num" ]] && return
+    if [[ -n "${ISSUE_TITLE_CACHE[$num]:-}" ]]; then
+        echo "${ISSUE_TITLE_CACHE[$num]}"
+        return
+    fi
+    local title
+    title=$(gh issue view "$num" --json title -q .title 2>/dev/null) || return
+    ISSUE_TITLE_CACHE[$num]="$title"
+    echo "$title"
+}
+
+gh_ready() {
+    [[ "$NO_GH" == true ]] && return 1
+    command -v gh &>/dev/null || return 1
+    gh auth status &>/dev/null || return 1
+    return 0
+}
+
+# One `gh pr list` call per repo; populates PR_BY_BRANCH[branch]="number|draft|reviewDecision|mergeStateStatus|passed/total"
+declare -A PR_BY_BRANCH
+
+load_prs() {
+    PR_BY_BRANCH=()
+    gh_ready || return
+    local json
+    json=$(gh pr list --repo "$(basename "$REPO_ROOT")" --state open \
+        --json headRefName,number,isDraft,reviewDecision,mergeStateStatus,statusCheckRollup 2>/dev/null) || return
+    [[ -z "$json" ]] && return
+
+    while IFS=$'\t' read -r branch number draft decision merge passed total; do
+        [[ -z "$branch" ]] && continue
+        PR_BY_BRANCH["$branch"]="$number|$draft|$decision|$merge|$passed/$total"
+    done < <(echo "$json" | jq -r '
+        .[] | [
+            .headRefName,
+            .number,
+            .isDraft,
+            (.reviewDecision // ""),
+            .mergeStateStatus,
+            ([.statusCheckRollup[]? | select(.conclusion=="SUCCESS" or .state=="SUCCESS")] | length),
+            (.statusCheckRollup | length)
+        ] | @tsv
+    ' 2>/dev/null)
+}
+
+derive_state() {
+    local branch="$1" local_dirty="$2" behind="$3" ahead="$4" pr_info="$5"
+
+    if [[ -z "$pr_info" ]]; then
+        if [[ "$branch" =~ ^agent-[0-9]+$ ]] && [[ "$local_dirty" == false ]] && [[ "$ahead" -eq 0 ]]; then
+            if [[ "$behind" -gt 0 ]]; then
+                echo -e "${BLUE}○ idle${NC} · rebase first"
+            else
+                echo -e "${BLUE}○ idle${NC}"
+            fi
+            return
+        fi
+        echo -e "${YELLOW}● working${NC}"
+        return
+    fi
+
+    IFS='|' read -r _num draft decision merge checks <<< "$pr_info"
+    local passed="${checks%/*}" total="${checks#*/}"
+
+    if [[ "$merge" == "DIRTY" ]] || { [[ "$total" -gt 0 ]] && [[ "$passed" -lt "$total" ]] && [[ "$draft" != true ]]; }; then
+        echo -e "${RED}✗ blocked${NC}"
+    elif [[ "$draft" == true ]]; then
+        echo -e "${YELLOW}● working${NC}"
+    elif [[ "$merge" == "CLEAN" ]] && { [[ "$total" -eq 0 ]] || [[ "$passed" -eq "$total" ]]; }; then
+        echo -e "${GREEN}◆ ready to merge${NC}"
+    else
+        echo -e "${YELLOW}● working${NC}"
+    fi
+}
+
+render_repo() {
+    local root="$1"
+    resolve_repo "$root" || return
+
+    pushd "$REPO_ROOT" > /dev/null
+    git fetch origin --quiet 2>/dev/null || true
+    local main_sha=$(git rev-parse --short HEAD 2>/dev/null)
+    popd > /dev/null
+
+    load_prs || true
+
+    # Collect worktrees: main checkout + agent-N / feature worktrees under WORKTREE_ROOT
+    local -a paths=("$REPO_ROOT")
+    if [[ -d "$WORKTREE_ROOT" ]]; then
+        while IFS= read -r -d '' d; do
+            paths+=("$d")
+        done < <(find "$WORKTREE_ROOT" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+    fi
+
+    local count=$((${#paths[@]} - 1))
+    echo -e "${BOLD}$REPO_NAME${NC} · main $main_sha · $(date '+%H:%M')  ${count} agents"
+    printf "%-7s %-14s %-20s %-7s %-11s %-7s %-6s %s\n" \
+        "AGENT" "BRANCH" "WORKING ON" "LOCAL" "VS MAIN" "PR" "CI" "STATE"
+
+    for path in "${paths[@]}"; do
+        [[ -d "$path" ]] || continue
+        local agent
+        if [[ "$path" == "$REPO_ROOT" ]]; then
+            agent="main"
+        else
+            agent=$(basename "$path")
+        fi
+
+        pushd "$path" > /dev/null
+        local branch=$(git branch --show-current 2>/dev/null)
+        [[ -z "$branch" ]] && branch="(detached)"
+
+        local dirty=false
+        local local_files=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+        [[ "$local_files" -gt 0 ]] && dirty=true
+        local local_col="clean"
+        [[ "$dirty" == true ]] && local_col="${local_files} files"
+
+        local ahead=0 behind=0
+        if git rev-parse --verify -q "origin/main" &>/dev/null; then
+            read -r behind ahead < <(git rev-list --left-right --count origin/main..."$branch" 2>/dev/null)
+        fi
+        ahead=${ahead:-0}; behind=${behind:-0}
+        local vs_main="-"
+        if [[ "$path" != "$REPO_ROOT" || "$ahead" -gt 0 || "$behind" -gt 0 ]]; then
+            if [[ "$ahead" -eq 0 && "$behind" -eq 0 ]]; then
+                vs_main="up to date"
+            else
+                vs_main=""
+                [[ "$ahead" -gt 0 ]] && vs_main="+${ahead} ahead"
+                [[ "$behind" -gt 0 ]] && vs_main="${vs_main:+$vs_main, }${behind} behind"
+            fi
+        fi
+
+        local issue_num=$(parse_issue_number "$branch")
+        local working_on="-"
+        if [[ -n "$issue_num" ]]; then
+            local title=$(issue_title "$issue_num")
+            working_on="#${issue_num}${title:+ $title}"
+        fi
+
+        local pr_info="${PR_BY_BRANCH[$branch]:-}"
+        local pr_col="-" ci_col="-"
+        if [[ -n "$pr_info" ]]; then
+            IFS='|' read -r pr_num pr_draft _decision _merge pr_checks <<< "$pr_info"
+            pr_col="#${pr_num}"
+            [[ "$pr_draft" == true ]] && pr_col="${pr_col}d"
+            local passed="${pr_checks%/*}" total="${pr_checks#*/}"
+            [[ "$total" -gt 0 ]] && ci_col="${passed}/${total}"
+        fi
+
+        local state=$(derive_state "$branch" "$dirty" "$behind" "$ahead" "$pr_info")
+
+        popd > /dev/null
+
+        printf "%-7s %-14.14s %-20.20s %-7s %-11s %-7s %-6s " \
+            "$agent" "$branch" "$working_on" "$local_col" "$vs_main" "$pr_col" "$ci_col"
+        echo -e "$state"
+    done
+    echo ""
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --watch)
+            WATCH=true
+            shift
+            ;;
+        --all)
+            ALL_REPOS=true
+            shift
+            ;;
+        --no-gh)
+            NO_GH=true
+            shift
+            ;;
+        --version)
+            show_version
+            exit 0
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+
+render_all() {
+    if [[ "$ALL_REPOS" == true ]]; then
+        local found=false
+        for wt in "$HOME"/wc/*-worktree; do
+            [[ -d "$wt" ]] || continue
+            found=true
+            local repo_root="${wt%-worktree}"
+            [[ -d "$repo_root" ]] || continue
+            render_repo "$repo_root"
+        done
+        if [[ "$found" == false ]]; then
+            echo "No *-worktree directories found under ~/wc"
+        fi
+    else
+        render_repo "$PWD"
+    fi
+}
+
+if [[ "$WATCH" == true ]]; then
+    while true; do
+        clear
+        render_all
+        sleep 15
+    done
+else
+    render_all
+fi

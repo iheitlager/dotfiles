@@ -67,6 +67,7 @@ export PATH="$HOME/.local/bin:$PATH"     # for uv and other user binaries
 eval "$(/opt/homebrew/bin/brew shellenv)"  # Homebrew
 export PATH="/Library/TeX/texbin:$PATH"  # MacTeX CLI tools
 export PATH="/opt/homebrew/opt/llvm/bin:$PATH"  # LLVM tools (lli, clang, etc.)
+export PATH="/opt/homebrew/opt/rustup/bin:$PATH"  # rustup takes priority over Homebrew's plain rust
 export PATH=$DOTFILES/local/bin:$PATH
 
 export MANPATH="/opt/local/share/man:$MANPATH"
@@ -86,9 +87,10 @@ _dotfiles_cached_eval() {
     local tool="$1"
     shift
     local cmd="$*"
-    local bin cache
+    local bin cache cache_key
     bin="$(command -v "$tool" 2>/dev/null)" || return 0
-    cache="$XDG_CACHE_HOME/dotfiles/eval_${tool}.sh"
+    cache_key="${cmd//[^a-zA-Z0-9]/_}"
+    cache="$XDG_CACHE_HOME/dotfiles/eval_${tool}_${cache_key}.sh"
     if [[ ! -f "$cache" ]] || [[ "$bin" -nt "$cache" ]]; then
         eval "$cmd" >| "$cache" 2>/dev/null
     fi
