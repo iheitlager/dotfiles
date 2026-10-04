@@ -4,6 +4,10 @@
 # Docker XDG compliant
 export DOCKER_CONFIG="$XDG_CONFIG_HOME/docker"
 
+# Lima XDG compliant (default ~/.lima). Colima keeps its own Lima home
+# under $XDG_CONFIG_HOME/colima/_lima, so this only affects limactl.
+export LIMA_HOME="$XDG_DATA_HOME/lima"
+
 # podman-compose builds services in parallel by default, interleaving
 # per-step build output from multiple services into an unreadable mess.
 export COMPOSE_PARALLEL_LIMIT=1
