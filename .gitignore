@@ -18,6 +18,3 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
-
-# Account-synced Claude skills (generated)
-claude/config/skills/synced/
