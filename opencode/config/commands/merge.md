@@ -77,11 +77,19 @@ Branch to delete: feat/oauth-support
 Proceed? [Y/n]
 ```
 
-### 3. Rebase on Main, Then Update Changelog & Version
+### 3. Release Bump (done here, never in the PR)
 
-**Always rebase before writing the version bump.** Other PRs may have merged since
-you started — if you bump to X.85 before rebasing and main already has X.85, you get a
-conflict and a wasted CI run.
+A PR carries **no version or changelog change**. `/merge` writes them, so two open PRs
+never conflict on `Cargo.toml`, `src/lib.rs`, `Cargo.lock` or `CHANGELOG.md`.
+
+Pre-check: if the PR diff touches any of those files, warn and ask — it defeats this scheme.
+
+```bash
+gh pr diff $PR --name-only | grep -E '^(Cargo\.toml|Cargo\.lock|src/lib\.rs|CHANGELOG\.md)$'
+```
+
+**Always rebase before writing the bump.** Other PRs may have merged since you started —
+if you bump to X.85 and main already has X.85, you get a conflict and a wasted CI run.
 
 ```bash
 # 1. Discard any local Cargo.lock drift before rebase
@@ -100,35 +108,51 @@ echo "Current version on main: $CURRENT"
 Determine version bump from branch type:
 - `feat/*` → minor bump (0.X.0)
 - `fix/*` → patch bump (0.0.X)
-- All others → skip version bump entirely (no release commit)
+- All others → skip version bump and changelog entirely (no release commit; go to step 4)
 
-Update `CHANGELOG.md` and bump version in the appropriate locations for the project type:
+**Changelog entry** comes from the PR body, between `<!-- changelog -->` and
+`<!-- /changelog -->` (written by `/pr`):
+
+```bash
+gh pr view $PR --json body -q .body \
+  | sed -n '/<!-- changelog -->/,/<!-- \/changelog -->/p' | sed '1d;$d'
+```
+
+If the block is missing or empty, stop and ask — do not invent an entry.
+Add it to `CHANGELOG.md` as a new `## [X.Y.Z] - YYYY-MM-DD` section.
+
+Files to update, by project type:
+
+**Rust:**
+1. `Cargo.toml` — `version = "X.Y.Z"` (workspace root if applicable)
+2. `src/lib.rs` — version constant, if present
+3. `Cargo.lock` — refresh with `cargo update -p <crate> --offline` (or `cargo check`)
+4. `CHANGELOG.md` — new section from the PR body block
 
 **Python:**
 1. `src/<package>/__init__.py` — `__version__ = "X.Y.Z"`
 2. `pyproject.toml` — `version = "X.Y.Z"`
 3. `README.md` — version badge or `## Version: X.Y.Z`
-4. `CHANGELOG.md` — new `## [X.Y.Z] - YYYY-MM-DD` section
-
-**Rust:**
-1. `Cargo.toml` — `version = "X.Y.Z"` (workspace root if applicable)
-2. `README.md` — version badge or `## Version: X.Y.Z`
-3. `CHANGELOG.md` — new `## [X.Y.Z] - YYYY-MM-DD` section
+4. `CHANGELOG.md` — new section from the PR body block
 
 If no version files exist, only update `CHANGELOG.md`.
 
 ```bash
+# Rust
+git add CHANGELOG.md Cargo.toml Cargo.lock src/lib.rs
+
 # Python
 git add CHANGELOG.md README.md src/*/ pyproject.toml
 
-# Rust
-git add CHANGELOG.md README.md Cargo.toml Cargo.lock
-
-# Use --no-verify: release commit only touches CHANGELOG/version files, not code.
-# Running the full test suite here is wasteful and adds ~60s per commit.
+# --no-verify: release commit only touches version/changelog files, not code.
 git commit --no-verify -m "chore: release vX.Y.Z"
 git push
 ```
+
+**Re-run CI after the push (merge queue / required checks).** The release commit changes the
+head SHA, so earlier check results no longer apply. Do not merge on the old results.
+Go back to the wait loop in step 2 (sleep 180, then poll every 30s) against the new head,
+and stop if any check fails. Only then continue to step 4.
 
 ### 4. Detect Linked Issues
 
@@ -208,6 +232,7 @@ PR Merged Successfully
 ✓ CHANGELOG.md updated — [0.4.0] section added
 ✓ Version bumped: 0.3.1 → 0.4.0
 ✓ Release commit: abc1233 chore: release v0.4.0
+✓ CI re-run on release commit passed
 ✓ PR #123 merged into main
 ✓ Remote branch 'feat/oauth-support' deleted
 ✓ Local branch 'feat/oauth-support' deleted
@@ -230,12 +255,13 @@ Dry Run: PR #123
 ═══════════════════════════════════════════════════════════════
 
 Would perform:
-  1. Update CHANGELOG.md + bump version to 0.4.0
-  2. Commit: chore: release v0.4.0
-  3. Merge PR #123 into main
-  4. Delete remote branch: origin/feat/oauth-support
-  5. Delete local branch: feat/oauth-support
-  6. Pull main, prune stale refs
+  1. Rebase on main, bump version to 0.4.0, add CHANGELOG.md section from PR body
+  2. Commit + push: chore: release v0.4.0
+  3. Wait for CI on the new head
+  4. Merge PR #123 into main
+  5. Delete remote branch: origin/feat/oauth-support
+  6. Delete local branch: feat/oauth-support
+  7. Pull main, prune stale refs
 
 Issues that would close: #101, #98
 

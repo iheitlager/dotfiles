@@ -66,6 +66,8 @@ Derive from branch name:
 
 Include findings from any prior `/review` run in the current session as actionable items.
 
+Do NOT bump versions or edit `CHANGELOG.md` in the PR — `/merge` does that. The `<!-- changelog -->` block in the body is its input.
+
 ```markdown
 ## Summary
 
@@ -81,6 +83,12 @@ Include findings from any prior `/review` run in the current session as actionab
 
 ### Fixed
 - ...
+
+## Changelog
+
+<!-- changelog -->
+- One line per user-visible change (consumed by `/merge` for the CHANGELOG.md section)
+<!-- /changelog -->
 
 ## Review Findings
 
