@@ -1,5 +1,5 @@
 {
-  "lastUpdated": 1792825266560,
+  "lastUpdated": 1793207657808,
   "skills": [
     {
       "skillId": "import-memory",
@@ -30,7 +30,7 @@
       "name": "skill-creator",
       "description": "Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.",
       "source": "anthropic-example",
-      "updatedAt": "2026-10-21T20:47:56.610025Z"
+      "updatedAt": "2026-10-28T17:00:24.127636Z"
     },
     {
       "skillId": "docx",
@@ -51,8 +51,7 @@
       "name": "xlsx",
       "description": "Use this skill any time a spreadsheet file is the primary input or output. This means any task where the user wants to: open, read, edit, or fix an existing .xlsx, .xlsm, .xltx, .csv, or .tsv file (e.g., adding columns, computing formulas, formatting, charting, cleaning messy data); create a new spreadsheet from scratch or from other data sources; or convert between tabular file formats. Trigger especially when the user references a spreadsheet file by name or path — even casually (like \"the xlsx in my downloads\") — and wants something done to it or produced from it. Also trigger for cleaning or restructuring messy tabular data files (malformed rows, misplaced headers, junk data) into proper spreadsheets. The deliverable must be a spreadsheet file. Do NOT trigger when the primary deliverable is a Word document, HTML report, standalone Python script, database pipeline, or Google Sheets API integration, even if tabular data is involved.",
       "source": "anthropic",
-      "updatedAt": "2026-09-14T21:00:33.324012Z",
-      "creatorType": "anthropic"
+      "updatedAt": "2026-10-27T19:00:29.248939Z"
     },
     {
       "skillId": "google-workspace",
@@ -75,10 +74,5 @@
       "source": "anthropic-example",
       "updatedAt": "2026-10-19T20:08:47.184180Z"
     }
-  ],
-  "pendingClaims": [
-    "38251:Tue Oct 20 14:02:21 2026/pptx",
-    "36637:Thu Oct 22 12:36:27 2026/pptx",
-    "36637:Thu Oct 22 12:36:27 2026/artifact-emulator"
   ]
 }

@@ -128,7 +128,7 @@ vim.api.nvim_create_autocmd('FileType', {
 
 -- Enable treesitter highlighting for filetypes not auto-detected
 vim.api.nvim_create_autocmd('FileType', {
-  pattern = { 'ebnf', 'mvl', 'turtle' },
+  pattern = { 'ebnf', 'mvl', 'turtle', 'song' },
   callback = function()
     vim.treesitter.start()
   end,
@@ -201,6 +201,13 @@ require('lazy').setup({
       vim.filetype.add({ extension = { ebnf = 'ebnf' } })
       -- Link .ttl files to the turtle treesitter parser (Turtle RDF syntax)
       vim.filetype.add({ extension = { ttl = 'turtle' } })
+      -- Link .song files to algo-synth's local tree-sitter grammar
+      vim.filetype.add({ extension = { song = 'song' } })
+      vim.api.nvim_create_autocmd('User', { pattern = 'TSUpdate', callback = function()
+        require('nvim-treesitter.parsers').song = {
+          install_info = { path = vim.fn.expand('~/wc/algo-synth/syntax/tree-sitter-song'), queries = 'queries' },
+        }
+      end })
       -- Enable treesitter-based folding (foldlevel=99 keeps all folds open by default)
       vim.opt.foldmethod = 'expr'
       vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'

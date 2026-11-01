@@ -103,6 +103,9 @@
     "defaultMode": "auto"
   },
   "model": "opus",
+  "fallbackModel": [
+    "claude-opus-5"
+  ],
   "skillOverrides": {
     "assurance-criteria": "off",
     "feature-model": "off",

@@ -105,6 +105,7 @@ Rules:
 - **Use Git operations freely** (commits, pushing, creating branches, rebasing) as natural parts of the workflow
 - No need to ask permission for Bash or git actions
 - Be cautious with destructive git operations (no force pushes or hard resets unless explicitly requested)
+- **Commit signing failure = I'm away.** Signing goes through 1Password, which needs my fingerprint. If a signed commit/tag fails, do not retry and do not bypass signing (no `--no-gpg-sign`, no config changes). Stop and message that you're waiting until I'm back at the keyboard.
 
 ### GitHub Comment Attribution
 
@@ -139,6 +140,14 @@ After completing any investigation, analysis, or research task, **always suggest
 4. **Commit changes** — create meaningful, semantic commits
 5. **Squash if needed** — clean up commit history before PR
 6. **File a pull request** — include summary and test plan
+
+#### Closing Issues from PRs
+
+- **Finish the issue in the PR.** Close every open acceptance criterion on the same branch as an extra commit: missing tests, an unmeasured perf claim, a code path not covered. Do not leave leftovers.
+- **Then write `Closes #N`.** Do not use `Related to #N` to dodge leftovers.
+- **Follow-up issue only when a criterion truly cannot be done in this repo** (it needs another repo's release, or a CI-only number). Open it with `gh issue create`, without asking, and link it. Still write `Closes #N`.
+- **`Related to #N` only for planned partial work**, such as phase 1 of 3 or one step of an epic.
+- **Never put close/fix/resolve before `#N` in a negated sentence.** GitHub ignores negation.
 
 ---
 

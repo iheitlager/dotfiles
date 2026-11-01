@@ -68,6 +68,7 @@ eval "$(/opt/homebrew/bin/brew shellenv)"  # Homebrew
 export PATH="/Library/TeX/texbin:$PATH"  # MacTeX CLI tools
 export PATH="/opt/homebrew/opt/llvm/bin:$PATH"  # LLVM tools (lli, clang, etc.)
 export PATH="/opt/homebrew/opt/rustup/bin:$PATH"  # rustup takes priority over Homebrew's plain rust
+export PATH="/opt/homebrew/opt/sqlite/bin:$PATH"  # keg-only Homebrew sqlite3 (current) over macOS's older /usr/bin/sqlite3
 export PATH=$DOTFILES/local/bin:$PATH
 
 export MANPATH="/opt/local/share/man:$MANPATH"
