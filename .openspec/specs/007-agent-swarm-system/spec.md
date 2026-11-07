@@ -233,7 +233,7 @@ The default tmux layout MUST give each agent its own window with a two-pane spli
 
 ### Requirement 6: Tmux Layout — Classic Mode
 
-The classic layout (all agents in one window) MUST remain available via `--classic` / `-o`.
+The classic layout (all agents in one window) MUST remain available via `--classic` / `-c`.
 
 #### Scenario: Classic Layout for N Agents
 
