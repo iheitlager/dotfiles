@@ -477,7 +477,7 @@ For urgent coordination, agents can signal each other via tmux:
 tmux send-keys -t claude-<project>:agent-N.1 "Message here" Enter
 tmux send-keys -t claude-<project>:agent-N.1 Enter  # Extra enter for visibility
 
-# Classic layout (--classic/-o): all agents in one "agents" window, 1-based panes
+# Classic layout (--classic/-c): all agents in one "agents" window, 1-based panes
 tmux send-keys -t claude-<project>:agents.N "Message here" Enter
 ```
 

@@ -150,11 +150,10 @@ Read the full issue including comments and linked discussions.
 
 ### 2. Research via Agent
 
-Spawn an Explore agent to understand the codebase context:
+Delegate to the built-in `explore` subagent (invoke with `@explore`) to understand the codebase context. Give it this prompt:
 
 ```
-Task tool:
-  subagent_type: Explore
+@explore
   prompt: |
     Research context for implementing GitHub issue #N:
 

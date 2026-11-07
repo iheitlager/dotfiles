@@ -4,16 +4,17 @@
 
 
 # launch-agents
-# Version: 0.9.4
+# Version: 0.10.0
 #
 # Changelog:
+# 0.10.0 Add --opencode/-o (opencode + mistral/zai-glm-5-3, override via OPENCODE_MODEL); classic layout moves to -c
 # 0.9.4 Add --no-monitors flag; allow -n 1
 # 0.9.3 Add --main flag: adds a final shell window in the main repo directory
 # 0.9.2 Default -n 2 to sonnet/sonnet (use --opus for opus distribution)
 # 0.9.1 Default -n 2 to opus/opus; fix window switch landing on left (claude) pane
 # 0.9.0 Add disk health check: warn/clean runaway Claude tmp output files on startup
 # 0.8.1 Set Ghostty window title for workspace and swarm modes
-# 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-o
+# 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-c
 # 0.7.0 Default to sonnet, --opus flag enables opus-based distribution
 # 0.6.0 Added --daemon/-d flag for task-watcher integration
 # 0.5.2 Improved resilience: smart defaults, restart command, better session handling
@@ -87,6 +88,8 @@ FORCE=false
 VERBOSE=false
 EQUAL_DISTRIBUTION=false
 OPUS_MODE=false
+OPENCODE_MODE=false
+OPENCODE_MODEL="${OPENCODE_MODEL:-mistral/zai-glm-5-3}"
 CLASSIC_MODE=false
 MAIN_WINDOW=false
 NO_MONITORS=false
@@ -177,7 +180,8 @@ Commands:
 
 Options:
     -n COUNT           Number of agents: 1, 2, 3, 4, or 6 (default: 2)
--o, --classic      Use classic multi-pane layout (all agents in one window)
+-c, --classic      Use classic multi-pane layout (all agents in one window)
+    -o, --opencode     Run opencode instead of claude (default mistral/zai-glm-5-3; override with OPENCODE_MODEL)
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
     --main             Add a final shell window in the main repo directory
@@ -192,7 +196,7 @@ Layouts (default):
     3 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  agent-3 [claude│shell]
     4 agents        agent-1..4 [claude│shell each]
 
-Layouts (--classic / -o):
+Layouts (--classic / -c):
     2 agents        agents: agent-1 │ agent-2   +  shell-1  shell-2
     3 agents        agents: agent-1 │ agent-2 / agent-3   +  shell-1..3
     4 agents        agents: agent-1 / agent-3 │ agent-2 / agent-4   +  shell-1..4
@@ -227,7 +231,7 @@ get_client() {
 
     case $count in
         1|2|3|4)
-            echo "claude"
+            if [[ "$OPENCODE_MODE" == true ]]; then echo "opencode"; else echo "claude"; fi
             ;;
         6)
             if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
@@ -266,6 +270,12 @@ get_model() {
                 6) echo "gemini-pro"; return ;;
             esac
         fi
+    fi
+
+    # opencode: single configurable model (n=1-4 only, see get_client)
+    if [[ "$OPENCODE_MODE" == true && "$count" -le 4 ]]; then
+        echo "$OPENCODE_MODEL"
+        return
     fi
 
     # Claude models: default is sonnet; --opus enables opus for larger configs
@@ -519,6 +529,12 @@ _start_agent_pane() {
             # that compound exponentially via tmux's args_escape on hook passes.
             tmux send-keys -t "$target" "claude --model $model --add-dir . --append-system-prompt 'Agent agent-$agent ($client/$model) for $REPO_NAME. Branch: agent-$agent. Read AGENTS.md for workflow.' $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
             ;;
+        opencode)
+            tmux send-keys -t "$target" "clear" C-m
+            debug "tmux send-keys -t $target 'opencode --model $model' C-m"
+            # opencode reads AGENTS.md from the worktree natively; no system-prompt flag needed.
+            tmux send-keys -t "$target" "opencode --model $model" C-m
+            ;;
         copilot)
             tmux send-keys -t "$target" "export COPILOT_MODEL=$model" C-m
             sleep 0.1
@@ -705,7 +721,10 @@ cmd_workspace() {
     local ws_model="sonnet"
     [[ "$OPUS_MODE" == true ]] && ws_model="opus"
 
-    if [[ -f "$agent_spec" ]]; then
+    if [[ "$OPENCODE_MODE" == true ]]; then
+        ws_model="$OPENCODE_MODEL"
+        tmux send-keys -t "$ws_session:workspace.1" "opencode --model $ws_model" C-m
+    elif [[ -f "$agent_spec" ]]; then
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt 'Workspace session: $ws_session. Read $agent_spec for workspace instructions.' $SKIP_PERMISSIONS" C-m
     else
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . $SKIP_PERMISSIONS" C-m
@@ -732,7 +751,7 @@ cmd_workspace() {
     echo "Directory:    $(basename "$PWD")"
     echo ""
     echo "Window 1 (workspace):"
-    echo "  Left pane:  claude ($ws_model)"
+    echo "  Left pane:  $([[ "$OPENCODE_MODE" == true ]] && echo opencode || echo claude) ($ws_model)"
     echo "  Right pane: shell"
     echo ""
     if [[ "$NO_MONITORS" != true ]]; then
@@ -964,7 +983,7 @@ cmd_clean() {
         fi
         
         # Kill agent processes
-        for proc in claude gemini copilot; do
+        for proc in claude gemini copilot opencode; do
             if pgrep -f "$proc" > /dev/null; then
                 echo -e "  ${YELLOW}Killing $proc...${NC}"
                 pkill -f "$proc" 2>/dev/null || true
@@ -1146,8 +1165,12 @@ while [[ $# -gt 0 ]]; do
             EQUAL_DISTRIBUTION=true
             shift
             ;;
-        -o|--classic)
+        -c|--classic)
             CLASSIC_MODE=true
+            shift
+            ;;
+        -o|--opencode)
+            OPENCODE_MODE=true
             shift
             ;;
         --opus)
