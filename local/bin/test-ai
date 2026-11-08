@@ -6,6 +6,8 @@
 # Version: 0.3.0
 #
 # Changelog:
+# 0.3.1 Orchestrator starts in auto mode (--permission-mode auto) instead of
+#       acceptEdits, so it runs fully unattended alongside the rig defaults
 # 0.3.0 Move /exp and /exp-check templates from inline heredocs to
 #       <dotfiles>/ai/test-ai/claude/commands/; commands are now client-agnostic
 #       (client names come from the CLAUDE.md pane map) and are copied with the
@@ -393,9 +395,10 @@ for i in "${!CLIENT_NAMES[@]}"; do
     tmux send-keys -t "${PANE_IDS[$i]}" "${CLIENT_NAMES[$i]}" C-m
 done
 
-# Orchestrator: aware of the rig via CLAUDE.md, may drive tmux without prompts
+# Orchestrator: aware of the rig via CLAUDE.md, starts in auto mode so it
+# runs unattended (project settings add bypassPermissions on top)
 tmux send-keys -t "$MAIN_PANE" 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"' C-m
-tmux send-keys -t "$MAIN_PANE" "claude --permission-mode acceptEdits --allowedTools 'Bash(tmux:*)'" C-m
+tmux send-keys -t "$MAIN_PANE" "claude --permission-mode auto --allowedTools 'Bash(tmux:*)'" C-m
 
 tmux select-window -t "$SESSION:main"
 tmux select-pane -t "$MAIN_PANE"
