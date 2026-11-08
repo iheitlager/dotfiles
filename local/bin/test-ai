@@ -3,9 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # test-ai
-# Version: 0.3.0
+# Version: 0.4.1
 #
 # Changelog:
+# 0.4.1 Template copies overwrite when the dotfiles template is newer
+#       (mtime), so rig folders never keep stale commands/defaults
 # 0.4.0 /exp help (and bare /exp) shows usage; orchestrator greets with
 #       "Rig ready — for help press /exp help" once its TUI is up
 # 0.3.5 Auto-accept the claude client's bypass-permissions startup dialog
@@ -267,7 +269,9 @@ printf '*\n' > "$RESULTS_DIR/.gitignore"
 
 # Client defaults and orchestrator commands from the dotfiles, in each
 # client's native structure: <dotfiles>/ai/test-ai/<client>/<file> → .<client>/<file>
-# Existing files are never overwritten; created files go into the manifest.
+# Newer templates always overwrite (mtime comparison), so rig folders never
+# keep stale files; files the user edited more recently are kept.
+# Every file the rig owns goes into the manifest for --clean.
 install_client_defaults() {
     local templates="$DOTFILES_DIR/ai/test-ai"
     [[ -d "$templates" ]] || return 0
@@ -277,14 +281,17 @@ install_client_defaults() {
         while IFS= read -r src_file; do
             rel="${src_file#"$templates/$client"/}"
             target_file=".$client/$rel"
-            if [[ -e "$target_file" ]]; then
-                echo -e "  ${YELLOW}exists, kept${NC} $target_file"
-                continue
+            if [[ ! -e "$target_file" ]]; then
+                mkdir -p "$(dirname "$target_file")"
+                cp "$src_file" "$target_file"
+                echo "$target_file" >> "$RESULTS_DIR/rig-files"
+                echo -e "  ${GREEN}default${NC}   $target_file"
+            elif [[ "$src_file" -nt "$target_file" ]]; then
+                cp "$src_file" "$target_file"
+                grep -qxF "$target_file" "$RESULTS_DIR/rig-files" 2>/dev/null || \
+                    echo "$target_file" >> "$RESULTS_DIR/rig-files"
+                echo -e "  ${GREEN}updated${NC}   $target_file (template newer)"
             fi
-            mkdir -p "$(dirname "$target_file")"
-            cp "$src_file" "$target_file"
-            echo "$target_file" >> "$RESULTS_DIR/rig-files"
-            echo -e "  ${GREEN}default${NC}   $target_file"
         done < <(find "$templates/$client" -type f)
     done
 }
