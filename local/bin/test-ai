@@ -6,6 +6,13 @@
 # Version: 0.3.0
 #
 # Changelog:
+# 0.3.5 Auto-accept the claude client's bypass-permissions startup dialog
+#       (Down + Enter on "Yes, I accept") so the rig is fully unattended
+# 0.3.4 /exp status: detailed per-client live status (activity, blockers);
+#       launch claude client with --permission-mode bypassPermissions
+#       (project settings.json alone left it in manual mode)
+# 0.3.3 /exp list: report rig status (client, pane, state) without sending;
+#       client names stay dynamic via the CLAUDE.md pane map
 # 0.3.2 exec the tmux attach: bash replaces itself, so nothing resumes after
 #       detach (immune to the script being edited while a rig is attached)
 # 0.3.1 Orchestrator starts in auto mode (--permission-mode auto) instead of
@@ -377,6 +384,8 @@ ignore this whole section and behave as a normal coding assistant.
 
 ### Slash commands
 
+- /exp list              - show each client, its pane and current state
+- /exp status           - detailed live status per client (activity, blockers)
 - /exp [client] <prompt>  - send an experiment to all clients (or one)
 - /exp-check             - capture all client outputs into .test-ai/ and compare
 EOF
@@ -391,11 +400,37 @@ EOF
 
 sleep 1  # let the pane shells start
 
-# Clients: plain interactive sessions, default config (vanilla behavior)
+# Clients: plain interactive sessions, default config (vanilla behavior).
+# Exception: claude ignores bypassPermissions from project settings, so pass
+# it explicitly to keep experiments from blocking on permission prompts.
 for i in "${!CLIENT_NAMES[@]}"; do
+    client_cmd="${CLIENT_NAMES[$i]}"
+    [[ "$client_cmd" == "claude" ]] && client_cmd="claude --permission-mode bypassPermissions"
     tmux send-keys -t "${PANE_IDS[$i]}" 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"' C-m
-    tmux send-keys -t "${PANE_IDS[$i]}" "${CLIENT_NAMES[$i]}" C-m
+    tmux send-keys -t "${PANE_IDS[$i]}" "$client_cmd" C-m
 done
+
+# The claude client shows a bypass-permissions dialog a few seconds after
+# launch; "No, exit" is preselected, so Down + Enter picks "Yes, I accept".
+# Poll briefly so the rig is fully unattended.
+accept_bypass_dialogs() {
+    local i pane attempt accepted
+    for attempt in 1 2 3 4 5; do
+        accepted=false
+        for i in "${!CLIENT_NAMES[@]}"; do
+            [[ "${CLIENT_NAMES[$i]}" == "claude" ]] || continue
+            pane="${PANE_IDS[$i]}"
+            if tmux capture-pane -p -t "$pane" 2>/dev/null | grep -q "Yes, I accept"; then
+                tmux send-keys -t "$pane" Down Enter
+                echo -e "  ${GREEN}accepted${NC} bypass dialog on claude client ($pane)"
+                accepted=true
+            fi
+        done
+        if [[ "$accepted" == true ]]; then break; fi
+        sleep 2
+    done
+}
+accept_bypass_dialogs
 
 # Orchestrator: aware of the rig via CLAUDE.md, starts in auto mode so it
 # runs unattended (project settings add bypassPermissions on top)
