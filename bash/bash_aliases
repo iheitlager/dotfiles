@@ -67,10 +67,21 @@ alias ls='eza --color=always --group-directories-first'
 alias ll='eza -la --color=always --group-directories-first --git --header'
 alias la='eza -a --color=always --group-directories-first'
 alias lt='eza --tree --color=always --git-ignore --level=3'
-# Filtered tree: skips VCS noise wherever you run it
-alias ltree='eza --tree --color=always --git-ignore --group-directories-first --level=2 -I .git -I node_modules -I __pycache__ -I .DS_Store'
-# Dotfiles topic overview: ltree plus repo-specific noise (specs, tests, skills)
-alias dtree='eza --tree --color=always --git-ignore --group-directories-first --level=2 -I .git -I .claude -I .openspec -I .pytest_cache -I .ruff_cache -I tests -I skills -I node_modules -I __pycache__ -I .DS_Store ~/.dotfiles'
+# Filtered tree: skips VCS noise wherever you run it (-a: includes dotfiles)
+alias ltree='eza --tree -a --color=always --git-ignore --group-directories-first --level=2 -I .git -I node_modules -I __pycache__ -I .DS_Store'
+# Rig dotfiles overview: shows the test-ai generated dot-directories in the
+# current folder (.claude, .opencode, .vibe, .test-ai) — handy inside rig folders
+dtree() {
+  local dirs=() d
+  for d in .claude .opencode .vibe .test-ai; do
+    [[ -e "$d" ]] && dirs+=("$d")
+  done
+  if [[ ${#dirs[@]} -eq 0 ]]; then
+    echo "no rig dotfiles here (run test-ai first)"
+    return 1
+  fi
+  eza --tree -a --color=always --group-directories-first --level=3 "${dirs[@]}"
+}
 alias l='eza -F --color=always'
 
 lsort() {
