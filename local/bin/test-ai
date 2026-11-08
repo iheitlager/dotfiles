@@ -6,6 +6,8 @@
 # Version: 0.3.0
 #
 # Changelog:
+# 0.3.2 exec the tmux attach: bash replaces itself, so nothing resumes after
+#       detach (immune to the script being edited while a rig is attached)
 # 0.3.1 Orchestrator starts in auto mode (--permission-mode auto) instead of
 #       acceptEdits, so it runs fully unattended alongside the rig defaults
 # 0.3.0 Move /exp and /exp-check templates from inline heredocs to
@@ -436,6 +438,8 @@ echo ""
 # Set terminal window title via OSC escape (direct to terminal, not tmux command queue)
 printf '\e]0;test-ai · %s\a' "$(basename "$PWD")"
 
+# Attach via exec: bash replaces itself with the tmux client, so there is no
+# script parser left to resume (and misparse) after detach.
 if [[ "$NO_ATTACH" != true ]]; then
-    tmux attach -t "$SESSION"
+    exec tmux attach -t "$SESSION"
 fi
