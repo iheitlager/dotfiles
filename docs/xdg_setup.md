@@ -103,11 +103,11 @@ For applications like Claude Code that don't fully support XDG conventions, we u
 
 ### Bootstrap: Dotfiles → XDG
 
-The `link_config_files()` function in [script/bootstrap](../script/bootstrap#L91-L100) links any `config/` directory inside a topic to `~/.config/<topic>/`:
+The `link_config_files()` function in [script/bootstrap](../script/bootstrap#L91-L100) links any `config/` directory inside a topic (top-level or nested) to `~/.config/<topic>/`:
 
 ```bash
 link_config_files () {
-  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config')
+  for src in $(find "$DOTFILES" -maxdepth 3 -type d -name 'config')
   do
     local topic=$(basename $(dirname "$src"))
     local dst="$HOME/.config/$topic"
@@ -118,8 +118,9 @@ link_config_files () {
 
 This creates:
 ```
-~/.config/claude/ → ~/.dotfiles/claude/config/
-~/.config/tmux/   → ~/.dotfiles/tmux/config/
+~/.config/claude/   → ~/.dotfiles/claude/config/
+~/.config/tmux/     → ~/.dotfiles/tmux/config/
+~/.config/opencode/ → ~/.dotfiles/ai/opencode/config/
 ```
 
 ### Topic Install: XDG → Application

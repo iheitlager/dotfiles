@@ -1,9 +1,9 @@
 # Dotfiles System Core Specification
 
 **Domain:** Personal Development Environment
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Implemented
-**Date:** 2026-02-07
+**Date:** 2026-11-07
 **Owner:** Ilja Heitlager
 
 ## Overview
@@ -54,6 +54,16 @@ The system MUST support modular topic-based organization where each topic is ind
 - THEN the system SHALL automatically discover and integrate them on next shell start
 - AND `dot list` SHALL include the new topic if install.sh exists
 - AND `dot status` SHALL show the topic's features
+
+#### Scenario: Nested Topic Added
+
+- GIVEN a developer creates a nested topic at `~/.dotfiles/<group>/<topic>/` (e.g., `ai/opencode/`)
+- WHEN they add standard files (brew_packages, config/, install.sh)
+- THEN the system SHALL discover them the same as top-level topics
+- AND `dot list` SHALL show the nested topic by relative path (e.g., `ai/opencode`)
+- AND `dot install <topic>` and `dot brew <topic>` SHALL resolve the topic by name (e.g., `opencode`)
+- AND bootstrap SHALL symlink `<group>/<topic>/config/` to `~/.config/<topic>/` (config dir name wins over group)
+- AND shell integration SHALL source bash_* files from nested topics after top-level topics
 
 #### Scenario: Topic Files Sourced in Order
 
@@ -190,7 +200,7 @@ The system MUST automatically discover and install Homebrew packages from all to
 
 - GIVEN multiple topics have brew_packages files
 - WHEN `dot` command runs
-- THEN it SHALL find all brew_packages files using maxdepth 2
+- THEN it SHALL find all brew_packages files using maxdepth 3 (top-level and nested topics)
 - AND SHALL source each brew_packages file in order
 - AND SHALL collect all tap, brew, cask commands
 
@@ -266,6 +276,13 @@ The system MUST support two config directory patterns with conflict detection an
 - THEN it SHALL create symlink: `~/.config/<topic>/` → `~/.dotfiles/<topic>/config/`
 - AND SHALL handle interactive prompts for conflicts
 
+#### Scenario: Nested Topic Config Pattern
+
+- GIVEN a nested topic has structure: `<group>/<topic>/config/` (e.g., `ai/opencode/config/`)
+- WHEN bootstrap runs link_config_files()
+- THEN it SHALL create symlink: `~/.config/<topic>/` → `~/.dotfiles/<group>/<topic>/config/`
+- AND SHALL handle interactive prompts for conflicts
+
 #### Scenario: General Config Pattern
 
 - GIVEN `config/<app>/` exists
@@ -304,7 +321,7 @@ The system MUST execute topic-specific install.sh scripts with error handling.
 
 - GIVEN topics have install.sh files (e.g., bash/install.sh, osx/install.sh)
 - WHEN bootstrap runs run_installers()
-- THEN it SHALL find all install.sh files using maxdepth 2
+- THEN it SHALL find all install.sh files using maxdepth 3 (top-level and nested topics)
 - AND SHALL execute each with `sh -c "${src}"`
 - AND SHALL log output to /tmp/dotfiles-install
 - AND SHALL report success for each installer
@@ -976,17 +993,18 @@ Files not matching reserved names:
    - Logs to /tmp/dotfiles-dot
 
 6. **Install Dotfiles** (`install_dotfiles()`)
-   - Finds all *.symlink files (maxdepth 2)
+   - Finds all *.symlink files (maxdepth 3)
    - Links to $HOME with dot prefix
    - Prompts for conflicts (overwrite/backup/skip)
 
 7. **Link Config Files** (`link_config_files()`)
    - Links <topic>/config/ → ~/.config/<topic>/
+   - Links <group>/<topic>/config/ → ~/.config/<topic>/ (nested topics)
    - Links config/<app>/ → ~/.config/<app>/
    - Prompts for conflicts (overwrite/backup/skip)
 
 8. **Run Installers** (`run_installers()`)
-   - Finds all install.sh files (maxdepth 2)
+   - Finds all install.sh files (maxdepth 3)
    - Executes each with `sh -c`
    - Logs to /tmp/dotfiles-install
    - Exits on first failure
@@ -1087,7 +1105,7 @@ When `dot --new` runs:
 2. Prompt for sudo early (avoid timeout mid-install)
 3. Install Homebrew if missing (via homebrew/brew_install.sh)
 4. Scan for all brew_packages files:
-   find "$DOTFILES" -maxdepth 2 -name 'brew_packages'
+   find "$DOTFILES" -maxdepth 3 -name 'brew_packages'
 5. For each brew_packages file:
    - Print "Processing installer: <topic>"
    - Source the file (executes tap/brew/cask commands)

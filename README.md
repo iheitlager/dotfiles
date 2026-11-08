@@ -66,6 +66,10 @@ Everything is organized by topic (vim, git, python, etc.). Each topic can have:
 | `*.symlink` | Symlinked to `$HOME` |
 | `config/` | Symlinked to `~/.config/<topic>/` |
 
+Topics can also be nested one level deep (`<group>/<topic>/`, e.g. `ai/opencode/`).
+They are discovered the same way; `config/` is named after the inner topic
+(`ai/opencode/config/` → `~/.config/opencode/`).
+
 ## XDG Base Directory
 
 This setup follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/):
@@ -83,6 +87,7 @@ Use `xdg-info` to inspect XDG paths and app compliance.
 
 ```
 ~/.dotfiles/
+├── ai/             # AI tooling (opencode)
 ├── bash/           # Shell configuration
 ├── claude/         # Claude Code config, agents, skills
 ├── config/         # XDG configs (ghostty, bat, ripgrep, tmux)

@@ -108,9 +108,9 @@ _dotfiles_cached_source() {
     
     # Regenerate cache if missing or dotfiles dir is newer
     if [[ ! -f "$cache" ]] || [[ "$DOTFILES" -nt "$cache" ]]; then
-        # Concatenate all module files with origin comments
+        # Concatenate all module files with origin comments (top-level and nested topics)
         : >| "$cache"  # Truncate/create (>| overrides noclobber)
-        for f in $DOTFILES/*/"$type"; do
+        for f in $DOTFILES/*/"$type" $DOTFILES/*/*/"$type"; do
             if [[ -f "$f" ]]; then
                 printf '\n# >>> %s\n' "${f#$DOTFILES/}" >> "$cache"
                 cat "$f" >> "$cache"

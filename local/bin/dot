@@ -84,6 +84,12 @@ if [[ $# -gt 0 ]]; then
             fi
             TOPIC="$2"
             INSTALL_SCRIPT="$DOTFILES/$TOPIC/install.sh"
+            # Nested topics live at $DOTFILES/<group>/<topic>/ (e.g., ai/opencode)
+            if [[ ! -f "$INSTALL_SCRIPT" ]]; then
+                for nested in "$DOTFILES"/*/"$TOPIC"/install.sh; do
+                    [[ -f "$nested" ]] && INSTALL_SCRIPT="$nested" && break
+                done
+            fi
             if [[ -f "$INSTALL_SCRIPT" ]]; then
                 echo "🔧 Running install.sh for '$TOPIC'..."
                 source "$INSTALL_SCRIPT"
@@ -108,6 +114,12 @@ if [[ $# -gt 0 ]]; then
             fi
             TOPIC="$2"
             BREW_SCRIPT="$DOTFILES/$TOPIC/brew_packages"
+            # Nested topics live at $DOTFILES/<group>/<topic>/ (e.g., ai/opencode)
+            if [[ ! -f "$BREW_SCRIPT" ]]; then
+                for nested in "$DOTFILES"/*/"$TOPIC"/brew_packages; do
+                    [[ -f "$nested" ]] && BREW_SCRIPT="$nested" && break
+                done
+            fi
             if [[ -f "$BREW_SCRIPT" ]]; then
                 echo "🍺 Running brew_packages for '$TOPIC'..."
                 source "$BREW_SCRIPT"
@@ -128,9 +140,10 @@ if [[ $# -gt 0 ]]; then
                 exit 1
             fi
             echo "📋 Available topics with install.sh:"
-            for script in "$DOTFILES"/*/install.sh; do
+            for script in "$DOTFILES"/*/install.sh "$DOTFILES"/*/*/install.sh; do
                 if [[ -f "$script" ]]; then
-                    topic=$(basename "$(dirname "$script")")
+                    topic="${script#"$DOTFILES"/}"
+                    topic="${topic%/install.sh}"
                     echo "   - $topic"
                 fi
             done
@@ -146,9 +159,9 @@ if [[ $# -gt 0 ]]; then
             echo "💾 Shell Cache ($cache_dir)"
             if [[ -d "$cache_dir" ]]; then
                 # Count source files for each cache type
-                env_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_env' 2>/dev/null | wc -l | tr -d ' ')
-                alias_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_aliases' 2>/dev/null | wc -l | tr -d ' ')
-                comp_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_completion' 2>/dev/null | wc -l | tr -d ' ')
+                env_count=$(find "$DOTFILES" -maxdepth 3 -name 'bash_env' 2>/dev/null | wc -l | tr -d ' ')
+                alias_count=$(find "$DOTFILES" -maxdepth 3 -name 'bash_aliases' 2>/dev/null | wc -l | tr -d ' ')
+                comp_count=$(find "$DOTFILES" -maxdepth 3 -name 'bash_completion' 2>/dev/null | wc -l | tr -d ' ')
 
                 for cache_file in "$cache_dir"/*.sh; do
                     [[ -f "$cache_file" ]] || continue
@@ -257,6 +270,26 @@ if [[ $# -gt 0 ]]; then
                     [[ -f "$dir/bash_shortcuts" ]] && features+="K"
 
                     [[ -n "$features" ]] && printf "   %-12s [%s]\n" "$topic" "$features"
+                done
+
+                # Nested topics (e.g., ai/opencode)
+                for dir in "$DOTFILES"/*/*/; do
+                    [[ -d "$dir" ]] || continue
+                    [[ "$dir" == "$DOTFILES/config/"* ]] && continue
+
+                    features=""
+                    [[ -f "$dir/install.sh" ]] && features+="I"
+                    [[ -f "$dir/brew_packages" ]] && features+="B"
+                    [[ -f "$dir/bash_aliases" ]] && features+="A"
+                    [[ -f "$dir/bash_env" ]] && features+="E"
+                    [[ -f "$dir/bash_completion" ]] && features+="C"
+                    [[ -d "$dir/config" ]] && features+="X"
+                    [[ -f "$dir/bash_shortcuts" ]] && features+="K"
+
+                    if [[ -n "$features" ]]; then
+                        nested_topic="${dir#"$DOTFILES"/}"; nested_topic="${nested_topic%/}"
+                        printf "   %-12s [%s]\n" "$nested_topic" "$features"
+                    fi
                 done
 
                 # Check config/ subdirectories for additional topics
@@ -387,11 +420,11 @@ if [[ $# -gt 0 ]]; then
             # Collect declared formulae (direct installs + array-style)
             mapfile -t declared_formulae < <(
                 {
-                    find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                    find "$DOTFILES" -maxdepth 3 -name 'brew_packages' | \
                         xargs grep -hv '^\s*#' | \
                         grep 'brew install ' | grep -v '\-\-cask' | \
                         grep -oE 'brew install [a-zA-Z0-9@._/-]+' | awk '{print $NF}'
-                    find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                    find "$DOTFILES" -maxdepth 3 -name 'brew_packages' | \
                         xargs grep -hv '^\s*#' | \
                         grep -E '[a-z_]+=\(' | \
                         grep -oE '\([^)]+\)' | tr -d '()' | tr ' ' '\n'
@@ -400,7 +433,7 @@ if [[ $# -gt 0 ]]; then
 
             # Collect declared casks
             mapfile -t declared_casks < <(
-                find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                find "$DOTFILES" -maxdepth 3 -name 'brew_packages' | \
                     xargs grep -hv '^\s*#' | \
                     grep 'brew install --cask' | \
                     grep -oE 'brew install --cask [a-zA-Z0-9@._/-]+' | awk '{print $NF}' | \
@@ -574,7 +607,7 @@ if [[ -n "$stale_dirs" ]]; then
 fi
 
 # now process all topical brew packages
-for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
+for src in $(find "$DOTFILES" -maxdepth 3 -name 'brew_packages')
 do
     topic=$(basename $(dirname "$src"))
     printf "  [ \033[00;34m..\033[0m ] Processing installer: %s" "$topic"

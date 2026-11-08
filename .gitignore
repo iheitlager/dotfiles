@@ -2,6 +2,7 @@
 claude/config/settings.local.json
 claude/config/oauth-credentials.json
 containers/**/.claude-oauth-creds.json
+ai/opencode/config/service.json
 .DS_Store
 .netrwhist
 AGENTS.md

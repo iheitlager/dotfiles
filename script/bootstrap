@@ -186,8 +186,8 @@ validate_config_structure () {
 
   local conflicts=()
 
-  # Check for topic-specific config directories
-  for topic_config in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config' ! -path "$DOTFILES/config"); do
+  # Check for topic-specific config directories (top-level and nested topics)
+  for topic_config in $(find "$DOTFILES" -maxdepth 3 -type d -name 'config' ! -path "$DOTFILES/config"); do
     local topic=$(basename $(dirname "$topic_config"))
     local general_config="$DOTFILES/config/$topic"
 
@@ -280,7 +280,8 @@ link_config_files () {
   local overwrite_all=false backup_all=false skip_all=false
 
   # Link topic-specific config directories: ~/.dotfiles/<topic>/config/ → ~/.config/<topic>/
-  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config' ! -path "$DOTFILES/config")
+  # Also covers nested topics: ~/.dotfiles/<group>/<topic>/config/ → ~/.config/<topic>/
+  for src in $(find "$DOTFILES" -maxdepth 3 -type d -name 'config' ! -path "$DOTFILES/config")
   do
     local topic=$(basename $(dirname "$src"))
     local dst="$HOME/.config/$topic"
@@ -382,7 +383,7 @@ install_dotfiles () {
 
   local overwrite_all=false backup_all=false skip_all=false
 
-  for src in $(find "$DOTFILES" -maxdepth 2 -name '*.symlink')
+  for src in $(find "$DOTFILES" -maxdepth 3 -name '*.symlink')
   do
     dst="$HOME/.$(basename "${src%.*}")"
     link_file "$src" "$dst"
@@ -407,7 +408,7 @@ install_brew_packages () {
 run_installers () {
   info "run installers for topic packages"
   echo -n "" > /tmp/dotfiles-install
-  for src in $(find "$DOTFILES" -maxdepth 2 -name 'install.sh')
+  for src in $(find "$DOTFILES" -maxdepth 3 -name 'install.sh')
   do
     if sh -c "${src}" >> /tmp/dotfiles-install 2>&1
     then
