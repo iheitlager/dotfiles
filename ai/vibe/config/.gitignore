@@ -1,0 +1,8 @@
+# Runtime files, in case vibe writes through the XDG config path
+logs/
+vibehistory
+cache.toml
+*_cache.json
+connector_bootstrap_cache.json
+trusted_folders.toml
+ui_startup_config.json

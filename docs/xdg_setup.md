@@ -121,6 +121,7 @@ This creates:
 ~/.config/claude/   → ~/.dotfiles/claude/config/
 ~/.config/tmux/     → ~/.dotfiles/tmux/config/
 ~/.config/opencode/ → ~/.dotfiles/ai/opencode/config/
+~/.config/vibe/     → ~/.dotfiles/ai/vibe/config/
 ```
 
 ### Topic Install: XDG → Application
@@ -140,6 +141,9 @@ ln -sfn ~/.config/claude/commands "$HOME/.claude/commands"
 ```
 
 > **Note**: `ln -sfn` is used for directories to replace existing symlinks correctly.
+
+The same pattern applies to Vibe: [ai/vibe/install.sh](../ai/vibe/install.sh) links
+`~/.config/vibe/config.toml` into the application directory `~/.vibe/`.
 
 ---
 

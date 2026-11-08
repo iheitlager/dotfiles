@@ -66,9 +66,9 @@ Everything is organized by topic (vim, git, python, etc.). Each topic can have:
 | `*.symlink` | Symlinked to `$HOME` |
 | `config/` | Symlinked to `~/.config/<topic>/` |
 
-Topics can also be nested one level deep (`<group>/<topic>/`, e.g. `ai/opencode/`).
+Topics can also be nested one level deep (`<group>/<topic>/`, e.g. `ai/opencode/`, `ai/vibe/`).
 They are discovered the same way; `config/` is named after the inner topic
-(`ai/opencode/config/` → `~/.config/opencode/`).
+(`ai/opencode/config/` → `~/.config/opencode/`, `ai/vibe/config/` → `~/.config/vibe/`).
 
 ## XDG Base Directory
 
@@ -87,7 +87,7 @@ Use `xdg-info` to inspect XDG paths and app compliance.
 
 ```
 ~/.dotfiles/
-├── ai/             # AI tooling (opencode)
+├── ai/             # AI tooling (opencode, vibe, test-ai rigs)
 ├── bash/           # Shell configuration
 ├── claude/         # Claude Code config, agents, skills
 ├── config/         # XDG configs (ghostty, bat, ripgrep, tmux)
