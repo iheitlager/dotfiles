@@ -9,4 +9,8 @@ PATH=/usr/local/bin:$PATH
 
 # awscli is managed via the official AWS PKG installer (see aws/install.sh)
 
+# rclone ncdu s3:bucket — interactive ncdu-style S3 browser
+# uses standard AWS credentials (~/.config/aws/credentials or env vars)
+brew install rclone || brew upgrade rclone
+
 export PATH=$TMPPATH

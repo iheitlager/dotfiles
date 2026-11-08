@@ -181,5 +181,6 @@
     "~/.dotfiles",
     "~/wc/**",
     "/workspace/**"
-  ]
+  ],
+  "skipDangerousModePermissionPrompt": true
 }

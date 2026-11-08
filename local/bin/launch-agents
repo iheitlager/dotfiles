@@ -4,9 +4,10 @@
 
 
 # launch-agents
-# Version: 0.10.0
+# Version: 0.10.1
 #
 # Changelog:
+# 0.10.1 opencode v2 dropped --model on the TUI: select model via OPENCODE_CONFIG + --standalone
 # 0.10.0 Add --opencode/-o (opencode + mistral/zai-glm-5-3, override via OPENCODE_MODEL); classic layout moves to -c
 # 0.9.4 Add --no-monitors flag; allow -n 1
 # 0.9.3 Add --main flag: adds a final shell window in the main repo directory
@@ -96,6 +97,18 @@ NO_MONITORS=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
+
+# opencode v2's TUI has no --model flag. Write a one-key config file and point
+# OPENCODE_CONFIG at it; --standalone is required because the shared background
+# service does not see the pane's environment.
+opencode_cmd() {
+    local model="$1"
+    local dir="${XDG_CACHE_HOME:-$HOME/.cache}/launch-agents"
+    local cfg="$dir/opencode-${model//\//_}.json"
+    mkdir -p "$dir"
+    printf '{"model":"%s"}\n' "$model" > "$cfg"
+    echo "OPENCODE_CONFIG='$cfg' opencode --standalone"
+}
 
 debug() {
     if [[ "$VERBOSE" == true ]]; then
@@ -531,9 +544,9 @@ _start_agent_pane() {
             ;;
         opencode)
             tmux send-keys -t "$target" "clear" C-m
-            debug "tmux send-keys -t $target 'opencode --model $model' C-m"
+            debug "tmux send-keys -t $target '$(opencode_cmd "$model")' C-m"
             # opencode reads AGENTS.md from the worktree natively; no system-prompt flag needed.
-            tmux send-keys -t "$target" "opencode --model $model" C-m
+            tmux send-keys -t "$target" "$(opencode_cmd "$model")" C-m
             ;;
         copilot)
             tmux send-keys -t "$target" "export COPILOT_MODEL=$model" C-m
@@ -723,7 +736,7 @@ cmd_workspace() {
 
     if [[ "$OPENCODE_MODE" == true ]]; then
         ws_model="$OPENCODE_MODEL"
-        tmux send-keys -t "$ws_session:workspace.1" "opencode --model $ws_model" C-m
+        tmux send-keys -t "$ws_session:workspace.1" "$(opencode_cmd "$ws_model")" C-m
     elif [[ -f "$agent_spec" ]]; then
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt 'Workspace session: $ws_session. Read $agent_spec for workspace instructions.' $SKIP_PERMISSIONS" C-m
     else

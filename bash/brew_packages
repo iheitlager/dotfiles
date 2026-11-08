@@ -22,7 +22,7 @@ for pkg in "${packages[@]}"; do
 done
 
 # Dev tools
-dev_packages=(shellcheck shfmt)
+dev_packages=(shellcheck shfmt cosign tokei)
 for pkg in "${dev_packages[@]}"; do
     brew install "$pkg" || brew upgrade "$pkg"
 done

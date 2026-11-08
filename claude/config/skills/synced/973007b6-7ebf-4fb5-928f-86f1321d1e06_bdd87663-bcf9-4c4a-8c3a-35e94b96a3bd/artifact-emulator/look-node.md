@@ -16,7 +16,7 @@ const [COMMAND, SHELL_DIR, RUNTIME_DIR, WORK_DIR] = ["<command>", "<shellDir>", 
 const PLAYWRIGHT = "<playwright>"; // from step 1: Playwright is loaded from this full path and nowhere else
 let SOURCE = "<a plain page: its .html file or folder, absolute>", EXTRA = [];
 // made from a type, fill these in instead of SOURCE, and EXTRA = ["--contract", "<contract>", "--caps-from-meta"]:
-const TYPE_FILES = "", PROJECT = ""; // the folder the read named; your project/ folder (both absolute)
+const TYPE_FILES = "", PROJECT = ""; // the folder step 2 gave you for the type's files; your project/ folder (both absolute)
 // for another look (SKILL.md's "another slide" and "dark theme" bullets): selectors to click in the artifact; "dark" or "light"
 const CLICKS = [], THEME = "";
 const { spawn } = require("node:child_process"), { once } = require("node:events");

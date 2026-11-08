@@ -35,7 +35,12 @@ cannot run in. Try again only if it says to; never work around it.
   file, anything the artifact service could not publish.
 - An artifact made from a type (a Slides deck, a Design canvas): the page is the
   type's and your content is the files under `project/`; the emulator needs both.
-  With your Artifact tool, list the artifact's published files (action
+  Without the built-in tool named exactly `Artifact` (tools whose names begin
+  `mcp__claude-artifacts__` are not it), skip to "Without the built-in tool"
+  below: the MCP tool `read_file` refuses the read that comes next, so do not
+  call it or `list_files` for that read.
+  With the built-in tool (even if you also have those MCP tools), list the
+  artifact's published files (action
   `list_files`, or `list` with `scope: "files"`), then ONE read (action
   `read_file`, or `read`) with `paths` = every listed path that is not under
   `project/`, plus every one under `project/ds/`, and no `out_dir`: the files
@@ -48,8 +53,34 @@ cannot run in. Try again only if it says to; never work around it.
   your `project/` folder is the one inside that scratch folder, copy it in with
   `cp -R '<scratch folder>/project/ds' '<your project/ folder>/'`, in single
   quotes as written. If either path holds a single quote, do not copy: say you
-  could not check the design system's look. Copy nothing else. Neither folder
-  may be reached through a symbolic link. If `serve`
+  could not check the design system's look. Copy nothing else.
+
+  Without the built-in tool: before step 1, see whether your tools include
+  `mcp__claude-artifacts__emulator_type_files` (search for it if some tools load
+  only on a search). If not, say in one clause that you cannot check how the
+  artifact looks here, and carry on. If so, after step 1 has worked, call it with
+  the artifact's `slug`. It saves a zip and tells you its path: do not open, move
+  or copy the zip. If the path holds a single quote, say you could not check. Else
+  unpack it:
+
+  ```bash
+  /usr/bin/python3 -I /mnt/skills/examples/artifact-emulator/scripts/type_files.py '<the path it told you>'
+  ```
+
+  That prints one JSON line: step 3 takes its `typeFiles` as TYPE_FILES, your
+  `project/` folder as PROJECT, and its `contract` as `<contract>`. The files in
+  the `typeFiles` folder are the type's: never read, edit or publish them
+  yourself. For another look, use that `typeFiles` folder again; call the tool
+  again only if that folder is gone. If the tool's refusal says to retry, call it
+  once more after a minute (a second refusal is final); if it says the artifact
+  was not made from an artifact type, show it as a plain page; if the script
+  stops, try again only if it says to. After any other refusal, say you could not
+  check, and carry on. A design system's look does not show this way: if you gave
+  the artifact one, or do not know, say you could not check the design system's
+  look.
+
+  Whichever way you fetched the type's files, neither folder you give step 3 may
+  be reached through a symbolic link. If `serve`
   refuses a file because other users may not read it, it is one you wrote with a
   private mode: make THAT file readable by name if it is yours (never
   recursively, never a path you did not create), or say you could not check.
@@ -63,7 +94,7 @@ Fill in the script's first lines and run it with `/usr/bin/python3 -I - <<'EOF'`
 COMMAND, SHELL_DIR, RUNTIME_DIR, WORK_DIR = "<command>", "<shellDir>", "<runtimeDir>", "<workDir>"  # from step 1
 SOURCE, EXTRA = "<a plain page: its .html file or folder, absolute>", []
 # made from a type, fill these in instead of SOURCE, and EXTRA = ["--contract", "<contract>", "--caps-from-meta"]:
-TYPE_FILES, PROJECT = "", ""  # the folder the read named; your project/ folder (both absolute)
+TYPE_FILES, PROJECT = "", ""  # the folder step 2 gave you for the type's files; your project/ folder (both absolute)
 # for another look (the "another slide" and "dark theme" bullets): selectors to click in the artifact; "dark" or "light"
 CLICKS, THEME = [], ""
 import json, os, re, subprocess, sys, tempfile, traceback
