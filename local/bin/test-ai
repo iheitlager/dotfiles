@@ -6,6 +6,8 @@
 # Version: 0.3.0
 #
 # Changelog:
+# 0.4.0 /exp help (and bare /exp) shows usage; orchestrator greets with
+#       "Rig ready — for help press /exp help" once its TUI is up
 # 0.3.5 Auto-accept the claude client's bypass-permissions startup dialog
 #       (Down + Enter on "Yes, I accept") so the rig is fully unattended
 # 0.3.4 /exp status: detailed per-client live status (activity, blockers);
@@ -384,8 +386,9 @@ ignore this whole section and behave as a normal coding assistant.
 
 ### Slash commands
 
-- /exp list              - show each client, its pane and current state
-- /exp status           - detailed live status per client (activity, blockers)
+- /exp help               - usage for the /exp commands
+- /exp list               - show each client, its pane and current state
+- /exp status             - detailed live status per client (activity, blockers)
 - /exp [client] <prompt>  - send an experiment to all clients (or one)
 - /exp-check             - capture all client outputs into .test-ai/ and compare
 EOF
@@ -436,6 +439,22 @@ accept_bypass_dialogs
 # runs unattended (project settings add bypassPermissions on top)
 tmux send-keys -t "$MAIN_PANE" 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"' C-m
 tmux send-keys -t "$MAIN_PANE" "claude --permission-mode auto --allowedTools 'Bash(tmux:*)'" C-m
+
+# Once the orchestrator's TUI is up, have it greet with a help hint
+greet_orchestrator() {
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if tmux capture-pane -p -t "$MAIN_PANE" 2>/dev/null | grep -q "auto mode on"; then
+            tmux send-keys -l -t "$MAIN_PANE" "Reply with exactly one line and nothing else: Rig ready — for help press /exp help"
+            tmux send-keys -t "$MAIN_PANE" Enter
+            echo -e "  ${GREEN}greeted${NC}  orchestrator ($MAIN_PANE)"
+            return 0
+        fi
+        sleep 2
+    done
+    echo -e "  ${YELLOW}orchestrator TUI not detected, skipped greeting${NC}"
+}
+greet_orchestrator
 
 tmux select-window -t "$SESSION:main"
 tmux select-pane -t "$MAIN_PANE"
