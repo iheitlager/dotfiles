@@ -4,9 +4,11 @@
 
 
 # launch-agents
-# Version: 0.10.1
+# Version: 0.11.0
 #
 # Changelog:
+# 0.11.0 Add --vibe/-m: run vibe instead of claude (model from ~/.vibe/config.toml);
+#       pre-trusts worktree dirs (AGENTS.md is trustable content for vibe)
 # 0.10.1 opencode v2 dropped --model on the TUI: select model via OPENCODE_CONFIG + --standalone
 # 0.10.0 Add --opencode/-o (opencode + mistral/zai-glm-5-3, override via OPENCODE_MODEL); classic layout moves to -c
 # 0.9.4 Add --no-monitors flag; allow -n 1
@@ -91,6 +93,7 @@ EQUAL_DISTRIBUTION=false
 OPUS_MODE=false
 OPENCODE_MODE=false
 OPENCODE_MODEL="${OPENCODE_MODEL:-mistral/zai-glm-5-3}"
+VIBE_MODE=false
 CLASSIC_MODE=false
 MAIN_WINDOW=false
 NO_MONITORS=false
@@ -108,6 +111,39 @@ opencode_cmd() {
     mkdir -p "$dir"
     printf '{"model":"%s"}\n' "$model" > "$cfg"
     echo "OPENCODE_CONFIG='$cfg' opencode --standalone"
+}
+
+# vibe's TUI has no usable --model flag (headless only) and its model comes
+# from ~/.vibe/config.toml, so agents run plain `vibe`. Worktrees contain
+# AGENTS.md (trustable content): without trust, vibe ignores it and shows a
+# dialog in unattended panes — so pre-trust the directory.
+trust_vibe_dir() {
+    local dir="$1"
+    local trust_file="$HOME/.vibe/trusted_folders.toml"
+    command -v vibe &>/dev/null || return 0
+    [[ -d "$dir" ]] || return 0
+    if [[ -f "$trust_file" ]] && grep -qF "\"$dir\"" "$trust_file"; then
+        return 0
+    fi
+    mkdir -p "$HOME/.vibe"
+    if [[ ! -f "$trust_file" ]]; then
+        printf 'trusted = ["%s"]\nuntrusted = []\n' "$dir" > "$trust_file"
+    else
+        awk -v p="$dir" '
+            /^trusted = \[/ {
+                if (index($0, p) != 0) { print; next }
+                line = $0
+                sub(/\][[:space:]]*$/, "", line)
+                if (line ~ /\[[[:space:]]*$/)
+                    print line "\"" p "\"]"
+                else
+                    print line ", \"" p "\"]"
+                next
+            }
+            { print }
+        ' "$trust_file" > "$trust_file.tmp" && mv "$trust_file.tmp" "$trust_file"
+    fi
+    debug "trusted $dir for vibe"
 }
 
 debug() {
@@ -195,6 +231,7 @@ Options:
     -n COUNT           Number of agents: 1, 2, 3, 4, or 6 (default: 2)
 -c, --classic      Use classic multi-pane layout (all agents in one window)
     -o, --opencode     Run opencode instead of claude (default mistral/zai-glm-5-3; override with OPENCODE_MODEL)
+    -m, --vibe         Run vibe instead of claude (model from ~/.vibe/config.toml)
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
     --main             Add a final shell window in the main repo directory
@@ -244,7 +281,9 @@ get_client() {
 
     case $count in
         1|2|3|4)
-            if [[ "$OPENCODE_MODE" == true ]]; then echo "opencode"; else echo "claude"; fi
+            if [[ "$OPENCODE_MODE" == true ]]; then echo "opencode"
+            elif [[ "$VIBE_MODE" == true ]]; then echo "vibe"
+            else echo "claude"; fi
             ;;
         6)
             if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
@@ -288,6 +327,12 @@ get_model() {
     # opencode: single configurable model (n=1-4 only, see get_client)
     if [[ "$OPENCODE_MODE" == true && "$count" -le 4 ]]; then
         echo "$OPENCODE_MODEL"
+        return
+    fi
+
+    # vibe: single model from the user's vibe config (n=1-4 only, see get_client)
+    if [[ "$VIBE_MODE" == true && "$count" -le 4 ]]; then
+        echo "vibe-default"
         return
     fi
 
@@ -548,6 +593,13 @@ _start_agent_pane() {
             # opencode reads AGENTS.md from the worktree natively; no system-prompt flag needed.
             tmux send-keys -t "$target" "$(opencode_cmd "$model")" C-m
             ;;
+        vibe)
+            trust_vibe_dir "$WORKTREE_ROOT/agent-$agent"
+            tmux send-keys -t "$target" "clear" C-m
+            debug "tmux send-keys -t $target 'vibe' C-m"
+            # vibe reads AGENTS.md from the worktree natively; no system-prompt flag needed.
+            tmux send-keys -t "$target" "vibe" C-m
+            ;;
         copilot)
             tmux send-keys -t "$target" "export COPILOT_MODEL=$model" C-m
             sleep 0.1
@@ -737,6 +789,10 @@ cmd_workspace() {
     if [[ "$OPENCODE_MODE" == true ]]; then
         ws_model="$OPENCODE_MODEL"
         tmux send-keys -t "$ws_session:workspace.1" "$(opencode_cmd "$ws_model")" C-m
+    elif [[ "$VIBE_MODE" == true ]]; then
+        ws_model="vibe-default"
+        trust_vibe_dir "$PWD"
+        tmux send-keys -t "$ws_session:workspace.1" "vibe" C-m
     elif [[ -f "$agent_spec" ]]; then
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt 'Workspace session: $ws_session. Read $agent_spec for workspace instructions.' $SKIP_PERMISSIONS" C-m
     else
@@ -764,7 +820,7 @@ cmd_workspace() {
     echo "Directory:    $(basename "$PWD")"
     echo ""
     echo "Window 1 (workspace):"
-    echo "  Left pane:  $([[ "$OPENCODE_MODE" == true ]] && echo opencode || echo claude) ($ws_model)"
+    echo "  Left pane:  $([[ "$OPENCODE_MODE" == true ]] && echo opencode || { [[ "$VIBE_MODE" == true ]] && echo vibe || echo claude; }) ($ws_model)"
     echo "  Right pane: shell"
     echo ""
     if [[ "$NO_MONITORS" != true ]]; then
@@ -1184,6 +1240,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         -o|--opencode)
             OPENCODE_MODE=true
+            VIBE_MODE=false
+            shift
+            ;;
+        -m|--vibe)
+            VIBE_MODE=true
+            OPENCODE_MODE=false
             shift
             ;;
         --opus)
