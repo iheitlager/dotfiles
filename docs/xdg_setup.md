@@ -142,8 +142,9 @@ ln -sfn ~/.config/claude/commands "$HOME/.claude/commands"
 
 > **Note**: `ln -sfn` is used for directories to replace existing symlinks correctly.
 
-The same pattern applies to Vibe: [ai/vibe/install.sh](../ai/vibe/install.sh) links
-`~/.config/vibe/config.toml` into the application directory `~/.vibe/`.
+Vibe ignores XDG and uses `~/.vibe` as its home: [ai/vibe/install.sh](../ai/vibe/install.sh)
+symlinks the whole `~/.vibe` directory to `ai/vibe/config/` (a dir-level link, so vibe's
+atomic config writes cannot break it). Runtime files written there are gitignored.
 
 ---
 

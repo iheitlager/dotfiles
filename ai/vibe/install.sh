@@ -7,15 +7,16 @@
 # Pin to 3.14: default 3.15 has no rpds-py wheels yet (PyO3 max is 3.14)
 uv tool install --upgrade --python 3.14 mistral-vibe
 
-# Setup XDG compliant Vibe config directory and symlinks
-# Layer 2: ~/.config/vibe → ~/.dotfiles/ai/vibe/config (linked by script/bootstrap)
-XDG_VIBE="${XDG_CONFIG_HOME:-$HOME/.config}/vibe"
-
-# Symlink versionable items INTO ~/.vibe
-mkdir -p "$HOME/.vibe"
-ln -sfn "$XDG_VIBE/config.toml" "$HOME/.vibe/config.toml"
-
-# Symlink all directories found in config
-for dir in "$XDG_VIBE"/*/; do
-    [ -d "$dir" ] && ln -sfn "$dir" "$HOME/.vibe/$(basename "$dir")"
-done
+# Vibe uses ~/.vibe as VIBE_HOME (it ignores XDG). Symlink the whole directory
+# to the versioned topic config: a dir-level link survives vibe's atomic config
+# writes (a file-level link gets replaced on every save). Runtime files written
+# into the directory are covered by config/.gitignore.
+# Layer 2 (~/.config/vibe -> ai/vibe/config) is linked by script/bootstrap.
+DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+if [ -L "$HOME/.vibe" ]; then
+    ln -sfn "$DOTFILES/ai/vibe/config" "$HOME/.vibe"
+elif [ -e "$HOME/.vibe" ]; then
+    echo "warning: $HOME/.vibe is a real directory; move its contents into $DOTFILES/ai/vibe/config and re-run" >&2
+else
+    ln -s "$DOTFILES/ai/vibe/config" "$HOME/.vibe"
+fi

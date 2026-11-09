@@ -1,8 +1,11 @@
-# Runtime files, in case vibe writes through the XDG config path
+# ~/.vibe is symlinked to this directory (VIBE_HOME). Only config.toml and
+# versionable items (skills/, agents/, prompts/, hooks.toml) are tracked;
+# everything vibe writes at runtime stays local.
+.env
 logs/
 vibehistory
 cache.toml
-*_cache.json
-connector_bootstrap_cache.json
 trusted_folders.toml
+*_cache.json
+*.lock
 ui_startup_config.json
