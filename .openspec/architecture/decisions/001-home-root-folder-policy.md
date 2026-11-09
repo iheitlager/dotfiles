@@ -57,7 +57,9 @@ dir is an OS/app convention. The rule:
 | `~/.bun` | moved | `~/.local/share/bun` via `BUN_INSTALL` (node topic) |
 | `~/.lima` | moved | `~/.local/share/lima` via `LIMA_HOME` |
 | `~/.duckdb`, `~/.cdk`, `~/.duckdb_history` | symlinked | `~/.local/share/duckdb`, `~/.cache/cdk`, `~/.local/state/duckdb/history` |
-| `~/.column-rs_history` | removed; column-rs itself is configured to use XDG state | `~/.local/state/column-rs/history` |
+| `~/.bundle` | symlinked | `~/.cache/bundle` via `BUNDLE_USER_CACHE`/`BUNDLE_USER_CONFIG` (ruby topic) |
+| `~/.column-rs_history` | root stub removed; column-rs itself is configured to use XDG state | `~/.local/state/column-rs/history` |
+| `~/.wasi-sdk` | removed (empty dir) | — |
 | `~/.config/colima` (21G orphaned VM disks), `~/.cache/colima` | purged | colima home is now `~/.local/share/colima` via `COLIMA_HOME` |
 | `~/.DS_Store`, `~/.claude.json*` | removed (junk; `.claude.json` is recreated by Claude Code, see anthropics/claude-code#22260 — `dot clean` removes it) | — |
 

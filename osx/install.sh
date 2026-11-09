@@ -32,6 +32,7 @@ link_xdg() {  # link_xdg <root-name> <xdg-target>
 }
 link_xdg .duckdb         "$XDG_DATA_HOME/duckdb"
 link_xdg .cdk            "$XDG_CACHE_HOME/cdk"
+link_xdg .bundle         "$XDG_CACHE_HOME/bundle"
 link_xdg .duckdb_history "$XDG_STATE_HOME/duckdb/history"
 # .column-rs_history intentionally not symlinked: column-rs is configured
 # to use $XDG_STATE_HOME/column-rs/history directly
