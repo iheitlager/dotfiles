@@ -23,7 +23,9 @@ dir is an OS/app convention. The rule:
    `DOCKER_CONFIG`, `HISTFILE`, ...).
 2. Tool has no env support → keep the root path as a **symlink** to the XDG
    location (`~/.duckdb` → `~/.local/share/duckdb`, `~/.cdk` → `~/.cache/cdk`,
-   history files → `~/.local/state/<tool>/history`). Wired in `osx/install.sh`.
+   `~/.duckdb_history` → `~/.local/state/duckdb/history`). Wired in
+   `osx/install.sh`. Tools that can be configured themselves (e.g. column-rs)
+   get no symlink — their own config points at the XDG path directly.
 3. App home that must exist at root and holds versionable config → symlink the
    whole dir into the repo (`~/.vibe` → `~/.dotfiles/ai/vibe/config`; runtime
    files inside are gitignored). Same triple-layer pattern as
@@ -54,7 +56,8 @@ dir is an OS/app convention. The rule:
 | `~/.cargo`, `~/.rustup` | removed (stale; root-owned remnants need `sudo rm -rf`) | `~/.local/share/cargo`, `~/.local/share/rustup` |
 | `~/.bun` | moved | `~/.local/share/bun` via `BUN_INSTALL` (node topic) |
 | `~/.lima` | moved | `~/.local/share/lima` via `LIMA_HOME` |
-| `~/.duckdb`, `~/.cdk`, history files | symlinked | `~/.local/share/duckdb`, `~/.cache/cdk`, `~/.local/state/...` |
+| `~/.duckdb`, `~/.cdk`, `~/.duckdb_history` | symlinked | `~/.local/share/duckdb`, `~/.cache/cdk`, `~/.local/state/duckdb/history` |
+| `~/.column-rs_history` | removed; column-rs itself is configured to use XDG state | `~/.local/state/column-rs/history` |
 | `~/.config/colima` (21G orphaned VM disks), `~/.cache/colima` | purged | colima home is now `~/.local/share/colima` via `COLIMA_HOME` |
 | `~/.DS_Store`, `~/.claude.json*` | removed (junk; `.claude.json` is recreated by Claude Code, see anthropics/claude-code#22260 — `dot clean` removes it) | — |
 

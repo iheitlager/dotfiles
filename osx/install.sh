@@ -30,10 +30,11 @@ link_xdg() {  # link_xdg <root-name> <xdg-target>
     fi
     ln -sfn "$target" "$link"
 }
-link_xdg .duckdb            "$XDG_DATA_HOME/duckdb"
-link_xdg .cdk               "$XDG_CACHE_HOME/cdk"
-link_xdg .duckdb_history    "$XDG_STATE_HOME/duckdb/history"
-link_xdg .column-rs_history "$XDG_STATE_HOME/column-rs/history"
+link_xdg .duckdb         "$XDG_DATA_HOME/duckdb"
+link_xdg .cdk            "$XDG_CACHE_HOME/cdk"
+link_xdg .duckdb_history "$XDG_STATE_HOME/duckdb/history"
+# .column-rs_history intentionally not symlinked: column-rs is configured
+# to use $XDG_STATE_HOME/column-rs/history directly
 
 ###########################################################################
 # Power Management
