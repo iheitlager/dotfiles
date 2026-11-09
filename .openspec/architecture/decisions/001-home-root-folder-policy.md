@@ -20,11 +20,11 @@ dir is an OS/app convention. The rule:
 1. Tool supports an env var → set it in the topic's `bash_env`
    (`CARGO_HOME`, `RUSTUP_HOME`, `AWS_CONFIG_FILE`, `NPM_CONFIG_USERCONFIG`,
    `ANSIBLE_HOME`, `LIMA_HOME`, `COLIMA_HOME`, `BUN_INSTALL`, `OLLAMA_MODELS`,
-   `DOCKER_CONFIG`, `GNUPGHOME`, `HISTFILE`, ...).
+   `DOCKER_CONFIG`, `GNUPGHOME`, `VIBE_HOME`, `BUNDLE_USER_*`, `HISTFILE`, ...).
+   Rule: if an env var exists, there is **no root symlink** — the root entry disappears.
 2. Tool has no env support → keep the root path as a **symlink** to the XDG
    location (`~/.duckdb` → `~/.local/share/duckdb`, `~/.cdk` → `~/.cache/cdk`,
-   `~/.bundle` → `~/.cache/bundle`, `~/.cups` → `~/.config/cups`,
-   `~/.sigstore` → `~/.config/sigstore`,
+   `~/.cups` → `~/.config/cups`, `~/.sigstore` → `~/.config/sigstore`,
    `~/.duckdb_history` → `~/.local/state/duckdb/history`). Wired in
    `osx/install.sh`. Tools that can be configured themselves (e.g. column-rs)
    get no symlink — their own config points at the XDG path directly.
@@ -58,7 +58,8 @@ dir is an OS/app convention. The rule:
 | `~/.bun` | moved | `~/.local/share/bun` via `BUN_INSTALL` (node topic) |
 | `~/.lima` | moved | `~/.local/share/lima` via `LIMA_HOME` |
 | `~/.duckdb`, `~/.cdk`, `~/.duckdb_history` | symlinked | `~/.local/share/duckdb`, `~/.cache/cdk`, `~/.local/state/duckdb/history` |
-| `~/.bundle` | symlinked | `~/.cache/bundle` via `BUNDLE_USER_CACHE`/`BUNDLE_USER_CONFIG` (ruby topic) |
+| `~/.bundle` | no root entry — env vars only | `~/.cache/bundle` etc. via `BUNDLE_USER_*` (ruby topic) |
+| `~/.vibe` | no root entry — env var only | `$XDG_CONFIG_HOME/vibe` via `VIBE_HOME` (→ repo `ai/vibe/config`); a root symlink exists only transiently while a session that started before the switch is running |
 | `~/.column-rs_history` | root stub removed; column-rs itself is configured to use XDG state | `~/.local/state/column-rs/history` |
 | `~/.wasi-sdk` | removed (empty dir) | — |
 | `~/.cups` | symlinked | `~/.config/cups` |
