@@ -19,6 +19,23 @@ if [ ! -d ~/tmp ]; then
 fi
 
 ###########################################################################
+# XDG compatibility symlinks (tools without env-var support)
+# See .openspec/architecture/decisions/001-home-root-folder-policy.md
+###########################################################################
+link_xdg() {  # link_xdg <root-name> <xdg-target>
+    local link="$HOME/$1" target="$2"
+    mkdir -p "$(dirname "$target")"
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+        [ -e "$target" ] || mv "$link" "$target"
+    fi
+    ln -sfn "$target" "$link"
+}
+link_xdg .duckdb            "$XDG_DATA_HOME/duckdb"
+link_xdg .cdk               "$XDG_CACHE_HOME/cdk"
+link_xdg .duckdb_history    "$XDG_STATE_HOME/duckdb/history"
+link_xdg .column-rs_history "$XDG_STATE_HOME/column-rs/history"
+
+###########################################################################
 # Power Management
 ###########################################################################
 echo "  Configuring power management for profile: ${MACHINE_PROFILE:-laptop}..."
