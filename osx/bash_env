@@ -15,3 +15,7 @@ export PSQL_HISTORY="$XDG_STATE_HOME/psql/history"
 mkdir -p "$XDG_STATE_HOME/sqlite" 2>/dev/null
 export SQLITE_HISTORY="$XDG_STATE_HOME/sqlite/history"
 
+# GnuPG - XDG compliant, but only once the keyring has been moved to
+# $XDG_CONFIG_HOME/gnupg (see ADR-001); until then keep the default ~/.gnupg
+[ -d "$XDG_CONFIG_HOME/gnupg" ] && export GNUPGHOME="$XDG_CONFIG_HOME/gnupg"
+

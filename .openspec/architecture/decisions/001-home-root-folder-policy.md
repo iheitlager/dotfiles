@@ -20,9 +20,11 @@ dir is an OS/app convention. The rule:
 1. Tool supports an env var → set it in the topic's `bash_env`
    (`CARGO_HOME`, `RUSTUP_HOME`, `AWS_CONFIG_FILE`, `NPM_CONFIG_USERCONFIG`,
    `ANSIBLE_HOME`, `LIMA_HOME`, `COLIMA_HOME`, `BUN_INSTALL`, `OLLAMA_MODELS`,
-   `DOCKER_CONFIG`, `HISTFILE`, ...).
+   `DOCKER_CONFIG`, `GNUPGHOME`, `HISTFILE`, ...).
 2. Tool has no env support → keep the root path as a **symlink** to the XDG
    location (`~/.duckdb` → `~/.local/share/duckdb`, `~/.cdk` → `~/.cache/cdk`,
+   `~/.bundle` → `~/.cache/bundle`, `~/.cups` → `~/.config/cups`,
+   `~/.sigstore` → `~/.config/sigstore`,
    `~/.duckdb_history` → `~/.local/state/duckdb/history`). Wired in
    `osx/install.sh`. Tools that can be configured themselves (e.g. column-rs)
    get no symlink — their own config points at the XDG path directly.
@@ -36,14 +38,13 @@ dir is an OS/app convention. The rule:
 | Path | Why it stays |
 |---|---|
 | `~/.ssh` | OpenSSH hardcodes it; no env override |
-| `~/.gnupg` | GnuPG hardcodes it unless `GNUPGHOME`; strict 0700 permissions make moving risky |
-| `~/.Trash`, `~/.cups` | macOS Finder / CUPS system paths |
+| `~/.Trash` | macOS Finder system path |
 | `~/.cisco`, `~/.vpn` | Cisco AnyConnect system install |
 | `~/.bash_sessions` | macOS `/etc/bashrc` session persistence |
 | `~/.vscode` | VS Code extensions dir, no XDG support |
 | `~/.claude` | Claude Code app home; versioned config is layered out to `~/.config/claude` via symlinks (triple-layer), runtime state (`jobs/`, `projects/`) stays |
 | `~/.ollama` | Only models move (`OLLAMA_MODELS`); keypair + cache stay |
-| `~/.sigstore`, `~/.espup`, `~/.paper-scanner` | tiny app dirs, hardcoded paths |
+| `~/.espup`, `~/.paper-scanner` | tiny app dirs, hardcoded paths |
 | `~/Applications`, `~/Desktop`, ... | standard macOS/user dirs |
 
 ### Removed or relocated (2026-11-09 cleanup)
@@ -60,6 +61,9 @@ dir is an OS/app convention. The rule:
 | `~/.bundle` | symlinked | `~/.cache/bundle` via `BUNDLE_USER_CACHE`/`BUNDLE_USER_CONFIG` (ruby topic) |
 | `~/.column-rs_history` | root stub removed; column-rs itself is configured to use XDG state | `~/.local/state/column-rs/history` |
 | `~/.wasi-sdk` | removed (empty dir) | — |
+| `~/.cups` | symlinked | `~/.config/cups` |
+| `~/.sigstore` | symlinked (key material moved manually, never by automation) | `~/.config/sigstore`, mode 0700 |
+| `~/.gnupg` | moved via `GNUPGHOME` (guarded export in `osx/bash_env` until keyring is moved manually) | `~/.config/gnupg`, mode 0700 |
 | `~/.config/colima` (21G orphaned VM disks), `~/.cache/colima` | purged | colima home is now `~/.local/share/colima` via `COLIMA_HOME` |
 | `~/.DS_Store`, `~/.claude.json*` | removed (junk; `.claude.json` is recreated by Claude Code, see anthropics/claude-code#22260 — `dot clean` removes it) | — |
 
