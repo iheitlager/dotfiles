@@ -15,6 +15,13 @@ labelled as not the real viewer.
 
 ## 1. Get the emulator (once per session; safe to run again)
 
+If your tools include `mcp__claude-artifacts__emulator_download_code` (search for
+it if some tools load only on a search), call it with no arguments right before
+every run of the command below, including a run again after a stop or a cut-off.
+It saves a one-time code in a file for the command, which takes no arguments: that
+code is a secret, so do not open, move or copy the file. With no tool of exactly
+that name, or if the call fails, run the command all the same.
+
 ```bash
 /usr/bin/python3 -I /mnt/skills/examples/artifact-emulator/scripts/bootstrap.py
 ```

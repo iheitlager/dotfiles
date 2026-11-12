@@ -6,6 +6,7 @@ Where it cannot run it stops with a plain message.
 """
 
 import argparse
+import base64
 import hashlib
 import importlib.util
 import itertools
@@ -13,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -28,6 +30,23 @@ API_HOST_RE = re.compile(r"api(-[a-z0-9-]+)?\.anthropic\.com")
 CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
 PROXY_VARS = ("http_proxy", "https_proxy", "all_proxy", "no_proxy")
 DEFAULT_TOKEN_FILE = "/home/claude/.claude/remote/.session_ingress_token"
+# Without a token file the download uses a ticket, a short-lived credential for these downloads alone. A tool of the artifact
+# service answers with a one-time code, saved in a folder named by a session's UUID under RESULTS. redeem() trades it for a ticket.
+RESULTS = "/tmp/claude-tool-results"
+DEFAULT_API_HOST = "api.anthropic.com"
+TICKET_PREFIX = "/api/frame/emulator-ticket"
+TICKET_HEADER = "X-Download-Token"
+UUID_RE = re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+SAVED_NAME_RE = re.compile(r"mcp-[A-Za-z0-9._-]{1,100}-blob-[0-9]{1,20}-[A-Za-z0-9]{1,6}-[0-9a-f]{8}\.bin")
+# Both end in a 43-character signature that only the artifact service can check. A code's part before it is base64url JSON.
+CODE_RE = re.compile(r"sk-ant-fec01-([A-Za-z0-9_-]{1,4040})[A-Za-z0-9_-]{43}")
+TICKET_RE = re.compile(r"sk-ant-fed01-[A-Za-z0-9_-]{44,4083}")
+MAX_CODE_BYTES = 4096
+MAX_SAVED_FILES_READ = 256
+# A ticket file older than this is one that a killed run left. Keep it above TOTAL_BUDGET_S, so that no running script's is taken.
+TICKET_LIFE_S = 900
+# False would accept a code in whichever folder it lies: only for the case that folders prove not to be named as codes name them.
+CODE_NAMES_ITS_FOLDER = True
 # Fixed on purpose: the script takes no options, so no caller can point it at another place or program.
 ROOT = "/opt/frame-emulator"
 COMMAND = "/usr/local/bin/frame-emulator"
@@ -214,15 +233,82 @@ def find_playwright():
     raise Stop(f"neither Python Playwright (for {sys.executable}) nor Node Playwright is installed: {NOT_HERE}")
 
 
-def preflight():
-    token_file = os.path.abspath(os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE") or DEFAULT_TOKEN_FILE)
-    if not os.path.isfile(token_file):
-        raise Stop(f"no session token file at {token_file}: {NOT_HERE}")
-    if not os.access(token_file, os.R_OK):
-        raise Stop(f"cannot read the session token file at {token_file}, so the emulator cannot be fetched")
-    tools = {"chromium": find_chromium(), "driver": find_playwright()}
-    tools.update({"curl": trusted(CURL), "bun": trusted(BUN), "python": trusted(PYTHON)})
-    base_url = (os.environ.get("ANTHROPIC_BASE_URL") or "").rstrip("/")
+def open_folder(name, dir_fd=None):
+    """A descriptor for a real directory (never a link to one) that only root or this user can change, or None."""
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+    except OSError:
+        return None
+    st = os.fstat(fd)
+    if st.st_uid in (0, os.geteuid()) and not st.st_mode & 0o022:
+        return fd
+    os.close(fd)
+    return None
+
+
+def found_where_it_belongs(code, session):
+    """Whether the session UUID inside code is session, the name of the folder it was saved in; False if it cannot be read.
+    This only matches a code to its folder: only the artifact service can tell whether a code is genuine."""
+    if not CODE_NAMES_ITS_FOLDER:
+        return True
+    try:
+        claims = CODE_RE.fullmatch(code)[1]
+        return json.loads(base64.urlsafe_b64decode(claims + "=" * (-len(claims) % 4)))["s"] == session
+    except Exception:
+        return False
+
+
+def take_code():
+    """The newest one-time code under RESULTS that found_where_it_belongs accepts, or None. Reads only files of at most
+    MAX_CODE_BYTES whose names match SAVED_NAME_RE, the newest MAX_SAVED_FILES_READ of them, and deletes each one that holds
+    a code, used or not: a code is for one run of this script."""
+    opened, saved, code = {}, [], None
+    try:
+        opened[""] = top = open_folder(RESULTS)
+        for session in os.listdir(top) if top is not None else ():
+            if not UUID_RE.fullmatch(session):
+                continue
+            opened[session] = folder = open_folder(session, top)
+            before = len(saved)
+            for name in os.listdir(folder) if folder is not None else ():
+                try:
+                    st = os.stat(name, dir_fd=folder, follow_symlinks=False) if SAVED_NAME_RE.fullmatch(name) else None
+                except OSError:  # gone since it was listed
+                    continue
+                if st and stat.S_ISREG(st.st_mode) and st.st_size <= MAX_CODE_BYTES:
+                    saved.append((st.st_mtime_ns, name, session))
+            if folder is not None and len(saved) == before:  # however many folders there are, few stay open
+                os.close(opened.pop(session))
+        for _, name, session in sorted(saved, reverse=True)[:MAX_SAVED_FILES_READ]:
+            try:
+                with os.fdopen(os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=opened[session]), "rb") as f:
+                    text = f.read(MAX_CODE_BYTES + 1).decode("ascii", "replace").strip()
+                if not CODE_RE.fullmatch(text):
+                    continue
+                os.unlink(name, dir_fd=opened[session])
+            except OSError:  # another run of this script may have taken it
+                continue
+            if code is None and found_where_it_belongs(text, session):
+                code = text
+    except OSError:
+        pass
+    finally:
+        for fd in opened.values():
+            if fd is not None:
+                os.close(fd)
+    return code
+
+
+def session_token_file():
+    return os.path.abspath(os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE") or DEFAULT_TOKEN_FILE)
+
+
+def no_token_file():
+    return Stop(f"no session token file at {session_token_file()}: {NOT_HERE}")
+
+
+def api_host(base_url):
+    """The host in base_url. Stops unless base_url is the plain https address of an Anthropic API host."""
     u = urllib.parse.urlsplit(base_url)
     if not u.hostname or "@" in u.netloc or "?" in base_url or "#" in base_url or u.scheme not in ("https", "http"):
         raise Stop("ANTHROPIC_BASE_URL is not set to a plain URL, so the artifact service cannot be found")
@@ -235,11 +321,30 @@ def preflight():
     if not (API_HOST_RE.fullmatch(u.hostname) and u.path == "" and port_ok):
         raise Stop(f"ANTHROPIC_BASE_URL is {base_url}, which is not an Anthropic API host: refusing to send it the "
                    "session token or to run what it serves")
+    return u.hostname
+
+
+def preflight(code=None):
+    """Returns (base, token_file, tools). Given a one-time code, no token file is needed, base is that of the ticket's routes,
+    and an ANTHROPIC_BASE_URL that is unset or that api_host refuses gives DEFAULT_API_HOST and does not stop the run."""
+    token_file = session_token_file()
+    if code is None and not os.path.isfile(token_file):
+        raise no_token_file()
+    if code is None and not os.access(token_file, os.R_OK):
+        raise Stop(f"cannot read the session token file at {token_file}, so the emulator cannot be fetched")
+    tools = {"chromium": find_chromium(), "driver": find_playwright()}
+    tools.update({"curl": trusted(CURL), "bun": trusted(BUN), "python": trusted(PYTHON)})
+    try:
+        host = api_host((os.environ.get("ANTHROPIC_BASE_URL") or "").rstrip("/"))
+    except Stop:
+        if code is None:
+            raise
+        host = DEFAULT_API_HOST
     if not os.path.isfile(CA_BUNDLE):
         raise Stop(f"no certificate bundle at {CA_BUNDLE}: {NOT_HERE}")
     tools["ca"] = only_ours(CA_BUNDLE, "the certificate bundle")
     # Rebuilt from the parts just checked, so curl is never given a string it could read differently from the checks.
-    return "https://" + u.hostname + RELAY_PREFIX, token_file, tools
+    return "https://" + host + (RELAY_PREFIX if code is None else TICKET_PREFIX), token_file, tools
 
 
 def read_token(token_file):
@@ -250,16 +355,22 @@ def read_token(token_file):
     return token
 
 
-def curl(url, dest, ctx, max_bytes):
-    """GET url into dest with the session token as a bearer.
-    Returns the HTTP status, or minus curl's exit code when there was no answer."""
+def curl(url, dest, ctx, max_bytes, one_time_code=None):
+    """GET url into dest with the session token as a bearer, or with the ticket in its own header; or, given a one-time
+    code, POST that and nothing else. Returns the HTTP status, or minus curl's exit code when there was no answer."""
     if not url.startswith(ctx["base"] + "/emulator/"):
         raise Stop(f"refusing to fetch outside the artifact service's emulator routes: {url}")
-    token = read_token(ctx["token_file"])
+    token = one_time_code or read_token(ctx["token_file"])
     # The token travels in a config read from stdin: never in argv, the environment or a file.
-    config = f'oauth2-bearer = "{token}"\n'
+    if one_time_code:
+        config = f'data = "{token}"\nheader = "Content-Type: text/plain"\n'
+    elif ctx["ticket"]:
+        config = f'header = "{TICKET_HEADER}: {token}"\n'
+    else:
+        config = f'oauth2-bearer = "{token}"\n'
     cmd = [ctx["curl"], "-q", "-sS", "--globoff", "--proto", "=https", "--max-redirs", "0",
            "--connect-timeout", "10", "--speed-limit", "1024", "--speed-time", "20", "--max-time", "100",
+           *(["-H", "X-Frame-CP: go"] if ctx["ticket"] else []),
            "--cacert", ctx["ca"], "--max-filesize", str(max_bytes), "-K", "-", "-o", dest, "-w", "%{http_code}", url]
     env = {k: v for k, v in os.environ.items() if k.lower() in PROXY_VARS}  # a proxy may carry it, never choose whom to trust
     p = subprocess.run(cmd, input=config, capture_output=True, text=True, env=env)
@@ -269,16 +380,50 @@ def curl(url, dest, ctx, max_bytes):
     return int(p.stdout.strip() or 0)
 
 
-def fetch(url, dest, ctx, max_bytes, tries=4):
+def fetch(url, dest, ctx, max_bytes, tries=4, one_time_code=None):
     for attempt in range(tries):
         if time.monotonic() > ctx["deadline"]:
             raise Stop("downloading the emulator took too long; try again in a minute")
-        code = curl(url, dest, ctx, max_bytes)
+        code = curl(url, dest, ctx, max_bytes, one_time_code)
         if code not in (502, 503) and -code not in RETRY_EXITS:
             return code
         if attempt < tries - 1:
             time.sleep(ctx["pause"] * (attempt + 1))
     return code
+
+
+def on_stop_signals(handler):
+    for stop_signal in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(stop_signal, handler)
+
+
+def ticket_file(root):
+    """A new, empty file for the ticket, which only this user can read, in root's run folder. The caller deletes it."""
+    safe_root(root)
+    run = os.path.join(root, "run")
+    st = os.lstat(run)
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
+        raise Stop(f"{run} must be a real directory that only this user can enter")
+    for name in os.listdir(run):  # what a run that was killed left behind
+        try:
+            if name.startswith("ticket-") and time.time() - os.lstat(os.path.join(run, name)).st_mtime > TICKET_LIFE_S:
+                os.unlink(os.path.join(run, name))
+        except OSError:
+            pass
+    fd, path = tempfile.mkstemp(prefix="ticket-", dir=run)
+    os.close(fd)
+    return path
+
+
+def redeem(code, ctx):
+    """Trades the one-time code for the ticket, written to ctx["ticket"]. Stops unless the answer is 200 and holds a ticket.
+    One try only: the artifact service takes a code once, and an answer that was lost may have used it up."""
+    status = fetch(ctx["base"] + "/emulator/redeem", ctx["ticket"], ctx, MAX_CODE_BYTES, tries=1, one_time_code=code)
+    if status != 200:
+        raise Stop(why(status))
+    with open(ctx["ticket"], encoding="ascii", errors="replace") as f:
+        if not TICKET_RE.fullmatch(f.read(MAX_CODE_BYTES + 1).strip()):
+            raise no_token_file()
 
 
 def read_file_list(ctx, tmp):
@@ -501,10 +646,19 @@ def main():
     ap.parse_args()  # -h prints the description; anything else is refused before a file is read or a request sent
     os.umask(0o022)
     start = time.monotonic()
+    ticket = None
     try:
-        base, token_file, tools = preflight()
+        # Before any check that can stop the run, so that a run that stops has still deleted the saved code.
+        code = None if os.path.isfile(session_token_file()) else take_code()
+        base, token_file, tools = preflight(code)
+        if code is not None:
+            # A run that is told to stop deletes the ticket too.
+            on_stop_signals(lambda *_: (on_stop_signals(signal.SIG_IGN), sys.exit(1)))
+            token_file = ticket = ticket_file(ROOT)
         ctx = {"base": base, "token_file": token_file, "pause": PAUSE_S, "curl": tools["curl"], "ca": tools["ca"],
-               "deadline": time.monotonic() + PROGRAM_DEADLINE_S}
+               "ticket": ticket, "deadline": time.monotonic() + PROGRAM_DEADLINE_S}
+        if code is not None:
+            redeem(code, ctx)
         program_dir, entry = install_program(ctx, ROOT)
         if "copy_of" in tools["driver"]:  # only now, with every check passed and the emulator granted and installed
             tools["driver"]["node"] = private_node(*tools["driver"].pop("copy_of"))
@@ -522,6 +676,13 @@ def main():
         except OSError:
             pass
         return 1
+    finally:
+        if ticket is not None:
+            on_stop_signals(signal.SIG_IGN)
+            try:
+                os.unlink(ticket)
+            except OSError:
+                pass
     say("the emulator downloaded the viewer and runtime")
     print(json.dumps({"command": command, "shellDir": shell_dir, "runtimeDir": runtime_dir,
                       "workDir": os.path.join(os.path.realpath(ROOT), "run"), **tools["driver"]}))

@@ -1,5 +1,5 @@
 {
-  "lastUpdated": 1794032642332,
+  "lastUpdated": 1794327168191,
   "skills": [
     {
       "skillId": "import-memory",
@@ -71,18 +71,7 @@
       "name": "artifact-emulator",
       "description": "See a page, slide deck or design canvas artifact you made, close to how a person will see it: open its files in the real artifact viewer inside this cloud session, then screenshot it and read its console errors with a short Python Playwright script. Use it when the person asks to see or check how it looks, or when the artifact type's own instructions tell you to check. Where a type's instructions say not to check unless asked, they win. Never a step before saving or publishing, nor a routine after every save. Not for web apps or pages that are not artifacts. Cloud sessions only (built for cloud Cowork): elsewhere its script stops with a one-line reason. Only you see the result.",
       "source": "anthropic-example",
-      "updatedAt": "2026-11-04T23:00:30.818088Z"
+      "updatedAt": "2026-11-10T16:00:27.522722Z"
     }
-  ],
-  "pendingClaims": [
-    "91544:Wed Nov  4 16:49:17 2026/xlsx",
-    "91544:Wed Nov  4 16:49:17 2026/pptx",
-    "91544:Wed Nov  4 16:49:17 2026/pdf",
-    "91544:Wed Nov  4 16:49:17 2026/docx",
-    "85627:Fri Nov  6 05:57:04 2026/xlsx",
-    "85627:Fri Nov  6 05:57:04 2026/pptx",
-    "85627:Fri Nov  6 05:57:04 2026/pdf",
-    "85627:Fri Nov  6 05:57:04 2026/docx",
-    "91544:Wed Nov  4 16:49:17 2026/artifact-emulator"
   ]
 }
