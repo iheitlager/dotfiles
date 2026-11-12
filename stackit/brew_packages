@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# brew installer helper, normally run this from 'dot'
+TMPPATH=$PATH
+PATH=/usr/local/bin:$PATH
+
+# STACKIT CLI (cask, ships bash/zsh/fish completions — linked by Homebrew)
+brew tap stackitcloud/tap
+brew install --cask stackit || brew upgrade --cask stackit
+
+
+export PATH=$TMPPATH
