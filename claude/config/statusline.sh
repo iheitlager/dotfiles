@@ -11,6 +11,8 @@ BLUE="\033[38;5;117m"
 GREEN="\033[38;5;151m"
 YELLOW="\033[38;5;223m"
 PEACH="\033[38;5;216m"
+ORANGE="\033[38;5;208m"
+RED="\033[38;5;203m"
 MAUVE="\033[38;5;183m"
 TEAL="\033[38;5;152m"
 DIM="\033[2m\033[38;5;240m"
@@ -20,6 +22,10 @@ BOLD="\033[1m"
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 model=$(echo "$input" | jq -r 'if (.model | type) == "object" then .model.id else .model end // "claude"')
 context_pct=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
+# tokens in context: current usage if present, else derived from the percentage and the window size
+context_tokens=$(echo "$input" | jq -r '(.context_window.current_usage // {}) as $u
+    | if ($u | length) > 0 then (($u.input_tokens // 0) + ($u.cache_creation_input_tokens // 0) + ($u.cache_read_input_tokens // 0))
+      else ((.context_window.used_percentage // 0) * (.context_window.context_window_size // 200000) / 100) end | floor')
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' | xargs printf "%.4f")
 
 folder=$(basename "$cwd")
@@ -44,20 +50,22 @@ case "$model" in
     *)          model_short="claude" ;;
 esac
 
+# purple below 180k tokens, orange from 180k, red from 200k
 context_color="$MAUVE"
 context_icon=" "
-if [[ "$context_pct" -ge 90 ]]; then
-    context_color="$PEACH"
+if [[ "$context_tokens" -ge 200000 ]]; then
+    context_color="$RED"
     context_icon=" "
-elif [[ "$context_pct" -ge 75 ]]; then
-    context_color="$YELLOW"
+elif [[ "$context_tokens" -ge 180000 ]]; then
+    context_color="$ORANGE"
     context_icon=" "
 fi
+context_k=$(( (context_tokens + 500) / 1000 ))k
 
 segment1="${BLUE}${BOLD}${model_short}${RESET}"
 segment2="${TEAL} ${folder}${RESET}"
 segment3="${GREEN} ${branch}${RESET}"
-segment4="${context_color}${context_icon} ${context_pct}%${RESET}"
+segment4="${context_color}${context_icon} ${context_pct}% · ${context_k}${RESET}"
 segment5="${PEACH} \$${cost}${RESET}"
 
 printf '%b' "${segment1} ${DIM}${SEP}${RESET}${segment2}${DIM} ${SEP}${RESET}${segment3}${DIM} ${SEP}${RESET}${segment4}${DIM} ${SEP}${RESET}${segment5}"
