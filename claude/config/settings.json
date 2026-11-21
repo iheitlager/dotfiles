@@ -182,5 +182,6 @@
     "~/.dotfiles",
     "~/wc/**",
     "/workspace/**"
-  ]
+  ],
+  "autoMemoryEnabled": false
 }
