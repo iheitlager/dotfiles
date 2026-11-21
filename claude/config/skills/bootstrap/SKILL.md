@@ -47,7 +47,7 @@ Workflow commands, from ticket to merge:
   /merge --dry-run       show what would happen
 
   Loop: /issue → /take #N → /review → /pr → /fix → /merge
-  GitHub and GitLab: /pr, /merge.   GitHub only (gh): /issue, /take, /review, /fix.
+  All six work on GitHub (gh) and GitLab (glab); the forge is detected from origin.
 ```
 
 ## Steps

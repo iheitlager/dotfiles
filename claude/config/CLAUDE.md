@@ -38,7 +38,7 @@ Global workflow rules for every repo. Language and project conventions live in t
 
 Same rules for PRs (GitHub) and MRs (GitLab); the project's `AGENTS.md` names the forge and its CLI.
 
-- Comments posted with `gh issue comment` / `gh pr comment` / `glab issue note` / `glab mr note` end with:
+- Comments posted with `gh issue comment` / `gh pr comment` / `glab issue note` / `glab mr note create` end with:
 
   ```
   ---

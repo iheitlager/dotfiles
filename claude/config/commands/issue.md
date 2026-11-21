@@ -1,4 +1,4 @@
-List and manage GitHub issues for the current repository.
+List and manage issues (GitHub or GitLab) for the current repository.
 
 ## Usage
 
@@ -8,6 +8,35 @@ List and manage GitHub issues for the current repository.
 /issue new                 Structured create with template
 /issue #123                Show details for specific issue
 ```
+
+## Detect the Forge (all modes)
+
+```bash
+HOST=$(git remote get-url origin | sed -E 's#^[a-z+]+://##; s#^[^@/]*@##; s#[:/].*##')
+case "$HOST" in
+  github.com) FORGE=github ;;
+  *) glab auth status --hostname "$HOST" >/dev/null 2>&1 && FORGE=gitlab || FORGE=unknown ;;
+esac
+echo "$HOST → $FORGE"
+```
+
+- `github` → use `gh` as written below. `gitlab` → translate with the table. `unknown` → stop and ask.
+- GitLab behind a network allow-list returns **HTTP 403 with an HTML page** ("Access to Gitlab
+  is not allowed from your IP-address"). Stop and ask the user to connect the VPN.
+- On GitLab, issues are `#N` and merge requests are `!N`; say "MR", not "PR".
+
+| GitHub (`gh`) | GitLab (`glab`) |
+|---|---|
+| `gh issue list [--search S]` | `glab issue list [--search S]` |
+| `gh issue view N [--json ...]` | `glab issue view N [-F json] [--comments]` |
+| `gh issue create --title T --body B` | `glab issue create --title T --description B` |
+| `gh issue close N -c MSG` | `glab issue note N -m MSG && glab issue close N` |
+| `gh pr view [N] --json ...` | `glab mr view [N] -F json` |
+| `gh pr diff [N]` | `glab mr diff [N] --raw` |
+| `gh pr create --title T --body B` | `glab mr create --title T --description B` |
+| `gh pr comment N --body B` | `glab mr note create N -m B` |
+
+---
 
 ## List Mode (default)
 
