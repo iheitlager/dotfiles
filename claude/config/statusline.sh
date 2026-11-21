@@ -21,11 +21,17 @@ BOLD="\033[1m"
 
 cwd=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // empty')
 model=$(echo "$input" | jq -r 'if (.model | type) == "object" then .model.id else .model end // "claude"')
-context_pct=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
 # tokens in context: current usage if present, else derived from the percentage and the window size
 context_tokens=$(echo "$input" | jq -r '(.context_window.current_usage // {}) as $u
     | if ($u | length) > 0 then (($u.input_tokens // 0) + ($u.cache_creation_input_tokens // 0) + ($u.cache_read_input_tokens // 0))
       else ((.context_window.used_percentage // 0) * (.context_window.context_window_size // 200000) / 100) end | floor')
+window_size=$(echo "$input" | jq -r '.context_window.context_window_size // 1000000')
+# percentage of 200k below 200k (requests above it cost more), of the whole window above it
+if [[ "$context_tokens" -lt 200000 ]]; then
+    context_pct=$(( context_tokens * 100 / 200000 ))
+else
+    context_pct=$(( context_tokens * 100 / window_size ))
+fi
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' | xargs printf "%.4f")
 
 folder=$(basename "$cwd")
@@ -47,6 +53,8 @@ case "$model" in
     *"opus"*)   model_short="opus" ;;
     *"sonnet"*) model_short="sonnet" ;;
     *"haiku"*)  model_short="haiku" ;;
+    *"fable"*)  model_short="fable" ;;
+    *"mythos"*) model_short="mythos" ;;
     *)          model_short="claude" ;;
 esac
 
@@ -62,10 +70,18 @@ elif [[ "$context_tokens" -ge 180000 ]]; then
 fi
 context_k=$(( (context_tokens + 500) / 1000 ))k
 
+# cold cache: the last request wrote most of its context to the cache instead of reading it
+# (the cache expired after a pause, the context was replaced, or a new session started)
+cache_written=$(echo "$input" | jq -r '.context_window.current_usage.cache_creation_input_tokens // 0')
+cold=""
+if [[ "$context_tokens" -ge 20000 && $(( cache_written * 2 )) -gt "$context_tokens" ]]; then
+    cold=" ${YELLOW}↻ cold${RESET}"
+fi
+
 segment1="${BLUE}${BOLD}${model_short}${RESET}"
 segment2="${TEAL} ${folder}${RESET}"
 segment3="${GREEN} ${branch}${RESET}"
-segment4="${context_color}${context_icon} ${context_pct}% · ${context_k}${RESET}"
+segment4="${context_color}${context_icon} ${context_pct}% · ${context_k}${RESET}${cold}"
 segment5="${PEACH} \$${cost}${RESET}"
 
 printf '%b' "${segment1} ${DIM}${SEP}${RESET}${segment2}${DIM} ${SEP}${RESET}${segment3}${DIM} ${SEP}${RESET}${segment4}${DIM} ${SEP}${RESET}${segment5}"
