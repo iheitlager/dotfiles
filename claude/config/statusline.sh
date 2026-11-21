@@ -25,13 +25,8 @@ model=$(echo "$input" | jq -r 'if (.model | type) == "object" then .model.id els
 context_tokens=$(echo "$input" | jq -r '(.context_window.current_usage // {}) as $u
     | if ($u | length) > 0 then (($u.input_tokens // 0) + ($u.cache_creation_input_tokens // 0) + ($u.cache_read_input_tokens // 0))
       else ((.context_window.used_percentage // 0) * (.context_window.context_window_size // 200000) / 100) end | floor')
-window_size=$(echo "$input" | jq -r '.context_window.context_window_size // 1000000')
-# percentage of 200k below 200k (requests above it cost more), of the whole window above it
-if [[ "$context_tokens" -lt 200000 ]]; then
-    context_pct=$(( context_tokens * 100 / 200000 ))
-else
-    context_pct=$(( context_tokens * 100 / window_size ))
-fi
+# percentage of the 200k price threshold; above 200k it overshoots (400k = 200%)
+context_pct=$(( context_tokens * 100 / 200000 ))
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // 0' | xargs printf "%.4f")
 
 folder=$(basename "$cwd")
