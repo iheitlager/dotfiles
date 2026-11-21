@@ -15,18 +15,21 @@ labelled as not the real viewer.
 
 ## 1. Get the emulator (once per session; safe to run again)
 
-If your tools include `mcp__claude-artifacts__emulator_download_code` (search for
+If your tools include `mcp__claude-artifacts__emulator_caller_answers` (search for
 it if some tools load only on a search), call it with no arguments right before
 every run of the command below, including a run again after a stop or a cut-off.
-It saves a one-time code in a file for the command, which takes no arguments: that
-code is a secret, so do not open, move or copy the file. With no tool of exactly
-that name, or if the call fails, run the command all the same.
+It saves a small file of settings. Only if the command then tells you to, call
+`mcp__claude-artifacts__emulator_files` (search for it too) with no arguments,
+which saves a zip of the emulator's own files. The command finds both files by
+itself: do not open, unpack, edit or copy either, and never write one yourself.
+If a tool refuses, do as its description says. With no tool of exactly the first
+name, run the command all the same.
 
 ```bash
 /usr/bin/python3 -I /mnt/skills/examples/artifact-emulator/scripts/bootstrap.py
 ```
 
-Give it a ten-minute timeout the first time: it downloads about 10 MB in many
+Give it a ten-minute timeout the first time: it may download about 10 MB in many
 small requests. If it is cut off, run it again. It prints one JSON line on
 standard output holding `command`, `shellDir`, `runtimeDir` and `workDir`; keep
 them for step 3, and `node` and `playwright` too if it holds them (step 3 says
@@ -256,7 +259,7 @@ everything below applies to it unchanged.
   `context.request` on an address taken from a page.
 - `serve` stops after 15 minutes without a request. If an earlier one is still
   running, the next fails at once naming the port in use; stop it with
-  `/usr/bin/pkill -TERM -u 0 -f '/opt/frame-emulator/program/[0-9a-f]{64}/[^ ]+ serve '`.
+  `/usr/bin/pkill -TERM -u 0 -f '/opt/frame-emulator/(program|sets)/[0-9a-f]{64}/[^ ]+ serve '`.
 
 ## Limits of this first version
 

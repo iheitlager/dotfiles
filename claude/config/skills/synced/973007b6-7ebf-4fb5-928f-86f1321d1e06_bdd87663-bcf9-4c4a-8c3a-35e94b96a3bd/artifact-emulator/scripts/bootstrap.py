@@ -2,11 +2,12 @@
 """Fetch the artifact emulator into a cloud session: download the program, check it against its published sha256
 hashes, install it under /opt/frame-emulator, write the command /usr/local/bin/frame-emulator, and have the program
 fill /opt/frame-emulator/cache with the viewer and runtime. Prints one JSON line saying where everything is.
+Where there is no session token file it downloads nothing, and unpacks what two tools of the artifact service saved.
 Where it cannot run it stops with a plain message.
 """
 
 import argparse
-import base64
+import ctypes
 import hashlib
 import importlib.util
 import itertools
@@ -30,23 +31,11 @@ API_HOST_RE = re.compile(r"api(-[a-z0-9-]+)?\.anthropic\.com")
 CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
 PROXY_VARS = ("http_proxy", "https_proxy", "all_proxy", "no_proxy")
 DEFAULT_TOKEN_FILE = "/home/claude/.claude/remote/.session_ingress_token"
-# Without a token file the download uses a ticket, a short-lived credential for these downloads alone. A tool of the artifact
-# service answers with a one-time code, saved in a folder named by a session's UUID under RESULTS. redeem() trades it for a ticket.
-RESULTS = "/tmp/claude-tool-results"
+# Without a token file nothing is downloaded. One tool of the artifact service saves its answers about this user in this session
+# (saved_answers.py), or the run stops. Another saves the emulator's own files as one zip, which is unpacked only once the
+# service, asked at SET_PREFIX with no credential, has said that it made it and still holds it (emulator_set.py).
 DEFAULT_API_HOST = "api.anthropic.com"
-TICKET_PREFIX = "/api/frame/emulator-ticket"
-TICKET_HEADER = "X-Download-Token"
-UUID_RE = re.compile(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
-SAVED_NAME_RE = re.compile(r"mcp-[A-Za-z0-9._-]{1,100}-blob-[0-9]{1,20}-[A-Za-z0-9]{1,6}-[0-9a-f]{8}\.bin")
-# Both end in a 43-character signature that only the artifact service can check. A code's part before it is base64url JSON.
-CODE_RE = re.compile(r"sk-ant-fec01-([A-Za-z0-9_-]{1,4040})[A-Za-z0-9_-]{43}")
-TICKET_RE = re.compile(r"sk-ant-fed01-[A-Za-z0-9_-]{44,4083}")
-MAX_CODE_BYTES = 4096
-MAX_SAVED_FILES_READ = 256
-# A ticket file older than this is one that a killed run left. Keep it above TOTAL_BUDGET_S, so that no running script's is taken.
-TICKET_LIFE_S = 900
-# False would accept a code in whichever folder it lies: only for the case that folders prove not to be named as codes name them.
-CODE_NAMES_ITS_FOLDER = True
+SET_PREFIX = "/api/frame/emulator-set"
 # Fixed on purpose: the script takes no options, so no caller can point it at another place or program.
 ROOT = "/opt/frame-emulator"
 COMMAND = "/usr/local/bin/frame-emulator"
@@ -76,7 +65,12 @@ DEFAULT_ENTRY = "frame-emulator.gen.js"
 SAFE_PATH = "/usr/local/bin:/usr/bin:/bin"
 PAUSE_S = 2.0
 PROGRAM_DEADLINE_S = 240
-TOTAL_BUDGET_S = 570  # SKILL.md tells Claude to allow ten minutes
+# Total seconds for all runs until one works. Under SKILL.md's ten-minute timeout, so a first run stops before it is cut off.
+TOTAL_BUDGET_S = 570
+SECONDS_FILE = "set-up-seconds"  # in ROOT: one byte for each second counted
+FORGET_AFTER_S = 86400  # after this long with nothing added to the file, its seconds no longer count
+OUT_OF_TIME = ("set-up has taken too long, counting any earlier tries here. Do not run this again in the next 24 hours; "
+               "carry on without the emulator")
 # curl exit codes worth another try: could not resolve or connect, TLS handshake failed, empty reply, connection reset.
 RETRY_EXITS = (5, 6, 7, 35, 52, 56)
 NOT_HERE = "what this skill needs is not in this session, so it cannot run here. Carry on without it"
@@ -94,6 +88,28 @@ WHY = {
 
 class Stop(Exception):
     pass
+
+
+def module_beside(name):
+    """The module in the file name.py beside this script. SKILL.md runs this script with python's -I, under which the
+    script's own folder is not on sys.path, so a plain import would not find it."""
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), name + ".py")
+    spec = importlib.util.spec_from_file_location("artifact_emulator_" + name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+saved = emulator_set = None  # saved_answers.py and emulator_set.py, which neighbours() loads
+
+
+def neighbours():
+    """Loads the files beside this script that a run with no session token file needs, once. With a token file they are
+    never read."""
+    global saved, emulator_set
+    if saved is None:
+        sys.dont_write_bytecode = True  # python's -I does not stop it from leaving compiled copies beside them
+        saved, emulator_set = module_beside("saved_answers"), module_beside("emulator_set")
 
 
 def say(msg):
@@ -233,78 +249,8 @@ def find_playwright():
     raise Stop(f"neither Python Playwright (for {sys.executable}) nor Node Playwright is installed: {NOT_HERE}")
 
 
-def open_folder(name, dir_fd=None):
-    """A descriptor for a real directory (never a link to one) that only root or this user can change, or None."""
-    try:
-        fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
-    except OSError:
-        return None
-    st = os.fstat(fd)
-    if st.st_uid in (0, os.geteuid()) and not st.st_mode & 0o022:
-        return fd
-    os.close(fd)
-    return None
-
-
-def found_where_it_belongs(code, session):
-    """Whether the session UUID inside code is session, the name of the folder it was saved in; False if it cannot be read.
-    This only matches a code to its folder: only the artifact service can tell whether a code is genuine."""
-    if not CODE_NAMES_ITS_FOLDER:
-        return True
-    try:
-        claims = CODE_RE.fullmatch(code)[1]
-        return json.loads(base64.urlsafe_b64decode(claims + "=" * (-len(claims) % 4)))["s"] == session
-    except Exception:
-        return False
-
-
-def take_code():
-    """The newest one-time code under RESULTS that found_where_it_belongs accepts, or None. Reads only files of at most
-    MAX_CODE_BYTES whose names match SAVED_NAME_RE, the newest MAX_SAVED_FILES_READ of them, and deletes each one that holds
-    a code, used or not: a code is for one run of this script."""
-    opened, saved, code = {}, [], None
-    try:
-        opened[""] = top = open_folder(RESULTS)
-        for session in os.listdir(top) if top is not None else ():
-            if not UUID_RE.fullmatch(session):
-                continue
-            opened[session] = folder = open_folder(session, top)
-            before = len(saved)
-            for name in os.listdir(folder) if folder is not None else ():
-                try:
-                    st = os.stat(name, dir_fd=folder, follow_symlinks=False) if SAVED_NAME_RE.fullmatch(name) else None
-                except OSError:  # gone since it was listed
-                    continue
-                if st and stat.S_ISREG(st.st_mode) and st.st_size <= MAX_CODE_BYTES:
-                    saved.append((st.st_mtime_ns, name, session))
-            if folder is not None and len(saved) == before:  # however many folders there are, few stay open
-                os.close(opened.pop(session))
-        for _, name, session in sorted(saved, reverse=True)[:MAX_SAVED_FILES_READ]:
-            try:
-                with os.fdopen(os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=opened[session]), "rb") as f:
-                    text = f.read(MAX_CODE_BYTES + 1).decode("ascii", "replace").strip()
-                if not CODE_RE.fullmatch(text):
-                    continue
-                os.unlink(name, dir_fd=opened[session])
-            except OSError:  # another run of this script may have taken it
-                continue
-            if code is None and found_where_it_belongs(text, session):
-                code = text
-    except OSError:
-        pass
-    finally:
-        for fd in opened.values():
-            if fd is not None:
-                os.close(fd)
-    return code
-
-
 def session_token_file():
     return os.path.abspath(os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE") or DEFAULT_TOKEN_FILE)
-
-
-def no_token_file():
-    return Stop(f"no session token file at {session_token_file()}: {NOT_HERE}")
 
 
 def api_host(base_url):
@@ -324,27 +270,27 @@ def api_host(base_url):
     return u.hostname
 
 
-def preflight(code=None):
-    """Returns (base, token_file, tools). Given a one-time code, no token file is needed, base is that of the ticket's routes,
-    and an ANTHROPIC_BASE_URL that is unset or that api_host refuses gives DEFAULT_API_HOST and does not stop the run."""
+def preflight(from_tools=False):
+    """Returns (base, token_file, tools). With from_tools no token file is needed, base is SET_PREFIX's, and an
+    ANTHROPIC_BASE_URL that is unset or that api_host refuses gives DEFAULT_API_HOST and does not stop the run."""
     token_file = session_token_file()
-    if code is None and not os.path.isfile(token_file):
-        raise no_token_file()
-    if code is None and not os.access(token_file, os.R_OK):
+    if not from_tools and not os.path.isfile(token_file):
+        raise Stop(f"no session token file at {token_file}: {NOT_HERE}")
+    if not from_tools and not os.access(token_file, os.R_OK):
         raise Stop(f"cannot read the session token file at {token_file}, so the emulator cannot be fetched")
     tools = {"chromium": find_chromium(), "driver": find_playwright()}
     tools.update({"curl": trusted(CURL), "bun": trusted(BUN), "python": trusted(PYTHON)})
     try:
         host = api_host((os.environ.get("ANTHROPIC_BASE_URL") or "").rstrip("/"))
     except Stop:
-        if code is None:
+        if not from_tools:
             raise
         host = DEFAULT_API_HOST
     if not os.path.isfile(CA_BUNDLE):
         raise Stop(f"no certificate bundle at {CA_BUNDLE}: {NOT_HERE}")
     tools["ca"] = only_ours(CA_BUNDLE, "the certificate bundle")
     # Rebuilt from the parts just checked, so curl is never given a string it could read differently from the checks.
-    return "https://" + host + (RELAY_PREFIX if code is None else TICKET_PREFIX), token_file, tools
+    return "https://" + host + (SET_PREFIX if from_tools else RELAY_PREFIX), token_file, tools
 
 
 def read_token(token_file):
@@ -355,22 +301,16 @@ def read_token(token_file):
     return token
 
 
-def curl(url, dest, ctx, max_bytes, one_time_code=None):
-    """GET url into dest with the session token as a bearer, or with the ticket in its own header; or, given a one-time
-    code, POST that and nothing else. Returns the HTTP status, or minus curl's exit code when there was no answer."""
+def curl(url, dest, ctx, max_bytes):
+    """GET url into dest with the session token as a bearer.
+    Returns the HTTP status, or minus curl's exit code when there was no answer."""
     if not url.startswith(ctx["base"] + "/emulator/"):
         raise Stop(f"refusing to fetch outside the artifact service's emulator routes: {url}")
-    token = one_time_code or read_token(ctx["token_file"])
+    token = read_token(ctx["token_file"])
     # The token travels in a config read from stdin: never in argv, the environment or a file.
-    if one_time_code:
-        config = f'data = "{token}"\nheader = "Content-Type: text/plain"\n'
-    elif ctx["ticket"]:
-        config = f'header = "{TICKET_HEADER}: {token}"\n'
-    else:
-        config = f'oauth2-bearer = "{token}"\n'
+    config = f'oauth2-bearer = "{token}"\n'
     cmd = [ctx["curl"], "-q", "-sS", "--globoff", "--proto", "=https", "--max-redirs", "0",
            "--connect-timeout", "10", "--speed-limit", "1024", "--speed-time", "20", "--max-time", "100",
-           *(["-H", "X-Frame-CP: go"] if ctx["ticket"] else []),
            "--cacert", ctx["ca"], "--max-filesize", str(max_bytes), "-K", "-", "-o", dest, "-w", "%{http_code}", url]
     env = {k: v for k, v in os.environ.items() if k.lower() in PROXY_VARS}  # a proxy may carry it, never choose whom to trust
     p = subprocess.run(cmd, input=config, capture_output=True, text=True, env=env)
@@ -380,11 +320,11 @@ def curl(url, dest, ctx, max_bytes, one_time_code=None):
     return int(p.stdout.strip() or 0)
 
 
-def fetch(url, dest, ctx, max_bytes, tries=4, one_time_code=None):
+def fetch(url, dest, ctx, max_bytes, tries=4):
     for attempt in range(tries):
         if time.monotonic() > ctx["deadline"]:
             raise Stop("downloading the emulator took too long; try again in a minute")
-        code = curl(url, dest, ctx, max_bytes, one_time_code)
+        code = curl(url, dest, ctx, max_bytes)
         if code not in (502, 503) and -code not in RETRY_EXITS:
             return code
         if attempt < tries - 1:
@@ -392,38 +332,34 @@ def fetch(url, dest, ctx, max_bytes, tries=4, one_time_code=None):
     return code
 
 
-def on_stop_signals(handler):
-    for stop_signal in (signal.SIGTERM, signal.SIGHUP):
-        signal.signal(stop_signal, handler)
+def service_holds(set_id, ctx):
+    """Whether the artifact service says yes to the set of the emulator's files with this id. A server of the service says
+    yes only to the newest set that it has made itself and, for up to ten minutes after it made that one, to the one before:
+    so an old set gets a no, though the service made it once. True for the answer 204 and for no other, be it a 200, a redirect, an error or
+    none at all. Sends no credential, and keeps no body."""
+    if time.monotonic() > ctx["deadline"]:
+        raise Stop("asking the artifact service about the emulator's files took too long; try again in a minute")
+    cmd = [ctx["curl"], "-q", "-sS", "--globoff", "--proto", "=https", "--max-redirs", "0", "--connect-timeout", "10",
+           "--max-time", "20", "-H", "X-Frame-CP: go",  # without it the request never reaches the artifact service
+           "--cacert", ctx["ca"], "--max-filesize", "4096", "-o", os.devnull, "-w", "%{http_code}", ctx["base"] + "/" + set_id]
+    env = {k: v for k, v in os.environ.items() if k.lower() in PROXY_VARS}  # a proxy may carry it, never choose whom to trust
+    p = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env)
+    if p.returncode == 0 and p.stdout.strip() == "204":
+        return True
+    status = p.stdout.strip()
+    say(f"  curl exit {p.returncode}" if p.returncode else f"  HTTP {status if status.isdigit() else 0}")  # numbers and no more
+    return False
 
 
-def ticket_file(root):
-    """A new, empty file for the ticket, which only this user can read, in root's run folder. The caller deletes it."""
+def unpack_saved_set(ctx, root):
+    """The folder of the emulator's files that a tool saved and the artifact service confirms, unpacked under root, and
+    the path in it of the program's file to run."""
     safe_root(root)
-    run = os.path.join(root, "run")
-    st = os.lstat(run)
-    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_mode & 0o077:
-        raise Stop(f"{run} must be a real directory that only this user can enter")
-    for name in os.listdir(run):  # what a run that was killed left behind
-        try:
-            if name.startswith("ticket-") and time.time() - os.lstat(os.path.join(run, name)).st_mtime > TICKET_LIFE_S:
-                os.unlink(os.path.join(run, name))
-        except OSError:
-            pass
-    fd, path = tempfile.mkstemp(prefix="ticket-", dir=run)
-    os.close(fd)
-    return path
-
-
-def redeem(code, ctx):
-    """Trades the one-time code for the ticket, written to ctx["ticket"]. Stops unless the answer is 200 and holds a ticket.
-    One try only: the artifact service takes a code once, and an answer that was lost may have used it up."""
-    status = fetch(ctx["base"] + "/emulator/redeem", ctx["ticket"], ctx, MAX_CODE_BYTES, tries=1, one_time_code=code)
-    if status != 200:
-        raise Stop(why(status))
-    with open(ctx["ticket"], encoding="ascii", errors="replace") as f:
-        if not TICKET_RE.fullmatch(f.read(MAX_CODE_BYTES + 1).strip()):
-            raise no_token_file()
+    zips = [data for _, data in saved.saved_files(".zip", emulator_set.MAX_ZIP_BYTES, emulator_set.MAX_ZIPS_TRIED)]
+    try:
+        return emulator_set.install(os.path.realpath(root), zips, lambda set_id: service_holds(set_id, ctx), ctx["pause"])
+    except emulator_set.Refused as e:
+        raise Stop(str(e))
 
 
 def read_file_list(ctx, tmp):
@@ -610,15 +546,61 @@ def write_wrapper(path, bun, python, program_dir, entry, root, ca, chromium):
     return os.path.realpath(path)
 
 
-def run_bundle(command, ctx, timeout):
+def count_seconds(root):
+    """Adds a byte to root's SECONDS_FILE now and then once a second, from a SIGALRM handler, and exits the script when the
+    file holds TOTAL_BUDGET_S bytes or cannot be written. All runs share the file, which is emptied first if nothing was
+    added for FORGET_AFTER_S. The caller ends the counting with signal.setitimer(signal.ITIMER_REAL, 0)."""
+    safe_root(root)
+    owner_only(root, "what is installed there")
+    fd = os.open(os.path.join(root, SECONDS_FILE), os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    if abs(time.time() - os.fstat(fd).st_mtime) > FORGET_AFTER_S:  # abs: the clock may have been set back
+        os.ftruncate(fd, 0)
+
+    def tick(*_):
+        try:
+            if os.fstat(fd).st_size < TOTAL_BUDGET_S:
+                os.write(fd, b".")
+                return
+            reason = OUT_OF_TIME
+        except OSError as e:
+            reason = f"could not keep count of set-up time ({e.strerror}). Carry on without the emulator"
+        # No "except" here or in what neighbours() loads swallows a SystemExit, and subprocess.run kills the program it is waiting for.
+        # Python drops an exception raised in a destructor or callback, so the timer fires again, after time to clean up.
+        signal.setitimer(signal.ITIMER_REAL, 5, 1)
+        sys.exit(f"artifact-emulator: stopped: {reason}")
+
+    signal.signal(signal.SIGALRM, tick)
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGALRM])  # a parent's blocked signals are inherited
+    tick()
+    signal.setitimer(signal.ITIMER_REAL, 1, 1)
+
+
+def clear_seconds(root):
+    # Deleted, not emptied: a run still going keeps counting in the deleted file, so its limit holds.
+    try:
+        os.unlink(os.path.join(root, SECONDS_FILE))
+    except FileNotFoundError:
+        pass
+
+
+def die_with_this_script():
+    """Returns a preexec_fn for subprocess: the kernel kills the child when this script ends, however it ends."""
+    prctl, parent = ctypes.CDLL(None).prctl, os.getpid()
+
+    def in_child():
+        prctl(1, ctypes.c_ulong(signal.SIGKILL))  # 1 is PR_SET_PDEATHSIG
+        if os.getppid() != parent:  # the script ended before the prctl call
+            os._exit(1)
+    return in_child
+
+
+def run_bundle(command, ctx):
     """Ask the program to download the viewer, which it checks against the viewer's manifest, and the runtime."""
     cmd = [command, "bundle", "--shell-latest", ctx["base"], "--runtime-url", ctx["base"] + "/emulator/runtime",
            "--token-file", ctx["token_file"]]
     token = read_token(ctx["token_file"])  # only to keep it out of anything printed below
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, cwd="/", timeout=timeout)
-    except subprocess.TimeoutExpired:
-        raise Stop("downloading the viewer and runtime took too long; run this again")
+    # No timeout: count_seconds ends this script, and the program with it.
+    p = subprocess.run(cmd, capture_output=True, text=True, cwd="/", preexec_fn=die_with_this_script())
     if p.returncode != 0:
         tail = p.stderr.strip().replace(token, "[token]")
         try:
@@ -640,31 +622,38 @@ def run_bundle(command, ctx, timeout):
 def main():
     ap = argparse.ArgumentParser(description="Fetch the artifact emulator into this cloud session: the program "
                                  "(checked here against its published sha256 hashes), then the viewer and runtime "
-                                 "(fetched by the program). Prints one JSON line: command, shellDir, runtimeDir, workDir, "
+                                 "(fetched by the program). Where there is no session token file: unpack them from what "
+                                 "two tools saved. Prints one JSON line: command, shellDir, runtimeDir, workDir, "
                                  "and node and playwright where SKILL.md's step 3 is to use Node Playwright. "
-                                 "Safe to run again. Takes no options other than -h.")
+                                 "Safe to run again; until one run works, all runs share about ten minutes, after which it "
+                                 "refuses for 24 hours. "
+                                 "Takes no options other than -h.")
     ap.parse_args()  # -h prints the description; anything else is refused before a file is read or a request sent
     os.umask(0o022)
-    start = time.monotonic()
-    ticket = None
     try:
-        # Before any check that can stop the run, so that a run that stops has still deleted the saved code.
-        code = None if os.path.isfile(session_token_file()) else take_code()
-        base, token_file, tools = preflight(code)
-        if code is not None:
-            # A run that is told to stop deletes the ticket too.
-            on_stop_signals(lambda *_: (on_stop_signals(signal.SIG_IGN), sys.exit(1)))
-            token_file = ticket = ticket_file(ROOT)
+        from_tools = not os.path.isfile(session_token_file())
+        if from_tools:
+            neighbours()
+        answers, code = saved.take_answers() if from_tools else (None, "")
+        # The artifact service gives no answers to a user who may not have the emulator here, so a Claude that follows the
+        # skill stops at this point. The file is not signed: this is no access check.
+        if from_tools and answers is None:
+            raise Stop(saved.no_answers(code))
+        base, token_file, tools = preflight(from_tools)
+        count_seconds(ROOT)
         ctx = {"base": base, "token_file": token_file, "pause": PAUSE_S, "curl": tools["curl"], "ca": tools["ca"],
-               "ticket": ticket, "deadline": time.monotonic() + PROGRAM_DEADLINE_S}
-        if code is not None:
-            redeem(code, ctx)
-        program_dir, entry = install_program(ctx, ROOT)
+               "deadline": time.monotonic() + PROGRAM_DEADLINE_S}
+        program_dir, entry = unpack_saved_set(ctx, ROOT) if from_tools else install_program(ctx, ROOT)
         if "copy_of" in tools["driver"]:  # only now, with every check passed and the emulator granted and installed
             tools["driver"]["node"] = private_node(*tools["driver"].pop("copy_of"))
         command = write_wrapper(COMMAND, tools["bun"], tools["python"], program_dir, entry, ROOT, tools["ca"],
                                 tools["chromium"])
-        shell_dir, runtime_dir = run_bundle(command, ctx, max(60, TOTAL_BUDGET_S - (time.monotonic() - start)))
+        if from_tools:
+            shell_dir, runtime_dir = (os.path.join(program_dir, d) for d in (emulator_set.VIEWER, emulator_set.RUNTIME))
+            saved.write_answers(shell_dir, answers)
+        else:
+            shell_dir, runtime_dir = run_bundle(command, ctx)
+        clear_seconds(ROOT)
     except (Stop, OSError) as e:
         say(f"artifact-emulator: stopped: {e}")
         return 1
@@ -677,13 +666,9 @@ def main():
             pass
         return 1
     finally:
-        if ticket is not None:
-            on_stop_signals(signal.SIG_IGN)
-            try:
-                os.unlink(ticket)
-            except OSError:
-                pass
-    say("the emulator downloaded the viewer and runtime")
+        signal.setitimer(signal.ITIMER_REAL, 0)
+    say("the emulator's files are in place, each checked against its sha256" if from_tools
+        else "the emulator downloaded the viewer and runtime")
     print(json.dumps({"command": command, "shellDir": shell_dir, "runtimeDir": runtime_dir,
                       "workDir": os.path.join(os.path.realpath(ROOT), "run"), **tools["driver"]}))
     return 0
