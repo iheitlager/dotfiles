@@ -1,307 +1,54 @@
 # Claude Code Instructions
 
-Global coding preferences and workflow guidelines for all my projects.
+Global workflow rules for every repo. Language and project conventions live in the project's own `AGENTS.md` (or `CLAUDE.md`); create one with `/bootstrap [rust|python] [github|gitlab]`.
 
----
+## Working style
 
-## Code Quality Standards
+- **Plan before implementing.** For any non-trivial change (>1 file or >20 lines), give a 3-5 line plan first: which files change, the approach, what could go wrong. Wait for approval. Trivial changes (one-liner, typo, config): just do it.
+- **Simplicity first.** Minimum code for today's problem. No speculative abstractions, no Strategy pattern for one implementation, no config for one value. Refactor when the second use case arrives.
+- **Surgical changes.** Touch only what the task needs. Don't reformat adjacent code or restyle untouched functions. The diff should trace entirely to the request.
+- Read files before modifying them. Track multi-step work with a todo list.
 
-- **Python Version**: 3.12+ (use modern type hints and syntax)
-- **Linter**: `ruff` — Fast Python linter
-- **Type Checking**: `pyright` — Static type analysis
-- **Imports**: `isort` — Import sorting and organization
-- **Testing**: pytest with coverage targets (aim for >80%)
-- **Package Manager**: `uv` — Fast Python package manager
+## Bugs and test failures: own them
 
----
+- Fix bugs you find, whatever their origin. You may note once, factually, that it was already on main; then fix it anyway.
+- If a fix is out of scope or risky, say so and propose the fix; don't just move on.
+- Test failures block the PR, whoever introduced them.
 
-## Project Structure Conventions
+## Bash and git
 
-### Standard Layout
+- Use Bash and git freely (tests, builds, installs, commits, branches, rebases, pushes). No need to ask.
+- No force pushes or hard resets unless explicitly asked.
+- **Commit signing failure = I'm away.** Signing goes through 1Password and needs my fingerprint. If a signed commit or tag fails, don't retry and don't bypass signing (no `--no-gpg-sign`, no config changes). Stop and say you're waiting until I'm back.
 
-```
-project/
-├── src/project_name/    # Main source code
-│   ├── __init__.py
-│   ├── core/            # Core models and types
-│   ├── cli/             # Command-line interface
-│   └── ...
-├── tests/               # Test suite
-│   ├── unit/            # Unit tests
-│   └── integration/     # Integration tests
-├── .openspec/           # OpenSpec specifications & ADRs
-│   ├── specs/           # System specifications (NNN-name/spec.md)
-│   ├── adr/             # Architectural Decision Records (NNNN-title.md)
-│   └── changes/         # Delta specs (proposals)
-├── docs/                # Documentation
-├── pyproject.toml       # Project configuration
-├── Makefile             # Common tasks
-├── README.md
-└── CHANGELOG.md
-```
+## Branches and worktrees
 
-### Architectural Decision Records (ADRs)
+| Type | Format | Version impact |
+|---|---|---|
+| Feature | `feat/xxx` | minor |
+| Bug fix | `fix/xxx` | patch |
+| Refactor | `refactor/xxx` | none |
+| Spike | `spike/NNN_xxx` | none |
+| Docs | `docs/xxx` | none |
+| Chore | `chore/xxx` | none |
 
-I use ADRs to document significant design decisions:
-- Store in `.openspec/adr/` with format `NNNN-title.md`
-- Always check existing ADRs before proposing architectural changes
-- Create new ADRs for decisions that affect architecture
+`agent-XX` branches (e.g. `agent-1`) are **worktree base branches**, not feature branches: never push them, never open a PR from them. In a worktree: `git fetch && git rebase origin/main`, then `git checkout -b feat/...`, push that and open the PR from it.
 
-### Specification Format
+## GitHub / GitLab
 
-Specs live in `.openspec/specs/NNN-name/spec.md` (numbered directories, each containing a `spec.md`).
+Same rules for PRs (GitHub) and MRs (GitLab); the project's `AGENTS.md` names the forge and its CLI.
 
-Each spec uses sheerpower-style format parseable by code-analyzer (ADR-0019):
+- Comments posted with `gh issue comment` / `gh pr comment` / `glab issue note` / `glab mr note` end with:
 
-```markdown
-### Requirement N: Title [MUST|SHOULD|MAY]
+  ```
+  ---
+  🤖 *Analysis by Claude*
+  ```
 
-Description using RFC 2119 keywords (SHALL, MUST, etc.).
-
-**Implementation:** `src/path/module.py::ClassName`
-
-#### Scenario: Descriptive name
-
-- GIVEN precondition
-- WHEN action
-- THEN expected result
-
-**Tests:** `tests/unit/test_file.py::TestClass::test_method`
-```
-
-Link codes:
-- `ADR-NNNN` — ADR references
-- `#NN` — GitHub issue references
-- `src/path/module.py` — Source file paths
-- `tests/path/test_file.py::test_function` — Test function paths
-
-Run `make assurance` to validate spec coverage, `make compliance` for full pipeline.
-
----
-
-## Claude Code Workflow Preferences
-
-### Planning and Execution
-- **Plan before implementing.** For any non-trivial change (>1 file or >20 lines), present a 3-5 line plan before implementing. State: what files change, what the approach is, what could go wrong. Wait for approval. Trivial changes (one-liner, typo, config) just do it.
-- **Simplicity first.** Minimum code that solves today's problem. No speculative abstractions, no Strategy patterns for one implementation, no config for one value. If a senior engineer would say "this is overcomplicated" — simplify. Refactor later when the second use case actually arrives, not before.
-- **Surgical changes.** Touch only what the task requires. Don't reformat adjacent code, don't add type hints to untouched functions, don't change quote styles. Your mess, your cleanup. Their mess, their decision. The diff should trace entirely to the request. Smaller diffs = faster review = faster ship.
-- Read files before modifying them
-- Use TodoWrite to track progress on multi-step work
-- Think through architectural decisions carefully
-
-### Bugs and Test Failures: Own Them, Fix Them
-
-**NEVER excuse yourself out of fixing a bug.** "This failure pre-exists on main" is not an acceptable response — it's an excuse. If you see a failing test or a bug, fix it. That is the job.
-
-Rules:
-- **Fix bugs you find, regardless of origin.** Pre-existing bugs are still bugs. You are on this branch, you have the context, fix it now.
-- **You may note origin once** — briefly, factually: "this bug was already on main." Then fix it anyway.
-- **Never use bug origin as a reason to skip fixing.** "Not introduced by our branch" is not a reason to leave it broken.
-- **If a fix is out of scope or risky**, say so and ask — but propose a fix, don't just move on.
-- **Test failures block the PR.** All failures must be resolved before merge, regardless of who introduced them.
-
-### Bash and Git Usage
-- **Use Bash commands freely** for tests, builds, dependency installation, git status checks, etc.
-- **Use Git operations freely** (commits, pushing, creating branches, rebasing) as natural parts of the workflow
-- No need to ask permission for Bash or git actions
-- Be cautious with destructive git operations (no force pushes or hard resets unless explicitly requested)
-- **Commit signing failure = I'm away.** Signing goes through 1Password, which needs my fingerprint. If a signed commit/tag fails, do not retry and do not bypass signing (no `--no-gpg-sign`, no config changes). Stop and message that you're waiting until I'm back at the keyboard.
-
-### GitHub Comment Attribution
-
-When posting comments to GitHub issues or PRs using `gh issue comment` or `gh pr comment`, **always end the comment with an attribution signature**:
-
-```
----
-🤖 *Analysis by Claude*
-```
-
-This ensures comments posted through your account are clearly identified as AI-generated analysis.
-
-### After Investigation
-
-After completing any investigation, analysis, or research task, **always suggest creating GitHub issues/tickets** before proposing implementation or PRs. This ensures findings are tracked, prioritized, and visible to others.
-
-**Workflow:**
-1. Summarize findings clearly
-2. Propose ticket(s) to capture the work items discovered
-3. Ask if the user wants to create the ticket(s) using `/issue` before proceeding with implementation
-
-### Feature Development Workflow
-
-#### Starting a New Feature
-1. **Create a branch** following branch naming conventions
-2. **Create a plan** if complex — document approach before implementation
-
-#### Finalizing a Feature
-1. **Ensure tests pass** — all tests running locally
-2. **Consider ADR** — determine if architectural decisions need documentation
-3. **Update documentation** — review existing docs for relevance
-4. **Commit changes** — create meaningful, semantic commits
-5. **Squash if needed** — clean up commit history before PR
-6. **File a pull request** — include summary and test plan
-
-#### Closing Issues from PRs
-
-- **Finish the issue in the PR.** Close every open acceptance criterion on the same branch as an extra commit: missing tests, an unmeasured perf claim, a code path not covered. Do not leave leftovers.
-- **Then write `Closes #N`.** Do not use `Related to #N` to dodge leftovers.
-- **Follow-up issue only when a criterion truly cannot be done in this repo** (it needs another repo's release, or a CI-only number). Open it with `gh issue create`, without asking, and link it. Still write `Closes #N`.
-- **`Related to #N` only for planned partial work**, such as phase 1 of 3 or one step of an epic.
-- **Never put close/fix/resolve before `#N` in a negated sentence.** GitHub ignores negation.
-
----
-
-## Tool Usage Guidelines
-
-### Use `uv` for Python Projects
-
-For Python projects using `uv` for dependency management:
-
-```bash
-# ✅ DO THIS
-uv run pytest tests/
-uv run python script.py
-uv run ruff check src/
-uv run pyright src/
-
-# ❌ AVOID THIS (unless project doesn't use uv)
-pytest tests/
-python script.py
-```
-
-Why? `uv` ensures correct virtual environment and dependency isolation.
-
-Check `Makefile` for convenient shortcuts: `make test`, `make lint`, `make format`, etc.
-
-### Markdown Generation Policy
-
-**STRICT: Never generate markdown documentation files unless explicitly requested**.
-
-**What NOT to do:**
-- ❌ Do NOT create `.md` summary/overview documents
-- ❌ Do NOT create `.md` files to explain code changes
-- ❌ Do NOT create `.md` architecture overviews
-- ❌ Do NOT auto-generate documentation files
-
-**What TO do:**
-- ✅ Use inline code comments for complex logic
-- ✅ Reference existing documentation
-- ✅ Generate markdown ONLY when explicitly asked: "Create a README", "Document this", "Write an ADR"
-- ✅ Update existing markdown files when specifically requested
-
----
-
-## Git Workflow & Branching Strategy
-
-### Worktrees and Agent Branches
-
-**IMPORTANT**: For projects using git worktrees, `agent-XX` branches (e.g., `agent-1`, `agent-2`) are **base branches** for parallel work, NOT feature branches.
-
-**Rules for agent-XX branches:**
-- ❌ **NEVER** create PRs directly from `agent-XX` branches
-- ❌ **NEVER** push `agent-XX` branches to remote
-- ✅ **DO** use them as base branches in worktrees for creating feature branches
-- ✅ **DO** sync them with main: `git fetch && git rebase origin/main`
-
-**Correct workflow from a worktree:**
-```bash
-# You're in a worktree on agent-1 branch
-git branch --show-current  # → agent-1
-
-# 1. Sync with main
-git fetch origin
-git rebase origin/main
-
-# 2. Create feature branch
-git checkout -b feat/my-feature
-
-# 3. Make changes and commit
-# ... work ...
-git commit -m "feat: add feature"
-
-# 4. Push feature branch and create PR
-git push -u origin feat/my-feature
-/pr  # This will work because you're on feat/my-feature, not agent-1
-```
-
-**Why this matters:**
-- Worktrees enable parallel development without branch switching
-- `agent-XX` branches are isolated workspace bases
-- PRs should come from feature branches (`feat/`, `fix/`, etc.), not workspace bases
-
-### Branch Naming Conventions
-
-All branches must follow these conventions:
-
-| Branch Type | Format | Purpose | Version Impact |
-|-------------|--------|---------|-----------------|
-| Feature | `feat/xxxxx` | New functionality | Minor update |
-| Bug Fix | `fix/xxxxx` | Code fixes | Patch update |
-| Refactor | `refactor/xxxxx` | Code refactoring | No update |
-| Spike | `spike/DDD_xxxxx` | Experimental exploration | No update |
-| Documentation | `docs/xxxxx` | Documentation updates | No update |
-| Chore | `chore/xxxxx` | Maintenance, tooling | No update |
-
-**Examples**:
-- `feat/python-parser` — New Python parser implementation
-- `fix/symbol-table-closure` — Fix closure detection in symbol tables
-- `refactor/three-layer-models` — Refactor model hierarchy
-- `spike/001_core_model_validation` — Spike to validate core models
-- `docs/adr-0007` — Document new architectural decision
-- `chore/update-dependencies` — Dependency updates
-
-Be sure to update `CHANGELOG.md` and version numbers as appropriate when merging feature or fix branches.
-
-### Version Bumping
-
-When releasing a new version, update these **three locations**:
-
-1. **`src/code_analyzer/__init__.py`**
-   ```python
-   __version__ = "0.1.0"  # Update here
-   ```
-
-2. **`README.md`**
-   ```markdown
-   ## Version: 0.1.0  # Update here
-   ```
-
-3. **`CHANGELOG.md`**
-   ```markdown
-   # Changelog
-
-   ## [0.1.0] - 2026-01-05  # Update here
-   - Feature A
-   - Feature B
-   ```
-
-**Versioning Scheme**: Semantic Versioning (MAJOR.MINOR.PATCH)
-- **Minor**: New features (`feat/` branches)
-- **Patch**: Bug fixes (`fix/` branches)
-- **No change**: Refactors, spikes, docs, chores
-
----
-
-## Useful Resources
-
-- **Project README**: [README.md](README.md)
-- **Change Log**: [CHANGELOG.md](CHANGELOG.md)
-- **ADR Index**: [.openspec/adr/index.md](.openspec/adr/index.md)
-- **Vision**: [docs/vision.md](docs/vision.md)
-
----
-
-## Notes for Contributors
-
-- **Always check ADRs** before proposing architectural changes
-- **Respect the four-layer architecture** when adding parsers or storage logic
-- **Add tests** for all new features (aim for coverage > 80%)
-- **Update ADRs** if making decisions that affect architecture
-- **Use type hints** consistently across the codebase
-- **Document complex logic** with comments referencing relevant ADRs
-
----
-
-*Last updated: 2026-01-14*
+- **Finish the issue in the PR.** Close every open acceptance criterion on the same branch (missing tests, unmeasured perf claims, uncovered paths), then write `Closes #N`. Don't use `Related to #N` to dodge leftovers.
+- Open a follow-up issue (with `gh issue create` / `glab issue create`, without asking, and link it) only when a criterion truly can't be done in this repo; still write `Closes #N`.
+- `Related to #N` only for planned partial work (phase 1 of 3, one step of an epic).
+- Never put close/fix/resolve before `#N` in a negated sentence; GitHub ignores the negation.
+- In code repos, after an investigation, propose issues for the findings before implementing.
 
 @RTK.md
