@@ -50,5 +50,3 @@ Same rules for PRs (GitHub) and MRs (GitLab); the project's `AGENTS.md` names th
 - `Related to #N` only for planned partial work (phase 1 of 3, one step of an epic).
 - Never put close/fix/resolve before `#N` in a negated sentence; GitHub ignores the negation.
 - In code repos, after an investigation, propose issues for the findings before implementing.
-
-@RTK.md
