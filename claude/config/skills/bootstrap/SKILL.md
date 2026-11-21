@@ -8,6 +8,48 @@ argument-hint: "[rust|python] [github|gitlab]"
 
 Write the project's agent instructions to `./AGENTS.md`, so Claude Code, opencode and other agents read the same file. Arguments come in any order.
 
+## /bootstrap help
+
+If the argument is `help`, print the text below (as-is, no file changes) and stop.
+
+```
+/bootstrap [rust|python] [github|gitlab]     write ./AGENTS.md for this repo
+/bootstrap help                              this text
+
+  language  rust (default) | python   — detected from Cargo.toml / pyproject.toml
+  forge     github (default) | gitlab — detected from the origin remote / .gitlab-ci.yml
+  existing  AGENTS.md is merged; CLAUDE.md is moved into AGENTS.md and
+            replaced by "@AGENTS.md" (Claude Code skips AGENTS.md if CLAUDE.md exists)
+
+Workflow commands, from ticket to merge:
+
+  /issue                 list open issues, suggest what to pick up
+  /issue <text>          create an issue from a description
+                         (GOAL:/CONSTRAINTS:/FORMAT:/FAILURE CONDITIONS: → prompt contract)
+  /issue #N              show one issue
+
+  /take #N               pre-flight (clean tree, rebase on main), branch, plan, implement
+                         epic label → one branch, one commit per sub-ticket, one PR
+  /take                  suggest issues to take
+
+  /review [#N] [aspect]  review the branch/PR with specialist agents
+                         aspects: code security tests docs types simplify all
+                         posts findings to the PR, or keeps them for /pr
+
+  /pr [draft|<base>]     create the PR/MR with summary, test plan, Closes #N,
+                         and the review findings in the body
+  /pr list | #N          list or show PRs
+
+  /fix                   address the review findings, plan first
+  /fix "<error>"         analyse a specific error
+
+  /merge [#N]            check findings fixed and CI green, merge, clean up the branch
+  /merge --dry-run       show what would happen
+
+  Loop: /issue → /take #N → /review → /pr → /fix → /merge
+  GitHub and GitLab: /pr, /merge.   GitHub only (gh): /issue, /take, /review, /fix.
+```
+
 ## Steps
 
 1. **Pick the language.** Use the argument if given. Otherwise: `Cargo.toml` at the root → rust; `pyproject.toml` (and no `Cargo.toml`) → python; neither → rust (the default).
