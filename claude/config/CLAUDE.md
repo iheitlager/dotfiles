@@ -9,6 +9,15 @@ Global workflow rules for every repo. Language and project conventions live in t
 - **Surgical changes.** Touch only what the task needs. Don't reformat adjacent code or restyle untouched functions. The diff should trace entirely to the request.
 - Read files before modifying them. Track multi-step work with a todo list.
 
+## Token economy
+
+Every request resends the whole context, so size is the cost.
+
+- **Read narrow.** `grep` first, then read with `offset`/`limit`. Don't re-read a file you just edited.
+- **Keep bulk output out of the main context.** Big searches or sweeps go to a subagent; noisy commands get `head`/`tail`/`grep`.
+- **Answer first, briefly.** No restating the request, no recap of a diff the user can see.
+- **Say when to clear.** At a task boundary, or past 200k context (statusline 100%), suggest `/clear` or `/compact`.
+
 ## Bugs and test failures: own them
 
 - Fix bugs you find, whatever their origin. You may note once, factually, that it was already on main; then fix it anyway.
