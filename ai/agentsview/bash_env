@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# agentsview - XDG compliant: no native XDG support, so point its data dir
+# (database, config, logs) at $XDG_DATA_HOME instead of ~/.agentsview.
+export AGENTSVIEW_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/agentsview"
