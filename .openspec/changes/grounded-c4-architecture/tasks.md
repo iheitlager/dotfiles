@@ -272,7 +272,7 @@ Write the formal OpenSpec specification for the Grounded C4 system.
 Write comprehensive design documentation explaining the system.
 
 **Acceptance Criteria:**
-- [ ] Document at `docs/grounded-c4.md`
+- [ ] Document at `.openspec/grounded-c4.md`
 - [ ] Comparison: C4 vs. Concrete vs. Grounded C4
 - [ ] Running example (Resonance or Dotfiles)
 - [ ] YAML schema reference
@@ -283,7 +283,7 @@ Write comprehensive design documentation explaining the system.
 - [ ] References
 
 **Files:**
-- `docs/grounded-c4.md`
+- `.openspec/grounded-c4.md`
 
 ---
 
@@ -461,7 +461,7 @@ Enable specs to reference sequences in architecture.
 
 **Files:**
 - `share/spec/template.md` (extend)
-- `docs/grounded-c4.md` (extend)
+- `.openspec/grounded-c4.md` (extend)
 
 ---
 

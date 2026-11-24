@@ -1,71 +1,122 @@
-Merge a GitHub PR with full pre-flight checks, clean up, and ticket verification.
+---
+model: haiku
+---
+Merge a pull request (GitHub) or merge request (GitLab) after review findings have been documented and fixed.
+
+Assumes the workflow: `/pr` (document) → `/fix` (fix findings) → `/merge` (this).
+Below, "PR" means a GitHub pull request or a GitLab merge request (MR).
 
 ## Usage
 
 ```
-/merge              Merge current branch's PR
-/merge #123         Merge specific PR by number
+/merge              Merge the current branch's PR/MR
+/merge #123         Merge a specific PR (GitHub) or MR (GitLab: !123 or 123)
 /merge --dry-run    Show what would happen without merging
 ```
 
-## Features
-
-- **Pre-flight checks** — Verify PR is ready (approved, checks passing, no conflicts)
-- **Sync & clean** — Update local repo, prune stale refs, delete merged branches
-- **Return to main** — Automatically switch back to main branch
-- **Ticket verification** — Confirm linked issues will be closed
-
 ## Process
 
-### 1. Identify PR
+### 0. Detect the Forge
 
 ```bash
-# Current branch's PR
-gh pr view --json number,title,headRefName,baseRefName
-
-# Or specific PR
-gh pr view 123 --json number,title,headRefName,baseRefName
+HOST=$(git remote get-url origin | sed -E 's#^[a-z+]+://##; s#^[^@/]*@##; s#[:/].*##')
+case "$HOST" in
+  github.com) FORGE=github ;;
+  *) glab auth status --hostname "$HOST" >/dev/null 2>&1 && FORGE=gitlab || FORGE=unknown ;;
+esac
+echo "$HOST → $FORGE"
 ```
+
+- `github` → use `gh`. `gitlab` → use `glab`. `unknown` → stop and ask.
+- GitLab: `glab api` fills `:id` with the current project, so `projects/:id/...` needs no project ID.
+- GitLab behind a network allow-list returns **HTTP 403 with an HTML page** ("Access to Gitlab is not allowed from your IP-address"). Stop and tell the user to connect the VPN. Don't retry in a loop.
+
+### 1. Identify the PR
+
+**GitHub:**
+```bash
+gh pr view --json number,title,headRefName,baseRefName        # current branch
+gh pr view 123 --json number,title,headRefName,baseRefName    # specific PR
+```
+
+**GitLab:**
+```bash
+BRANCH=$(git branch --show-current)
+glab mr list --source-branch "$BRANCH"                        # current branch → MR iid
+glab api projects/:id/merge_requests/$MR \
+  | jq '{iid, title, source_branch, target_branch, draft, has_conflicts, detailed_merge_status, sha}'
+```
+
+**No PR/MR for the branch?** Stop and say so: `/pr` creates it. Don't open one silently here.
+Exception: when the user explicitly asked for "/pr and /merge" in one go, create it first,
+with a `<!-- changelog -->` block (see `/pr`).
+
+**Nothing to merge?** If the branch is `main` with no commits ahead of `origin/main`, stop and report.
 
 ### 2. Pre-flight Checks
 
-Run all checks before proceeding:
-
+**GitHub:**
 ```bash
 gh pr view $PR --json mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,isDraft
 ```
 
-**Required conditions:**
+| Check | Must Be |
+|-------|---------|
+| `isDraft` | `false` |
+| `mergeable` | `MERGEABLE` |
+| `mergeStateStatus` | `CLEAN` or `UNSTABLE` |
+| `reviewDecision` | `APPROVED` (if required) |
+| `statusCheckRollup` | All `SUCCESS` or `NEUTRAL` |
 
-| Check | Command | Must Be |
-|-------|---------|---------|
-| Not a draft | `isDraft` | `false` |
-| Mergeable | `mergeable` | `MERGEABLE` |
-| Merge state | `mergeStateStatus` | `CLEAN` or `UNSTABLE` |
-| Reviews | `reviewDecision` | `APPROVED` (if required) |
-| CI checks | `statusCheckRollup` | All `SUCCESS` or `NEUTRAL` |
-
-**Output on issues:**
-
+**GitLab:**
+```bash
+glab api projects/:id/merge_requests/$MR \
+  | jq '{draft, has_conflicts, detailed_merge_status, pipeline: .head_pipeline.status}'
 ```
-Pre-flight Check Failed
-═══════════════════════════════════════════════════════════════
 
-PR #123: feat(auth): add OAuth support
+| Field | Must Be |
+|-------|---------|
+| `draft` | `false` |
+| `has_conflicts` | `false` |
+| `detailed_merge_status` | `mergeable` |
+| `head_pipeline.status` | `success`, or `null` when the project has no CI (see below) |
 
-✗ Draft PR — cannot merge drafts
-✗ Merge conflicts — rebase required
-✗ Reviews: Changes requested (2 pending comments)
-✗ CI: 1 failing check (test-unit)
+`detailed_merge_status` is `checking` or `approvals_syncing` for a few seconds after a push.
+That is not a failure: poll every 5 s, up to 40 s, before judging it.
 
-Resolution:
-  gh pr ready 123              # Mark as ready
-  git fetch && git rebase      # Fix conflicts
-  Address review comments      # Then re-request review
-  Fix failing tests            # Push to re-run CI
-
-Run /merge again when resolved.
+```bash
+for i in $(seq 1 8); do
+  S=$(glab api projects/:id/merge_requests/$MR | jq -r .detailed_merge_status)
+  [[ "$S" == "mergeable" ]] && break
+  [[ "$S" == "checking" || "$S" == "approvals_syncing" ]] || break
+  sleep 5
+done
+echo "$S"
 ```
+
+**CI still running** (GitHub `UNSTABLE`, GitLab `ci_still_running` or pipeline `running`/`pending`):
+wait 3 minutes up front (CI typically takes 3–5 min), then poll every 30 s. Don't poll in a
+tight loop from the start.
+
+```bash
+sleep 180
+for i in {1..10}; do
+  # GitHub
+  STATUS=$(gh pr view $PR --json statusCheckRollup -q \
+    '[.statusCheckRollup[] | select(.status != "COMPLETED")] | length')
+  [[ "$STATUS" == "0" ]] && break
+  # GitLab: P=$(glab api projects/:id/merge_requests/$MR | jq -r .head_pipeline.status)
+  #         [[ "$P" == "success" || "$P" == "failed" || "$P" == "canceled" ]] && break
+  echo "Still waiting... ($i/10)"
+  sleep 30
+done
+```
+
+Stop and report if any check fails. Don't proceed.
+
+**No CI at all** (GitLab `head_pipeline` is `null`; GitHub has no checks): the project's own gate
+replaces CI. Run it on the PR head, for example `make check` (or `cargo test` / `uv run pytest`
+plus lint), and stop if it fails. Say in the output that the local gate stood in for CI.
 
 **Output when ready:**
 
@@ -73,151 +124,204 @@ Run /merge again when resolved.
 Pre-flight Check Passed
 ═══════════════════════════════════════════════════════════════
 
-PR #123: feat(auth): add OAuth support
+PR #123: feat(auth): add OAuth support        (GitLab: MR !123)
 
 ✓ Not a draft
 ✓ No merge conflicts
-✓ Reviews: Approved (2 approvals)
-✓ CI: All checks passing (5/5)
+✓ Approved (or: no approval rule)
+✓ CI passing (5/5)                            (or: no CI; make check passed locally)
 
-Linked issues that will close:
-  #101 - Add OAuth login option
-  #98  - Support third-party authentication
-
-Merge method: squash (default)
+Linked issues that will close: #101, #98
 Branch to delete: feat/oauth-support
 
 Proceed? [Y/n]
 ```
 
-### 3. Detect Linked Issues
+### 3. Release Bump (done here, never in the PR)
 
-Find issues that will be closed by this merge:
+A PR carries **no version or changelog change**. `/merge` writes them, so two open PRs
+never conflict on version files or `CHANGELOG.md`.
+
+**First check how the project versions.** Read the head of `CHANGELOG.md`, the Makefile (a
+`version`/`release`/`bump` target wins over manual edits) and any ADR on versioning. If the
+project has **no `CHANGELOG.md` and no release yet**, or an ADR ties versions to a milestone,
+ask before bumping: don't start a release scheme on your own.
+
+Pre-check: if the PR diff touches a version file or `CHANGELOG.md`, warn and ask. That defeats this scheme.
 
 ```bash
-# From PR body and commits
+git diff --name-only origin/main...HEAD \
+  | grep -E '(^|/)(Cargo\.toml|Cargo\.lock|lib\.rs|pyproject\.toml|package(-lock)?\.json|CHANGELOG\.md)$'
+```
+
+**Always rebase before writing the bump.** Other PRs may have merged since you started. If you
+bump to X.85 and main already has X.85, you get a conflict and a wasted CI run.
+
+```bash
+git restore Cargo.lock 2>/dev/null || true    # discard local lockfile drift
+git fetch origin
+git rebase origin/main
+CURRENT=$(grep -m1 '^version' Cargo.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')  # read, don't assume
+echo "Current version on main: $CURRENT"
+```
+
+Determine the bump from the branch type:
+- `feat/*` → minor bump (0.X.0)
+- `fix/*` → patch bump (0.0.X)
+- All others → skip the bump and the changelog (no release commit; go to step 4)
+
+**Changelog entry** comes from the PR body, between `<!-- changelog -->` and `<!-- /changelog -->` (written by `/pr`):
+
+```bash
+# GitHub
+gh pr view $PR --json body -q .body | sed -n '/<!-- changelog -->/,/<!-- \/changelog -->/p' | sed '1d;$d'
+# GitLab
+glab api projects/:id/merge_requests/$MR | jq -r .description \
+  | sed -n '/<!-- changelog -->/,/<!-- \/changelog -->/p' | sed '1d;$d'
+```
+
+If the block is missing or empty, stop and ask. Don't invent an entry.
+Add it to `CHANGELOG.md` as a new `## [X.Y.Z] - YYYY-MM-DD` section.
+
+Files to update, by project type:
+
+**Rust:**
+1. `Cargo.toml`: `version = "X.Y.Z"` (workspace root if applicable)
+2. `src/lib.rs`: version constant, if present (skip when it is `env!("CARGO_PKG_VERSION")`)
+3. `Cargo.lock`: `cargo update -w` (refreshes the workspace's own entries)
+4. `CHANGELOG.md`: new section from the PR body block
+
+**Python:**
+1. `src/<package>/__init__.py`: `__version__ = "X.Y.Z"`
+2. `pyproject.toml`: `version = "X.Y.Z"`
+3. `README.md`: version badge or `## Version: X.Y.Z`
+4. `CHANGELOG.md`: new section from the PR body block
+
+**Node / frontend** (also in mixed repos): `npm version X.Y.Z --no-git-tag-version` updates
+`package.json` and `package-lock.json` together.
+
+**Generated files that record the version** (an export, a fixture, a SQL dump with an app
+version in it): regenerate them with the project's own command, and diff before committing.
+Only the version lines may change.
+
+**After the bump, grep the old version repo-wide** and check every hit in `git diff --cached --stat`.
+Leave unrelated hits alone (a document's own version, a schema version). Fix the rest:
+
+```bash
+git grep -n "$CURRENT" -- ':!CHANGELOG.md'
+```
+
+Run the project gate again (`make check` or equivalent) before committing.
+
+```bash
+git add CHANGELOG.md <the version files you changed>   # name files; never `git add -A`
+# --no-verify: the release commit only touches version and changelog files, not code.
+git commit --no-verify -m "chore: release vX.Y.Z"
+git push
+```
+
+**Pushing after the rebase:** if the rebase rewrote commits that were already pushed, plain
+`git push` is rejected. **Don't force-push on your own.** Ask the user first, then use
+`git push --force-with-lease`. If the rebase was a no-op, plain `git push` works. Use it.
+
+**Re-run CI after the push.** The release commit changes the head SHA, so earlier results no
+longer apply. Go back to the wait loop in step 2 against the new head. Without CI, rerun the
+local gate. Only then continue to step 4.
+
+### 4. Detect Linked Issues
+
+**GitHub:**
+```bash
 gh pr view $PR --json body,commits --jq '
-  [.body, (.commits[].messageBody // "")] |
-  join(" ") |
-  match("(closes?|fixes?|resolves?)\\s*#([0-9]+)"; "gi") |
-  .captures[1].string
+  [.body, (.commits[].messageBody // "")] | join(" ") |
+  match("(closes?|fixes?|resolves?)\\s*#([0-9]+)"; "gi") | .captures[1].string
 ' | sort -u
 ```
 
-**Keywords that auto-close:**
-- `Closes #N`, `Close #N`
-- `Fixes #N`, `Fix #N`
-- `Resolves #N`, `Resolve #N`
-
-If no linked issues found, warn:
-
-```
-Warning: No linked issues detected.
-If this PR should close an issue, consider:
-  gh pr edit 123 --body "$(gh pr view 123 --json body -q .body)
-
-Closes #N"
+**GitLab** (GitLab reports the issues it will close itself):
+```bash
+glab api projects/:id/merge_requests/$MR/closes_issues | jq -r '.[].iid'
 ```
 
-### 4. Merge the PR
+Warn if no linked issues are found.
+
+### 5. Merge
+
+**GitHub:** always use the API. `gh pr merge` fails with worktrees.
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api -X PUT repos/$REPO/pulls/$PR/merge -f merge_method=merge
+BRANCH=$(gh pr view $PR --json headRefName -q .headRefName)
+gh api -X DELETE repos/$REPO/git/refs/heads/$BRANCH 2>/dev/null || true
+```
+
+**GitLab:** `glab mr merge` goes through the API, so worktrees are fine.
+```bash
+glab mr merge $MR --remove-source-branch --yes
+```
+A `405 Method Not Allowed` right after a push means GitLab is still checking. Rerun the
+step 2 poll until `detailed_merge_status` is `mergeable`, then retry once.
+
+### 6. Tag the Release
+
+When step 3 made a release commit, tag **that commit** (not the merge commit) and push the tag:
 
 ```bash
-# Squash merge (default, cleaner history)
-gh pr merge $PR --squash --delete-branch
-
-# Alternative methods if requested:
-# gh pr merge $PR --merge --delete-branch    # Merge commit
-# gh pr merge $PR --rebase --delete-branch   # Rebase
+REL=$(git log origin/main --format=%H --grep='^chore: release v' -1)
+git tag -a "vX.Y.Z" "$REL" -m "vX.Y.Z: <one-line summary>"
+git push origin "vX.Y.Z"
 ```
 
-The `--delete-branch` flag removes the remote branch automatically.
+If tag signing fails (1Password needs the user), stop and say so. Don't bypass signing.
 
-### 5. Sync Local Repository
+### 7. Sync the Local Repository
 
 ```bash
-# Fetch latest and prune deleted remote refs
+BRANCH=<the PR's source branch>
+WORKTREE=$(git worktree list --porcelain | grep -B2 "branch refs/heads/$BRANCH" | grep "^worktree" | awk '{print $2}')
+
 git fetch --prune
 
-# Get the merged branch name
-BRANCH=$(gh pr view $PR --json headRefName -q .headRefName)
-
-# Switch to main if on the merged branch
-CURRENT=$(git branch --show-current)
-if [ "$CURRENT" = "$BRANCH" ]; then
-  git checkout main
+BASE_WORKTREE=$(git worktree list --porcelain | grep -B2 "branch refs/heads/main" | grep "^worktree" | awk '{print $2}')
+if [[ -n "$BASE_WORKTREE" ]]; then
+  git -C "$BASE_WORKTREE" pull origin main
 fi
 
-# Update main
-git pull origin main
-
-# Delete local branch (safe delete, won't delete unmerged)
-git branch -d "$BRANCH" 2>/dev/null || true
-```
-
-### 6. Verify Linked Issues
-
-After merge, confirm issues were closed:
-
-```bash
-# Check each linked issue
-for ISSUE in $LINKED_ISSUES; do
-  gh issue view $ISSUE --json state,stateReason -q '
-    "Issue #\(.number): \(.state) (\(.stateReason // "N/A"))"
-  '
-done
-```
-
-**Expected output:**
-
-```
-Verifying linked issues...
-  ✓ Issue #101: CLOSED (completed)
-  ✓ Issue #98: CLOSED (completed)
-```
-
-**If an issue didn't close** (wrong keyword, different repo, etc.):
-
-```
-Warning: Issue #99 is still OPEN
-This may happen if:
-  - The issue is in a different repository
-  - The closing keyword was malformed
-  - GitHub's linking didn't trigger
-
-To close manually:
-  gh issue close 99 --reason completed --comment "Closed via PR #123"
-```
-
-### 7. Complete Swarm Job & Notify Agents
-
-After merge, update the swarm queue and signal other agents:
-
-```bash
-# Complete any swarm job associated with this PR's issues (Phase 2)
-for ISSUE in $LINKED_ISSUES; do
-  JOB_ID=$(swarm-job list active 2>/dev/null | grep "#$ISSUE" | awk '{print $1}')
-  if [[ -n "$JOB_ID" ]]; then
-    # Record PR merged event (Phase 2)
-    swarm-daemon hook JOB_PR_MERGED "$JOB_ID" "$PR"
-  fi
-done
-
-# Signal other agents to sync (reactive action - Phase 2)
-# Note: This can also be handled by swarm-daemon automatically
-if tmux has-session -t "claude-$PROJECT" 2>/dev/null; then
-  # Get all panes and notify them
-  for pane in $(tmux list-panes -t "claude-$PROJECT:agents" -F '#{pane_index}'); do
-    tmux send-keys -t "claude-$PROJECT:agents.$pane" \
-      "[sync] main updated via PR #$PR - run: git fetch && git rebase origin/main" Enter
-  done
+if [[ -n "$WORKTREE" ]]; then
+  AGENT_BRANCH=$(git -C "$WORKTREE" branch --show-current | grep agent || echo "main")
+  git -C "$WORKTREE" checkout "$AGENT_BRANCH" 2>/dev/null && \
+    git branch -D "$BRANCH" 2>/dev/null || true
+else
+  git checkout main 2>/dev/null; git pull -q origin main
+  git branch -D "$BRANCH" 2>/dev/null || true
 fi
 ```
 
-This ensures:
-- Swarm queue reflects completed work
-- Other agents know to sync their branches
+If the repository is a **git submodule** of a parent repo, commit the new pointer in the parent
+(`git add <path> && git commit -m "store: <name> pointer"`) and push. Do this for each level up.
 
----
+### 8. Verify Linked Issues
+
+**GitHub:**
+```bash
+for ISSUE in $LINKED_ISSUES; do
+  gh issue view $ISSUE --json number,state,stateReason -q '"Issue #\(.number): \(.state) (\(.stateReason // "N/A"))"'
+done
+```
+
+**GitLab:**
+```bash
+for ISSUE in $LINKED_ISSUES; do
+  glab issue view $ISSUE | grep -E '^(title|state):'
+done
+```
+
+If an issue is still open, offer to close it:
+
+```bash
+gh issue close $ISSUE --reason completed --comment "Closed via PR #$PR"          # GitHub
+glab issue close $ISSUE && glab issue note $ISSUE -m "Closed via !$MR"           # GitLab
+```
 
 ## Output
 
@@ -225,101 +329,65 @@ This ensures:
 PR Merged Successfully
 ═══════════════════════════════════════════════════════════════
 
-✓ PR #123 merged into main (squash)
+✓ CHANGELOG.md updated, [0.4.0] section added
+✓ Version bumped: 0.3.1 → 0.4.0 (Cargo.toml, Cargo.lock, package.json)
+✓ Release commit: abc1233 chore: release v0.4.0
+✓ CI re-run on release commit passed          (or: no CI; make check passed locally)
+✓ PR #123 merged into main                    (GitLab: MR !123)
+✓ Tag v0.4.0 on abc1233 pushed
 ✓ Remote branch 'feat/oauth-support' deleted
 ✓ Local branch 'feat/oauth-support' deleted
-✓ Switched to main
-✓ Pulled latest changes
-✓ Pruned stale remote refs
-✓ Swarm job completed (if applicable)
-✓ Notified agents to sync (if in swarm mode)
-
-Commit: abc1234 feat(auth): add OAuth support (#123)
+✓ main pulled and up to date; stale refs pruned
+✓ Parent repo pointer updated                 (submodules only)
 
 Linked Issues:
   ✓ #101 closed (completed)
   ✓ #98 closed (completed)
 
 Repository is clean and up to date.
-
-Next:
-  /pr list          See remaining PRs
-  /changelog        Update changelog for release
-  /version          Check version consistency
 ```
 
-## Dry Run Mode
-
-With `--dry-run`, show everything that would happen without executing:
+## Dry Run
 
 ```
 /merge --dry-run
 
-Dry Run: PR #123
+Dry Run: PR #123 (GitHub) / MR !123 (GitLab)
 ═══════════════════════════════════════════════════════════════
 
 Would perform:
-  1. Merge PR #123 into main (squash)
-  2. Delete remote branch: origin/feat/oauth-support
-  3. Delete local branch: feat/oauth-support
-  4. Switch to main branch
-  5. Pull latest changes
-  6. Prune stale refs
+  1. Rebase on main, bump version to 0.4.0, add CHANGELOG.md section from PR body
+  2. Commit + push: chore: release v0.4.0
+  3. Wait for CI on the new head (or run the local gate when there is no CI)
+  4. Merge into main
+  5. Tag v0.4.0 on the release commit and push it
+  6. Delete remote and local branch: feat/oauth-support
+  7. Pull main, prune stale refs, update the parent pointer if this is a submodule
 
-Issues that would close:
-  #101 - Add OAuth login option
-  #98  - Support third-party authentication
+Issues that would close: #101, #98
 
 No changes made. Run without --dry-run to execute.
 ```
 
 ## Edge Cases
 
-**On the branch being merged:**
-Automatically switches to main first before deleting.
+**No PR/MR exists for the branch:** stop and point to `/pr`, unless the user asked for both.
 
-**Local branch has unpushed commits:**
-```
-Warning: Local branch has commits not in the PR:
-  abc1234 WIP: debugging
-  def5678 temp changes
+**Local branch has unpushed commits:** warn and ask before deleting.
 
-These will be lost. Options:
-  1. Delete anyway (lose commits)
-  2. Keep local branch
-  3. Cancel merge
+**PR from a fork:** skip remote branch deletion (no permission).
 
-Choose [1/2/3]:
-```
+**Protected branch / squash not allowed:** fall back to a merge commit.
 
-**PR from fork:**
-```
-Note: PR is from a fork (user/repo).
-Remote branch deletion will be skipped (no permission).
-```
+**GitLab API returns HTML 403 (IP allow-list):** stop and ask the user to connect the VPN.
 
-**Protected branch rules:**
-If squash isn't allowed, fall back to merge commit:
-```
-Note: Squash merge not allowed by branch protection.
-Using merge commit instead.
-```
-
-## Merge Methods
-
-| Method | Flag | When to Use |
-|--------|------|-------------|
-| **Squash** | `--squash` | Default. Clean single commit. Feature branches. |
-| **Merge** | `--merge` | Preserve full history. Long-running branches. |
-| **Rebase** | `--rebase` | Linear history. Small changes. |
-
-Override default: `/merge #123 --merge` or `/merge #123 --rebase`
+**Commit or tag signing fails:** stop; the user has to approve the signature. Never use `--no-gpg-sign`.
 
 ## Safety
 
-- Never merges draft PRs
-- Never merges with failing required checks
+- Never merges draft PRs/MRs
+- Never merges with failing required checks, or without a passing local gate when there is no CI
 - Never merges with unresolved conflicts
+- Never force-pushes without asking
 - Never force-deletes unmerged local branches
 - Always confirms before proceeding
-- Dry-run available to preview actions

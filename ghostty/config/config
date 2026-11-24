@@ -18,6 +18,7 @@ adjust-cell-height = 10%
 background = 1e1e2e
 foreground = cdd6f4
 
+
 # Normal colors
 palette = 0=#45475a
 palette = 1=#f38ba8
@@ -77,8 +78,9 @@ cursor-style-blink = false
 # =============================================================================
 copy-on-select = true
 mouse-hide-while-typing = true
+mouse-scroll-multiplier = 1
 confirm-close-surface = false
-scrollback-limit = 10000
+scrollback-limit = 50000
 
 # Shell integration (automatic with bash/zsh/fish)
 shell-integration = detect
@@ -90,11 +92,18 @@ shell-integration-features = cursor,sudo,title
 # Global hotkey to summon Ghostty from anywhere (Alt+Enter)
 keybind = global:alt+enter=toggle_quick_terminal
 
-# Unbind Alt+arrow so tmux can use them for pane switching
+# Unbind Alt+arrow so tmux can use them for pane switching (Windows-style keyboards)
 keybind = alt+left=unbind
 keybind = alt+right=unbind
 keybind = alt+up=unbind
 keybind = alt+down=unbind
+
+# CMD+arrow for pane switching (macOS keyboards)
+# Sends the same CSI modifier sequence as Alt+arrow so tmux M-* bindings catch both
+keybind = super+left=text:\x1b[1;3D
+keybind = super+right=text:\x1b[1;3C
+keybind = super+up=text:\x1b[1;3A
+keybind = super+down=text:\x1b[1;3B
 
 # Quick actions
 keybind = super+k=clear_screen
@@ -111,3 +120,7 @@ keybind = super+two=goto_tab:2
 keybind = super+three=goto_tab:3
 keybind = super+four=goto_tab:4
 keybind = super+five=goto_tab:5
+
+
+# theme = Catppuccin Mocha
+theme = Builtin Tango Light

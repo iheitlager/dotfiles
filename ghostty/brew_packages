@@ -7,7 +7,7 @@
 TMPPATH=$PATH
 PATH=/usr/local/bin:$PATH
 
-brew install --cask ghostty || brew upgrade ghostty
-brew install --cask font-jetbrains-mono-nerd-font || brew upgrade font-jetbrains-mono-nerd-font
+brew install --cask ghostty || brew upgrade --cask ghostty
+brew install --cask font-jetbrains-mono-nerd-font || brew upgrade --cask font-jetbrains-mono-nerd-font
 
 export PATH=$TMPPATH

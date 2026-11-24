@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+
+# opam - XDG compliant would require OPAMROOT, default is ~/.opam
+export OPAMROOT="$XDG_DATA_HOME/opam"
+
+# Inject opam environment (PATH, MANPATH, etc.) if opam is available
+if command -v opam &>/dev/null; then
+    eval "$(opam env)"
+fi

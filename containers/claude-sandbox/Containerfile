@@ -1,140 +1,76 @@
-# syntax=docker/dockerfile:1.4
+# Pinned base image (digest pins all arches via the multi-arch index).
+# Bump with: docker buildx imagetools inspect node:20-bookworm-slim --format '{{.Manifest.Digest}}'
+FROM node:20-bookworm-slim@sha256:f93745c153377ee2fbbdd6e24efcd03cd2e86d6ab1d8aa9916a3790c40313a55
 
-#
-# Stage 1: Builder - Download and prepare binaries
-#
-FROM python:3.12-slim AS builder
+# When bumping a version ARG, also refresh its sha256 ARG in the same commit.
+ARG CLAUDE_CODE_VERSION=2.1.112
+ARG GLAB_VERSION=1.92.1
+ARG GLAB_DEB_SHA256_AMD64=18048e5cb2cbc92eb31d4190852c6da32f6713633cfefc7b3fe00c18806c4f53
+ARG GLAB_DEB_SHA256_ARM64=f12a5e5e820b4c0b2803de4136884a90a64918bc3c7fd309f8c5a3ca9455fa8b
+ARG AWSCLI_VERSION=2.34.31
+ARG AWSCLI_SHA256_X86_64=d1540db414d48650c87cea7e2b585368b864d2be5fc4034f9af3b1e3dc2f678a
+ARG AWSCLI_SHA256_AARCH64=932ff651397d5c56f78987fcdf736dfc62c2a32ed2c0e9c9ae96e9a7ff1e85ea
 
-ARG CLAUDE_CODE_VERSION=2.1.31
-ARG UV_VERSION=0.5.11
-ARG GIT_DELTA_VERSION=0.18.2
-
-WORKDIR /tmp/build
-
-# Install minimal build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    wget \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Download Claude CLI binary from GCS (official distribution)
-RUN ARCH=$(uname -m) && \
-    case "$ARCH" in \
-        x86_64) CLAUDE_ARCH="x64" ;; \
-        aarch64) CLAUDE_ARCH="arm64" ;; \
-        arm64) CLAUDE_ARCH="arm64" ;; \
-        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
-    esac && \
-    GCS_BASE="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases" && \
-    wget "${GCS_BASE}/${CLAUDE_CODE_VERSION}/linux-${CLAUDE_ARCH}/claude" \
-        -O /tmp/build/claude && \
-    chmod +x /tmp/build/claude
-
-# Download git-delta
-RUN ARCH=$(dpkg --print-architecture) && \
-    wget "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" \
-        -O /tmp/build/git-delta.deb
-
-# Download UV installer
-RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh -o /tmp/build/uv-install.sh
-
-#
-# Stage 2: Runtime - Final image
-#
-FROM python:3.12-slim
-
-ARG TZ=Europe/Amsterdam
-ENV TZ="$TZ"
-
-# XDG Base Directory Specification
-ENV XDG_CONFIG_HOME=/home/agent/.config
-ENV XDG_CACHE_HOME=/home/agent/.cache
-ENV XDG_DATA_HOME=/home/agent/.local/share
-ENV XDG_STATE_HOME=/home/agent/.local/state
-
-# Install runtime dependencies (no build-essential, no nodejs/npm)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    less \
     git \
-    procps \
-    sudo \
-    fzf \
-    man-db \
-    unzip \
-    gnupg2 \
-    gh \
-    iptables \
-    ipset \
-    iproute2 \
-    dnsutils \
-    aggregate \
-    jq \
-    nano \
-    vim \
-    curl \
-    wget \
+    tmux \
+    ncurses-term \
     ca-certificates \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    curl \
+    jq \
+    less \
+    openssh-client \
+    gnupg \
+    unzip \
+ && rm -rf /var/lib/apt/lists/*
 
-# Create agent user with proper XDG directories
-RUN useradd -m -s /bin/bash agent && \
-    mkdir -p \
-        /home/agent/.config \
-        /home/agent/.cache \
-        /home/agent/.local/share \
-        /home/agent/.local/state \
-        /home/agent/.local/bin \
-        /workspace \
-        /commandhistory && \
-    touch /commandhistory/.bash_history && \
-    chown -R agent:agent \
-        /home/agent \
-        /workspace \
-        /commandhistory
+# GitHub CLI (keyring fetched at build; TODO: commit the keyring to the repo)
+RUN install -d -m 0755 /etc/apt/keyrings \
+ && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+ && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends gh \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy binaries from builder
-COPY --from=builder /tmp/build/git-delta.deb /tmp/git-delta.deb
-COPY --from=builder /tmp/build/uv-install.sh /tmp/uv-install.sh
-# Claude will be installed to ~/.local/bin by the agent user below
+# GitLab CLI (glab) — pinned version + sha256 verify
+RUN ARCH=$(dpkg --print-architecture); \
+    case "$ARCH" in \
+      amd64) SHA="${GLAB_DEB_SHA256_AMD64}" ;; \
+      arm64) SHA="${GLAB_DEB_SHA256_ARM64}" ;; \
+      *) echo "Unsupported arch for glab: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" \
+      -o /tmp/glab.deb \
+ && echo "${SHA}  /tmp/glab.deb" | sha256sum -c - \
+ && apt-get install -y --no-install-recommends /tmp/glab.deb \
+ && rm /tmp/glab.deb
 
-# Install git-delta
-RUN dpkg -i /tmp/git-delta.deb && rm /tmp/git-delta.deb
+# AWS CLI v2 — pinned version + sha256 verify
+RUN set -e; ARCH=$(uname -m); \
+    case "$ARCH" in \
+      x86_64)  SHA="${AWSCLI_SHA256_X86_64}" ;; \
+      aarch64) SHA="${AWSCLI_SHA256_AARCH64}" ;; \
+      *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}-${AWSCLI_VERSION}.zip" -o /tmp/awscli.zip \
+ && echo "${SHA}  /tmp/awscli.zip" | sha256sum -c - \
+ && unzip -q /tmp/awscli.zip -d /tmp \
+ && /tmp/aws/install \
+ && rm -rf /tmp/aws /tmp/awscli.zip
 
-# Environment variables
-ENV DEVCONTAINER=true
-ENV ANTHROPIC_DISABLE_AUTO_UPDATE=1
-ENV SHELL=/bin/bash
-ENV EDITOR=nano
-ENV VISUAL=nano
+# claude-code — pinned version, no lifecycle scripts
+RUN npm install -g --ignore-scripts "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
-WORKDIR /workspace
+ENV CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 \
+    IS_SANDBOX=1
 
-# Switch to agent user and install UV
-USER agent
-RUN sh /tmp/uv-install.sh
-ENV PATH="/home/agent/.cargo/bin:/home/agent/.local/bin:$PATH"
+# Container runs as root by design: IS_SANDBOX=1 + --cap-drop ALL + no-new-privileges
+# make the container itself the security boundary. Do not add a USER directive
+# without reworking the host-config bind-mount layout.
 
-# Install Claude to agent's ~/.local/bin (native installation location)
-COPY --from=builder --chown=agent:agent /tmp/build/claude /home/agent/.local/bin/claude
-RUN chmod +x /home/agent/.local/bin/claude
+WORKDIR /workspaces
 
-# Clean up as root
-USER root
-RUN rm -f /tmp/uv-install.sh
-
-# Pre-cache common Python packages using BuildKit cache mount
-RUN --mount=type=cache,target=/home/agent/.cache/uv,uid=1000,gid=1000 \
-    uv pip install --system \
-    pip \
-    setuptools \
-    wheel
-
-# Copy and set up scripts
-USER root
-COPY init-firewall.sh /usr/local/bin/
-COPY launch-claude.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/launch-claude.sh
-
-# Container must run as root to set up firewall, then switches to agent
-ENTRYPOINT ["/usr/local/bin/launch-claude.sh"]
+CMD ["claude"]

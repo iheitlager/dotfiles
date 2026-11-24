@@ -15,6 +15,38 @@ starttime=$(date +"%s")
 FORCE_GIT=false
 SKIP_BREW=false
 
+MACHINE_PROFILE_FILE="$HOME/.config/dotfiles/machine_profile"
+
+# Show help using bat if available (pattern from local/lib/shell-common.sh)
+_show_help() {
+    if command -v bat &>/dev/null; then
+        bat --plain --language=help
+    else
+        cat
+    fi
+}
+
+usage() {
+    _show_help <<'EOF'
+Usage: bootstrap [OPTIONS]
+
+  Prepare the environment with dotfiles. Sets up XDG directories,
+  configures git, installs Homebrew packages, and links dotfiles.
+
+OPTIONS
+  -g, --git              Force regeneration of ~/.local/gitconfig
+      --no-brew          Skip Homebrew package installation
+  -p, --profile PROFILE  Set machine profile: laptop, workstation, or auto
+  -h, --help             Show this help message
+
+EOF
+}
+
+# Check for help before the sudo prompt
+for arg in "$@"; do
+    [[ "$arg" == "-h" || "$arg" == "--help" ]] && usage && exit 0
+done
+
 # make sure we get the sudo password at the start
 sudo -v
 
@@ -46,6 +78,63 @@ success () {
 fail () {
   printf "\r\033[2K  [\033[0;31mFAIL\033[0m] $1\n"
   echo ''
+}
+
+# Resolve machine profile: laptop or workstation
+_resolve_auto_profile () {
+  local hw_model
+  hw_model=$(sysctl -n hw.model 2>/dev/null || echo "")
+  if [[ "$hw_model" == Macmini* ]]; then
+    echo "workstation"
+  else
+    echo "laptop"
+  fi
+}
+
+setup_machine_profile () {
+  # Already set via environment — honour it and persist if new
+  if [ -n "$MACHINE_PROFILE" ]; then
+    if [ "$MACHINE_PROFILE" = "auto" ]; then
+      MACHINE_PROFILE=$(_resolve_auto_profile)
+      success "machine profile auto-detected: $MACHINE_PROFILE"
+    else
+      success "machine profile from environment: $MACHINE_PROFILE"
+    fi
+    mkdir -p "$(dirname "$MACHINE_PROFILE_FILE")"
+    echo "$MACHINE_PROFILE" > "$MACHINE_PROFILE_FILE"
+    export MACHINE_PROFILE
+    return
+  fi
+
+  # Already persisted from a previous run
+  if [ -f "$MACHINE_PROFILE_FILE" ]; then
+    MACHINE_PROFILE=$(cat "$MACHINE_PROFILE_FILE")
+    success "machine profile loaded: $MACHINE_PROFILE"
+    export MACHINE_PROFILE
+    return
+  fi
+
+  # Ask the user
+  echo ""
+  user "  What is the role of this machine?\n"
+  printf "    1) laptop      (default: sleep/standby enabled)\n"
+  printf "    2) workstation (always-on: no sleep, wake-on-LAN)\n"
+  printf "    3) auto-detect (Mac mini → workstation, otherwise laptop)\n"
+  printf "\n"
+  user "  Enter choice [1/2/3, default: 1]: "
+  read -r profile_choice
+
+  case "$profile_choice" in
+    2) MACHINE_PROFILE="workstation" ;;
+    3) MACHINE_PROFILE=$(_resolve_auto_profile)
+       success "auto-detected profile: $MACHINE_PROFILE" ;;
+    *) MACHINE_PROFILE="laptop" ;;
+  esac
+
+  mkdir -p "$(dirname "$MACHINE_PROFILE_FILE")"
+  echo "$MACHINE_PROFILE" > "$MACHINE_PROFILE_FILE"
+  success "machine profile set: $MACHINE_PROFILE (saved to $MACHINE_PROFILE_FILE)"
+  export MACHINE_PROFILE
 }
 
 # Create XDG Base Directory structure
@@ -97,8 +186,8 @@ validate_config_structure () {
 
   local conflicts=()
 
-  # Check for topic-specific config directories
-  for topic_config in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config' ! -path "$DOTFILES/config"); do
+  # Check for topic-specific config directories (top-level and nested topics)
+  for topic_config in $(find "$DOTFILES" -maxdepth 3 -type d -name 'config' ! -path "$DOTFILES/config"); do
     local topic=$(basename $(dirname "$topic_config"))
     local general_config="$DOTFILES/config/$topic"
 
@@ -129,7 +218,7 @@ validate_config_structure () {
 
 # git gitconfig generator - creates local config with user info and signing key
 setup_gitconfig () {
-  local local_gitconfig="$HOME/.local/gitconfig"
+  local local_gitconfig="$HOME/.config/git/local"
   local force=$1
 
   if [ -f "$local_gitconfig" ] && [ "$force" != "true" ]; then
@@ -191,7 +280,8 @@ link_config_files () {
   local overwrite_all=false backup_all=false skip_all=false
 
   # Link topic-specific config directories: ~/.dotfiles/<topic>/config/ → ~/.config/<topic>/
-  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config' ! -path "$DOTFILES/config")
+  # Also covers nested topics: ~/.dotfiles/<group>/<topic>/config/ → ~/.config/<topic>/
+  for src in $(find "$DOTFILES" -maxdepth 3 -type d -name 'config' ! -path "$DOTFILES/config")
   do
     local topic=$(basename $(dirname "$src"))
     local dst="$HOME/.config/$topic"
@@ -293,7 +383,7 @@ install_dotfiles () {
 
   local overwrite_all=false backup_all=false skip_all=false
 
-  for src in $(find "$DOTFILES" -maxdepth 2 -name '*.symlink')
+  for src in $(find "$DOTFILES" -maxdepth 3 -name '*.symlink')
   do
     dst="$HOME/.$(basename "${src%.*}")"
     link_file "$src" "$dst"
@@ -318,7 +408,7 @@ install_brew_packages () {
 run_installers () {
   info "run installers for topic packages"
   echo -n "" > /tmp/dotfiles-install
-  for src in $(find "$DOTFILES" -maxdepth 2 -name 'install.sh')
+  for src in $(find "$DOTFILES" -maxdepth 3 -name 'install.sh')
   do
     if sh -c "${src}" >> /tmp/dotfiles-install 2>&1
     then
@@ -343,6 +433,14 @@ while [[ $# -gt 0 ]]; do
       SKIP_BREW=true
       shift
       ;;
+    -p|--profile)
+      MACHINE_PROFILE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -351,6 +449,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 setup_xdg_dirs
+setup_machine_profile
 purge_stale_symlinks
 validate_config_structure
 setup_gitconfig $FORCE_GIT

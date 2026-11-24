@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Invalidate dotfiles shell cache after each commit so alias/env changes
+# take effect on the next shell open without needing `touch $DOTFILES`.
+DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
+touch "$DOTFILES"

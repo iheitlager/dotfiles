@@ -4,11 +4,20 @@
 
 
 # launch-agents
-# Version: 0.8.1
+# Version: 0.11.0
 #
 # Changelog:
+# 0.11.0 Add --vibe/-m: run vibe instead of claude (model from ~/.vibe/config.toml);
+#       pre-trusts worktree dirs (AGENTS.md is trustable content for vibe)
+# 0.10.1 opencode v2 dropped --model on the TUI: select model via OPENCODE_CONFIG + --standalone
+# 0.10.0 Add --opencode/-o (opencode + mistral/zai-glm-5-3, override via OPENCODE_MODEL); classic layout moves to -c
+# 0.9.4 Add --no-monitors flag; allow -n 1
+# 0.9.3 Add --main flag: adds a final shell window in the main repo directory
+# 0.9.2 Default -n 2 to sonnet/sonnet (use --opus for opus distribution)
+# 0.9.1 Default -n 2 to opus/opus; fix window switch landing on left (claude) pane
+# 0.9.0 Add disk health check: warn/clean runaway Claude tmp output files on startup
 # 0.8.1 Set Ghostty window title for workspace and swarm modes
-# 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-o
+# 0.8.0 New default: per-agent windows (claude|shell); classic layout via --classic/-c
 # 0.7.0 Default to sonnet, --opus flag enables opus-based distribution
 # 0.6.0 Added --daemon/-d flag for task-watcher integration
 # 0.5.2 Improved resilience: smart defaults, restart command, better session handling
@@ -81,16 +90,121 @@ AGENT_COUNT=2
 FORCE=false
 VERBOSE=false
 EQUAL_DISTRIBUTION=false
-DAEMON_MODE=false
 OPUS_MODE=false
+OPENCODE_MODE=false
+OPENCODE_MODEL="${OPENCODE_MODEL:-mistral/zai-glm-5-3}"
+VIBE_MODE=false
 CLASSIC_MODE=false
+MAIN_WINDOW=false
+NO_MONITORS=false
 SKIP_PERMISSIONS="--permission-mode acceptEdits"
 ALLOWED_TOOLS=''
 # ALLOWED_TOOLS='--allowedTools "git *" --allowedTools "gh *" --allowedTools Read --allowedTools Write --allowedTools Edit --allowedTools Bash'
 
+# opencode v2's TUI has no --model flag. Write a one-key config file and point
+# OPENCODE_CONFIG at it; --standalone is required because the shared background
+# service does not see the pane's environment.
+opencode_cmd() {
+    local model="$1"
+    local dir="${XDG_CACHE_HOME:-$HOME/.cache}/launch-agents"
+    local cfg="$dir/opencode-${model//\//_}.json"
+    mkdir -p "$dir"
+    printf '{"model":"%s"}\n' "$model" > "$cfg"
+    echo "OPENCODE_CONFIG='$cfg' opencode --standalone"
+}
+
+# vibe's TUI has no usable --model flag (headless only) and its model comes
+# from ~/.vibe/config.toml, so agents run plain `vibe`. Worktrees contain
+# AGENTS.md (trustable content): without trust, vibe ignores it and shows a
+# dialog in unattended panes — so pre-trust the directory.
+trust_vibe_dir() {
+    local dir="$1"
+    local trust_file="$HOME/.vibe/trusted_folders.toml"
+    command -v vibe &>/dev/null || return 0
+    [[ -d "$dir" ]] || return 0
+    if [[ -f "$trust_file" ]] && grep -qF "\"$dir\"" "$trust_file"; then
+        return 0
+    fi
+    mkdir -p "$HOME/.vibe"
+    if [[ ! -f "$trust_file" ]]; then
+        printf 'trusted = ["%s"]\nuntrusted = []\n' "$dir" > "$trust_file"
+    else
+        awk -v p="$dir" '
+            /^trusted = \[/ {
+                if (index($0, p) != 0) { print; next }
+                line = $0
+                sub(/\][[:space:]]*$/, "", line)
+                if (line ~ /\[[[:space:]]*$/)
+                    print line "\"" p "\"]"
+                else
+                    print line ", \"" p "\"]"
+                next
+            }
+            { print }
+        ' "$trust_file" > "$trust_file.tmp" && mv "$trust_file.tmp" "$trust_file"
+    fi
+    debug "trusted $dir for vibe"
+}
+
 debug() {
     if [[ "$VERBOSE" == true ]]; then
         echo -e "${BOLD}${BLUE}[DEBUG]${NC} $*" >&2
+    fi
+}
+
+check_disk_health() {
+    local threshold_mb=100
+    local warn_free_gb=5
+    local claude_tmp
+    claude_tmp=$(ls -d /private/tmp/claude-* 2>/dev/null | head -1)
+
+    # Check free disk space
+    local free_gb
+    free_gb=$(df -g /System/Volumes/Data 2>/dev/null | awk 'NR==2 {print $4}')
+    if [[ -n "$free_gb" ]] && (( free_gb < warn_free_gb )); then
+        echo -e "${YELLOW}Warning: only ${free_gb}GB free on disk${NC}"
+    fi
+
+    [[ -z "$claude_tmp" ]] && return
+
+    # Find large output files
+    local large_files=()
+    local large_sizes=()
+    while IFS= read -r -d '' file; do
+        local size_bytes size_mb
+        size_bytes=$(stat -f%z "$file" 2>/dev/null || echo 0)
+        size_mb=$((size_bytes / 1024 / 1024))
+        if (( size_mb >= threshold_mb )); then
+            large_files+=("$file")
+            large_sizes+=("$(du -sh "$file" 2>/dev/null | cut -f1)")
+        fi
+    done < <(find "$claude_tmp" -name "*.output" -type f -print0 2>/dev/null)
+
+    [[ ${#large_files[@]} -eq 0 ]] && return
+
+    echo -e "${YELLOW}Warning: large Claude task output files found:${NC}"
+    for i in "${!large_files[@]}"; do
+        echo -e "  ${RED}[${large_sizes[$i]}]${NC} ${large_files[$i]}"
+    done
+
+    if [[ "$FORCE" == true ]]; then
+        for file in "${large_files[@]}"; do
+            rm -f "$file"
+            echo -e "  ${GREEN}deleted${NC} $file"
+        done
+        echo ""
+    else
+        echo ""
+        read -r -p "Delete these files? [y/N] " answer
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
+            for file in "${large_files[@]}"; do
+                rm -f "$file"
+                echo -e "  ${GREEN}deleted${NC} $file"
+            done
+        else
+            echo -e "${YELLOW}Skipped. Use --force to auto-clean on startup.${NC}"
+        fi
+        echo ""
     fi
 }
 
@@ -114,22 +228,25 @@ Commands:
     info            Show status of agents, models, and tasks
 
 Options:
-    -n COUNT           Number of agents: 2, 3, 4, or 6 (default: 2)
-    -d, --daemon       Run task-watcher daemon (monitors queue, notifies agents)
-    -o, --classic      Use classic multi-pane layout (all agents in one window)
+    -n COUNT           Number of agents: 1, 2, 3, 4, or 6 (default: 2)
+-c, --classic      Use classic multi-pane layout (all agents in one window)
+    -o, --opencode     Run opencode instead of claude (default mistral/zai-glm-5-3; override with OPENCODE_MODEL)
+    -m, --vibe         Run vibe instead of claude (model from ~/.vibe/config.toml)
     --opus             Use opus-based model distribution (default: all sonnet)
     --equal            For n=6, use equal distribution (Option 5) instead of default
+    --main             Add a final shell window in the main repo directory
+    --no-monitors      Skip the ctop/htop monitors window (workspace command only)
     -v, --verbose      Print commands being executed
-    --force            Force restart or clean (skips prompts)
+    -f, --force        Force restart or clean (skips prompts, auto-cleans disk)
     --yolo             Skip permission prompts (Claude agents only)
     -h, --help         Show this help message
 
 Layouts (default):
-    2 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  daemon
-    3 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  agent-3 [claude│shell]  daemon
-    4 agents        agent-1..4 [claude│shell each]  daemon
+    2 agents        agent-1 [claude│shell]  agent-2 [claude│shell]
+    3 agents        agent-1 [claude│shell]  agent-2 [claude│shell]  agent-3 [claude│shell]
+    4 agents        agent-1..4 [claude│shell each]
 
-Layouts (--classic / -o):
+Layouts (--classic / -c):
     2 agents        agents: agent-1 │ agent-2   +  shell-1  shell-2
     3 agents        agents: agent-1 │ agent-2 / agent-3   +  shell-1..3
     4 agents        agents: agent-1 / agent-3 │ agent-2 / agent-4   +  shell-1..4
@@ -143,8 +260,7 @@ Clients & Models:
 Examples:
     launch-agents                   Smart default: start or attach
     launch-agents -n 4 start        Start 4 agents
-    launch-agents -d start          Start with task-watcher daemon
-    launch-agents workspace         Simple workspace (claude + shell)
+launch-agents workspace         Simple workspace (claude + shell)
     launch-agents info              Show swarm status
     launch-agents stop              Stop all agents
     launch-agents clean             Remove merged worktrees
@@ -164,8 +280,10 @@ get_client() {
     local count=$2
 
     case $count in
-        2|3|4)
-            echo "claude"
+        1|2|3|4)
+            if [[ "$OPENCODE_MODE" == true ]]; then echo "opencode"
+            elif [[ "$VIBE_MODE" == true ]]; then echo "vibe"
+            else echo "claude"; fi
             ;;
         6)
             if [[ "$EQUAL_DISTRIBUTION" == true ]]; then
@@ -206,7 +324,23 @@ get_model() {
         fi
     fi
 
-    # Claude models: default to sonnet, --opus enables opus-based distribution
+    # opencode: single configurable model (n=1-4 only, see get_client)
+    if [[ "$OPENCODE_MODE" == true && "$count" -le 4 ]]; then
+        echo "$OPENCODE_MODEL"
+        return
+    fi
+
+    # vibe: single model from the user's vibe config (n=1-4 only, see get_client)
+    if [[ "$VIBE_MODE" == true && "$count" -le 4 ]]; then
+        echo "vibe-default"
+        return
+    fi
+
+    # Claude models: default is sonnet; --opus enables opus for larger configs
+    if [[ "$count" -eq 2 ]]; then
+        echo "sonnet"
+        return
+    fi
     if [[ "$OPUS_MODE" == true ]]; then
         case $count in
             2)
@@ -402,7 +536,7 @@ create_agent_instructions() {
     cat > "$worktree_path/AGENTS.md" << EOF
 # Agent Instructions
 
-You are agent-$agent running $model (via $client) in a peer swarm for project: $REPO_NAME
+You are agent-$agent running $model (via $client) for project: $REPO_NAME
 
 ## Identity
 
@@ -410,163 +544,20 @@ You are agent-$agent running $model (via $client) in a peer swarm for project: $
 - Client: $client
 - Model: $model
 - Worktree: $worktree_path
-- Shared state: $SHARED_CONTEXT
-
-## Receiving Orders
-
-Users may talk to you directly. When receiving a request:
-
-1. Assess complexity:
-   - Simple: docs, formatting, simple tests
-   - Moderate: standard features, refactors
-   - Complex: architecture, tricky bugs, design
-
-2. Decide:
-   - Small task + you match capability → do it directly
-   - Large task → break into subtasks, create job files
-   - Wrong capability tier → create a job for a better-suited agent
-
-## Job Queue
-
-Use \`swarm-job\` for all job operations:
-
-\`\`\`bash
-# List all jobs (pending/active/done)
-swarm-job list
-
-# List only pending jobs with scores
-swarm-job list pending
-
-# Claim best matching job for your model tier
-swarm-job claim
-
-# Claim specific job
-swarm-job claim job-1737372800-12345
-
-# Complete a job
-swarm-job complete job-1737372800-12345
-swarm-job complete job-1737372800-12345 -r "merged to main"
-
-# Create a new job for others
-swarm-job new "Job title" -p high -c complex
-\`\`\`
-
-## Polling
-
-Check for new jobs periodically. When idle:
-\`\`\`bash
-# Check every 30-60 seconds when not busy
-swarm-job list pending
-\`\`\`
-
-The swarm-daemon will also send notifications via tmux when:
-- New jobs are available for your tier
-- Jobs you depend on are completed (unblocked)
-
-## Capability Matching
-
-Your model tier: $model
-- opus (tier 3): complex tasks, architecture, debugging
-- sonnet (tier 2): moderate tasks, standard features
-- haiku (tier 1): simple tasks, docs, formatting
-
-Claim jobs at or below your tier. Higher-tier agents can help clear simpler jobs.
-
-## Job File Format
-
-\`\`\`yaml
-id: job-1737372800-12345
-created: <ISO timestamp>
-created_by: agent-$agent
-priority: low | medium | high | urgent
-complexity: simple | moderate | complex
-recommended_model: haiku | sonnet | opus
-title: <short title>
-description: |
-  <detailed description>
-depends_on: []
-claimed_by: null
-claimed_at: null
-completed_at: null
-result: null
-\`\`\`
-
-Job files live in \`$SHARED_CONTEXT/jobs/pending/\`, \`jobs/active/\`, and \`jobs/done/\`.
-
-## Peer Communication
-
-Check swarm activity:
-\`\`\`bash
-swarm-daemon log              # View recent events (preferred)
-swarm-daemon log -f           # Follow events in real-time
-tail -30 $SHARED_CONTEXT/events.log  # Direct file access (alternative)
-\`\`\`
-
-Signal another agent via tmux:
-\`\`\`bash
-# IMPORTANT: Must be TWO separate commands - first types text, second submits
-# Each agent is in its own window: $SESSION:agent-N.1 (left/claude pane)
-tmux send-keys -t $SESSION:agent-N.1 "Message here" Enter
-tmux send-keys -t $SESSION:agent-N.1 Enter
-\`\`\`
-
-Alternative (if the agent appears stuck in idle/Enchanting state):
-\`\`\`bash
-# Send Escape first to break idle state, then message with separate Enter
-tmux send-keys -t $SESSION:agent-N.1 Escape
-tmux send-keys -t $SESSION:agent-N.1 "Message here" Enter
-tmux send-keys -t $SESSION:agent-N.1 Enter
-\`\`\`
-
-Close the swarm:
-If the customer types shut down, gracefully wind down:
-1. Finish current job
-2. Exit process (shutdown logged automatically)
-\`\`\`bash
-launch-agents stop
-\`\`\`
-
-Pane mapping: each agent has its own window $SESSION:agent-N, claude is pane 1 (left), shell is pane 2 (right)
 
 ## Git Workflow
 
 You work on branch: agent-$agent
 
-For each job:
+For each task:
 1. Ensure branch is up to date: \`git fetch && git rebase origin/main\`
 2. Create a feature branch: \`git checkout -b feat/my-feature\`
 3. Make changes and commit with clear messages
-4. Create PR: use \`/pr\` skill, then signal the swarm:
-   \`\`\`bash
-   swarm-daemon hook JOB_PR_READY <job-id> <pr-number>
-   \`\`\`
-5. After merge: use \`/merge\` skill, then signal the swarm:
-   \`\`\`bash
-   swarm-daemon hook JOB_PR_MERGED <job-id>
-   \`\`\`
-6. Mark job complete: \`swarm-job complete <job-id>\`
-
-Note: Tool use events (Read, Edit, Write, Bash, etc.) are emitted automatically
-by the Claude Code hooks in \`~/.dotfiles/claude/config/settings.json\` — no
-manual calls needed for those.
+4. Create PR: use \`/pr\` skill
+5. After merge: use \`/merge\` skill
 
 IMPORTANT: Never create PRs or push \`agent-N\` branches. Always work on a
 feature branch (\`feat/\`, \`fix/\`, \`refactor/\`, etc.) branched from \`agent-$agent\`.
-
-## Principles
-
-- No hierarchy — all agents are peers
-- Match job complexity to your capability
-- One active job at a time
-- Signal completion clearly
-- Help clear simple jobs if queue is empty
-
-## Documentation
-
-For detailed architecture, security considerations, and advanced usage:
-\`\`\`bash
-cat ~/.dotfiles/docs/agent-system.md
-\`\`\`
 EOF
 }
 
@@ -591,7 +582,23 @@ _start_agent_pane() {
             tmux send-keys -t "$target" "export CLAUDE_AUTO_APPROVE_FOLDERS=true" C-m
             tmux send-keys -t "$target" "clear" C-m
             debug "tmux send-keys -t $target 'claude --model $model ...' C-m"
-            tmux send-keys -t "$target" "claude --model $model --add-dir . --append-system-prompt \"\$(cat AGENTS.md)\" $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+            # Short argv only — full instructions live in AGENTS.md (read on demand).
+            # Long --append-system-prompt text creates \012 escapes in pane commands
+            # that compound exponentially via tmux's args_escape on hook passes.
+            tmux send-keys -t "$target" "claude --model $model --add-dir . --append-system-prompt 'Agent agent-$agent ($client/$model) for $REPO_NAME. Branch: agent-$agent. Read AGENTS.md for workflow.' $SKIP_PERMISSIONS $ALLOWED_TOOLS" C-m
+            ;;
+        opencode)
+            tmux send-keys -t "$target" "clear" C-m
+            debug "tmux send-keys -t $target '$(opencode_cmd "$model")' C-m"
+            # opencode reads AGENTS.md from the worktree natively; no system-prompt flag needed.
+            tmux send-keys -t "$target" "$(opencode_cmd "$model")" C-m
+            ;;
+        vibe)
+            trust_vibe_dir "$WORKTREE_ROOT/agent-$agent"
+            tmux send-keys -t "$target" "clear" C-m
+            debug "tmux send-keys -t $target 'vibe' C-m"
+            # vibe reads AGENTS.md from the worktree natively; no system-prompt flag needed.
+            tmux send-keys -t "$target" "vibe" C-m
             ;;
         copilot)
             tmux send-keys -t "$target" "export COPILOT_MODEL=$model" C-m
@@ -610,7 +617,6 @@ _start_agent_pane() {
 
 create_tmux_layout_new() {
     # New default layout: one window per agent, each split left (claude) | right (shell)
-    # Plus a daemon window at the end.
     local count=$1
 
     echo -e "${BLUE}Creating per-agent tmux layout for $count agents...${NC}"
@@ -639,14 +645,16 @@ create_tmux_layout_new() {
         if [[ -f "$WORKTREE_ROOT/agent-$i/.venv/bin/activate" ]]; then
             tmux send-keys -t "$SESSION:$win.2" "source .venv/bin/activate" C-m
         fi
+
+        # Leave focus on left pane (claude) so switching to this window lands there
+        tmux select-pane -t "$SESSION:$win.1"
     done
 
-    # Always add daemon window (starts swarm-daemon only if -d flag)
-    tmux new-window -t "$SESSION" -n "daemon" -c "$REPO_ROOT"
-    sleep 0.2
-    if [[ "$DAEMON_MODE" == true ]]; then
-        tmux send-keys -t "$SESSION:daemon" "swarm-daemon daemon" C-m
-        echo -e "${GREEN}✓ Swarm daemon started${NC}"
+    # Add main window (shell in main repo) if --main flag set
+    if [[ "$MAIN_WINDOW" == true ]]; then
+        tmux new-window -t "$SESSION" -n "main" -c "$REPO_ROOT"
+        sleep 0.2
+        echo -e "${GREEN}✓ Main window ready${NC}"
     fi
 
     tmux select-window -t "$SESSION:agent-1"
@@ -708,14 +716,6 @@ create_tmux_layout_classic() {
             tmux send-keys -t "$SESSION:shell-$i" "source .venv/bin/activate" C-m
         fi
     done
-
-    # Add daemon window if daemon mode enabled
-    if [[ "$DAEMON_MODE" == true ]]; then
-        tmux new-window -t "$SESSION" -n "daemon" -c "$REPO_ROOT"
-        sleep 0.2
-        tmux send-keys -t "$SESSION:daemon" "swarm-daemon daemon" C-m
-        echo -e "${GREEN}✓ Swarm daemon started${NC}"
-    fi
 
     tmux select-window -t "$SESSION:agents"
     tmux select-pane -t "$SESSION:agents.1"
@@ -782,31 +782,33 @@ cmd_workspace() {
     tmux send-keys -t "$ws_session:workspace.1" "export WORKSPACE_SESSION='$ws_session'" C-m
     tmux send-keys -t "$ws_session:workspace.1" "clear" C-m
 
-    # Build agent prompt with session info
-    local agent_prompt=""
-    if [[ -f "$agent_spec" ]]; then
-        # Replace $WORKSPACE_SESSION placeholder with actual session name
-        agent_prompt=$(sed "s|\$WORKSPACE_SESSION|$ws_session|g" "$agent_spec")
-    fi
-
-    # Start claude on the left pane with workspace agent instructions
+    # Start claude on the left pane — short argv only (see _start_agent_pane comment)
     local ws_model="sonnet"
     [[ "$OPUS_MODE" == true ]] && ws_model="opus"
 
-    if [[ -n "$agent_prompt" ]]; then
-        tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt \"\$(sed 's|\\\$WORKSPACE_SESSION|$ws_session|g' '$agent_spec')\" $SKIP_PERMISSIONS" C-m
+    if [[ "$OPENCODE_MODE" == true ]]; then
+        ws_model="$OPENCODE_MODEL"
+        tmux send-keys -t "$ws_session:workspace.1" "$(opencode_cmd "$ws_model")" C-m
+    elif [[ "$VIBE_MODE" == true ]]; then
+        ws_model="vibe-default"
+        trust_vibe_dir "$PWD"
+        tmux send-keys -t "$ws_session:workspace.1" "vibe" C-m
+    elif [[ -f "$agent_spec" ]]; then
+        tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . --append-system-prompt 'Workspace session: $ws_session. Read $agent_spec for workspace instructions.' $SKIP_PERMISSIONS" C-m
     else
         tmux send-keys -t "$ws_session:workspace.1" "claude --model $ws_model --add-dir . $SKIP_PERMISSIONS" C-m
     fi
 
-    # Create second window: monitors (ctop | htop)
-    tmux new-window -t "$ws_session" -n "monitors" -c "$PWD"
-    tmux split-window -h -t "$ws_session:monitors" -c "$PWD"
-    tmux select-layout -t "$ws_session:monitors" even-horizontal
+    # Create second window: monitors (ctop | htop), unless --no-monitors
+    if [[ "$NO_MONITORS" != true ]]; then
+        tmux new-window -t "$ws_session" -n "monitors" -c "$PWD"
+        tmux split-window -h -t "$ws_session:monitors" -c "$PWD"
+        tmux select-layout -t "$ws_session:monitors" even-horizontal
 
-    # Start ctop (left) and htop (right) in monitors window
-    tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect --format "{{.ConnectionInfo.PodmanSocket.Path}}" 2>/dev/null)" command ctop" C-m
-    tmux send-keys -t "$ws_session:monitors.2" "htop" C-m
+        # Start ctop (left) and htop (right) in monitors window
+        tmux send-keys -t "$ws_session:monitors.1" "TERM=xterm-256color DOCKER_HOST="unix://$(podman machine inspect --format "{{.ConnectionInfo.PodmanSocket.Path}}" 2>/dev/null)" command ctop" C-m
+        tmux send-keys -t "$ws_session:monitors.2" "htop" C-m
+    fi
 
     # Select workspace window, left pane (claude)
     tmux select-window -t "$ws_session:workspace"
@@ -818,24 +820,26 @@ cmd_workspace() {
     echo "Directory:    $(basename "$PWD")"
     echo ""
     echo "Window 1 (workspace):"
-    echo "  Left pane:  claude ($ws_model)"
+    echo "  Left pane:  $([[ "$OPENCODE_MODE" == true ]] && echo opencode || { [[ "$VIBE_MODE" == true ]] && echo vibe || echo claude; }) ($ws_model)"
     echo "  Right pane: shell"
     echo ""
-    echo "Window 2 (monitors):"
-    echo "  Left pane:  ctop"
-    echo "  Right pane: htop"
-    echo ""
+    if [[ "$NO_MONITORS" != true ]]; then
+        echo "Window 2 (monitors):"
+        echo "  Left pane:  ctop"
+        echo "  Right pane: htop"
+        echo ""
+    fi
     echo "Navigation:"
-    echo "  Ctrl-b 1/2      Switch window"
+    if [[ "$NO_MONITORS" != true ]]; then
+        echo "  Ctrl-b 1/2      Switch window"
+    fi
     echo "  Alt ←→          Switch pane"
     echo "  Ctrl-b z        Zoom pane"
     echo "  Ctrl-b d        Detach"
     echo ""
 
-    # Set Ghostty window title (immediate + persist via tmux @title for reattach)
-    local ws_title="workspace · $(basename "$PWD")"
-    tmux set -t "$ws_session" @title "$ws_title"
-    printf '\e]0;%s\a' "$ws_title"
+    # Set terminal window title via OSC escape (direct to terminal, not tmux command queue).
+    printf '\e]0;workspace · %s\a' "$(basename "$PWD")"
 
     tmux attach -t "$ws_session"
 }
@@ -894,6 +898,9 @@ cmd_start() {
         echo "Navigation:"
         echo "  Ctrl-b 1-$AGENT_COUNT      Agent windows (claude│shell)"
         echo "  Ctrl-b $((AGENT_COUNT+1))         Daemon window"
+        if [[ "$MAIN_WINDOW" == true ]]; then
+        echo "  Ctrl-b $((AGENT_COUNT+2))         Main window (shell in $REPO_NAME)"
+        fi
         echo "  Alt ←→          Switch pane within window"
     fi
     echo "  Alt ↑↓←→        Switch pane"
@@ -901,10 +908,9 @@ cmd_start() {
     echo "  Ctrl-b d        Detach"
     echo ""
 
-    # Set Ghostty window title (immediate + persist via tmux @title for reattach)
-    local swarm_title="swarm · $REPO_NAME ($AGENT_COUNT agents)"
-    tmux set -t "$SESSION" @title "$swarm_title"
-    printf '\e]0;%s\a' "$swarm_title"
+    # Set terminal window title via OSC escape (direct to terminal, not tmux command queue).
+    # Previously also did `tmux set @title` which triggers after-set-option hooks — removed.
+    printf '\e]0;swarm · %s (%s agents)\a' "$REPO_NAME" "$AGENT_COUNT"
 
     tmux attach -t "$SESSION"
 }
@@ -1046,7 +1052,7 @@ cmd_clean() {
         fi
         
         # Kill agent processes
-        for proc in claude gemini copilot; do
+        for proc in claude gemini copilot opencode; do
             if pgrep -f "$proc" > /dev/null; then
                 echo -e "  ${YELLOW}Killing $proc...${NC}"
                 pkill -f "$proc" 2>/dev/null || true
@@ -1212,11 +1218,11 @@ cmd_info() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         -n)
-            if [[ "$2" =~ ^[2-6]$ ]]; then
+            if [[ "$2" =~ ^[1-6]$ ]]; then
                 AGENT_COUNT=$2
                 shift 2
             else
-                echo -e "${RED}Error: -n requires 2, 3, 4, or 6${NC}"
+                echo -e "${RED}Error: -n requires 1, 2, 3, 4, or 6${NC}"
                 exit 1
             fi
             ;;
@@ -1228,8 +1234,18 @@ while [[ $# -gt 0 ]]; do
             EQUAL_DISTRIBUTION=true
             shift
             ;;
-        -o|--classic)
+        -c|--classic)
             CLASSIC_MODE=true
+            shift
+            ;;
+        -o|--opencode)
+            OPENCODE_MODE=true
+            VIBE_MODE=false
+            shift
+            ;;
+        -m|--vibe)
+            VIBE_MODE=true
+            OPENCODE_MODE=false
             shift
             ;;
         --opus)
@@ -1240,7 +1256,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        --force)
+        -f|--force)
             FORCE=true
             shift
             ;;
@@ -1248,11 +1264,15 @@ while [[ $# -gt 0 ]]; do
             SKIP_PERMISSIONS="--dangerously-skip-permissions"
             shift
             ;;
-        -d|--daemon)
-            DAEMON_MODE=true
+        --main)
+            MAIN_WINDOW=true
             shift
             ;;
-        -h|--help)
+        --no-monitors)
+            NO_MONITORS=true
+            shift
+            ;;
+-h|--help)
             print_usage
             exit 0
             ;;
@@ -1274,6 +1294,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Check for runaway task output files and low disk space
+check_disk_health
 
 # Execute command
 case ${COMMAND:-} in

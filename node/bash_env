@@ -11,3 +11,8 @@ mkdir -p "$XDG_STATE_HOME/node" 2>/dev/null
 export NPM_CONFIG_USERCONFIG="$XDG_CONFIG_HOME/npm/npmrc"
 export npm_config_cache="$XDG_CACHE_HOME/npm"
 mkdir -p "$XDG_CONFIG_HOME/npm" 2>/dev/null
+
+# Bun - XDG compliant (install home + global bin shims live here, not ~/.bun)
+export BUN_INSTALL="$XDG_DATA_HOME/bun"
+mkdir -p "$BUN_INSTALL/bin" 2>/dev/null
+export PATH="$BUN_INSTALL/bin:$PATH"

@@ -9,6 +9,18 @@ BREWFILE="${XDG_DATA_HOME:-$HOME/.local/share}/Brewfile"
 trap 'echo ""; echo "❌ Installation interrupted by user"; exit 130' INT
 set -e
 
+# Cache sudo credentials and keep them alive for the duration of the script
+sudo_keepalive() {
+    if ! sudo -v 2>/dev/null; then
+        echo "❌ sudo authentication failed or was cancelled"
+        exit 1
+    fi
+    # Refresh sudo timestamp in the background until this script exits
+    while true; do sudo -n true; sleep 50; kill -0 "$$" || exit; done 2>/dev/null &
+    SUDO_KEEPALIVE_PID=$!
+    trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null; echo ""; echo "❌ Installation interrupted by user"; exit 130' INT EXIT
+}
+
 print_usage() {
     local HELP="cat"
     if command -v bat >/dev/null 2>&1; then
@@ -20,6 +32,7 @@ Usage: dot [COMMAND] [OPTIONS]
 
 COMMANDS:
     install <topic>   Run install.sh for a specific topic (e.g., vim, osx, vscode)
+    brew <topic>      Run brew_packages for a specific topic (e.g., ocaml, python)
     list              List available topics with install.sh scripts
     status            Show installation status and outdated packages
     invalidate        Clear dotfiles caches (bash_env, bash_aliases, etc.)
@@ -40,6 +53,7 @@ Example:
     dot                           # Install using existing Brewfile
     dot install vim               # Run vim/install.sh
     dot install osx               # Run osx/install.sh
+    dot brew ocaml                # Run ocaml/brew_packages
     dot list                      # Show available topics
     dot status                    # Show what's installed and outdated
     dot invalidate                # Clear dotfiles caches
@@ -70,6 +84,12 @@ if [[ $# -gt 0 ]]; then
             fi
             TOPIC="$2"
             INSTALL_SCRIPT="$DOTFILES/$TOPIC/install.sh"
+            # Nested topics live at $DOTFILES/<group>/<topic>/ (e.g., ai/opencode)
+            if [[ ! -f "$INSTALL_SCRIPT" ]]; then
+                for nested in "$DOTFILES"/*/"$TOPIC"/install.sh; do
+                    [[ -f "$nested" ]] && INSTALL_SCRIPT="$nested" && break
+                done
+            fi
             if [[ -f "$INSTALL_SCRIPT" ]]; then
                 echo "🔧 Running install.sh for '$TOPIC'..."
                 source "$INSTALL_SCRIPT"
@@ -82,15 +102,48 @@ if [[ $# -gt 0 ]]; then
                 exit 1
             fi
             ;;
+        brew)
+            if [[ -z $DOTFILES ]]; then
+                echo "❌ DOTFILES variable not set, exiting"
+                exit 1
+            fi
+            if [[ -z $2 ]]; then
+                echo "❌ Usage: dot brew <topic>"
+                echo "   Run 'dot list' to see available topics"
+                exit 1
+            fi
+            TOPIC="$2"
+            BREW_SCRIPT="$DOTFILES/$TOPIC/brew_packages"
+            # Nested topics live at $DOTFILES/<group>/<topic>/ (e.g., ai/opencode)
+            if [[ ! -f "$BREW_SCRIPT" ]]; then
+                for nested in "$DOTFILES"/*/"$TOPIC"/brew_packages; do
+                    [[ -f "$nested" ]] && BREW_SCRIPT="$nested" && break
+                done
+            fi
+            if [[ -f "$BREW_SCRIPT" ]]; then
+                echo "🍺 Running brew_packages for '$TOPIC'..."
+                source "$BREW_SCRIPT"
+                echo "📝 Exporting Homebrew state to Brewfile..."
+                brew bundle dump --file="$BREWFILE" --force 2>/dev/null
+                echo "✅ Done brewing '$TOPIC' — Brewfile updated"
+                exit 0
+            else
+                echo "❌ No brew_packages found for topic '$TOPIC'"
+                echo "   Expected: $BREW_SCRIPT"
+                echo "   Run 'dot list' to see available topics"
+                exit 1
+            fi
+            ;;
         list)
             if [[ -z $DOTFILES ]]; then
                 echo "❌ DOTFILES variable not set, exiting"
                 exit 1
             fi
             echo "📋 Available topics with install.sh:"
-            for script in "$DOTFILES"/*/install.sh; do
+            for script in "$DOTFILES"/*/install.sh "$DOTFILES"/*/*/install.sh; do
                 if [[ -f "$script" ]]; then
-                    topic=$(basename "$(dirname "$script")")
+                    topic="${script#"$DOTFILES"/}"
+                    topic="${topic%/install.sh}"
                     echo "   - $topic"
                 fi
             done
@@ -106,9 +159,9 @@ if [[ $# -gt 0 ]]; then
             echo "💾 Shell Cache ($cache_dir)"
             if [[ -d "$cache_dir" ]]; then
                 # Count source files for each cache type
-                env_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_env' 2>/dev/null | wc -l | tr -d ' ')
-                alias_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_aliases' 2>/dev/null | wc -l | tr -d ' ')
-                comp_count=$(find "$DOTFILES" -maxdepth 2 -name 'bash_completion' 2>/dev/null | wc -l | tr -d ' ')
+                env_count=$(find "$DOTFILES" -maxdepth 3 -name 'bash_env' 2>/dev/null | wc -l | tr -d ' ')
+                alias_count=$(find "$DOTFILES" -maxdepth 3 -name 'bash_aliases' 2>/dev/null | wc -l | tr -d ' ')
+                comp_count=$(find "$DOTFILES" -maxdepth 3 -name 'bash_completion' 2>/dev/null | wc -l | tr -d ' ')
 
                 for cache_file in "$cache_dir"/*.sh; do
                     [[ -f "$cache_file" ]] || continue
@@ -182,6 +235,14 @@ if [[ $# -gt 0 ]]; then
             installed=$(brew list --formula 2>/dev/null | wc -l | tr -d ' ')
             casks_installed=$(brew list --cask 2>/dev/null | wc -l | tr -d ' ')
             echo "   Installed: $installed formulae, $casks_installed casks"
+            # Stale upgrade dirs
+            stale=$(find /opt/homebrew/Caskroom -maxdepth 2 -type d -name '*.upgrading' 2>/dev/null)
+            if [[ -n "$stale" ]]; then
+                echo "   ⚠️  Stale upgrade dirs (run: rm -rf <path>):"
+                echo "$stale" | while read -r d; do echo "      $d"; done
+            else
+                echo "   ✅ No stale upgrade dirs"
+            fi
             echo ""
 
             # XDG paths (fast)
@@ -209,6 +270,26 @@ if [[ $# -gt 0 ]]; then
                     [[ -f "$dir/bash_shortcuts" ]] && features+="K"
 
                     [[ -n "$features" ]] && printf "   %-12s [%s]\n" "$topic" "$features"
+                done
+
+                # Nested topics (e.g., ai/opencode)
+                for dir in "$DOTFILES"/*/*/; do
+                    [[ -d "$dir" ]] || continue
+                    [[ "$dir" == "$DOTFILES/config/"* ]] && continue
+
+                    features=""
+                    [[ -f "$dir/install.sh" ]] && features+="I"
+                    [[ -f "$dir/brew_packages" ]] && features+="B"
+                    [[ -f "$dir/bash_aliases" ]] && features+="A"
+                    [[ -f "$dir/bash_env" ]] && features+="E"
+                    [[ -f "$dir/bash_completion" ]] && features+="C"
+                    [[ -d "$dir/config" ]] && features+="X"
+                    [[ -f "$dir/bash_shortcuts" ]] && features+="K"
+
+                    if [[ -n "$features" ]]; then
+                        nested_topic="${dir#"$DOTFILES"/}"; nested_topic="${nested_topic%/}"
+                        printf "   %-12s [%s]\n" "$nested_topic" "$features"
+                    fi
                 done
 
                 # Check config/ subdirectories for additional topics
@@ -339,11 +420,11 @@ if [[ $# -gt 0 ]]; then
             # Collect declared formulae (direct installs + array-style)
             mapfile -t declared_formulae < <(
                 {
-                    find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                    find "$DOTFILES" -maxdepth 3 -name 'brew_packages' | \
                         xargs grep -hv '^\s*#' | \
                         grep 'brew install ' | grep -v '\-\-cask' | \
                         grep -oE 'brew install [a-zA-Z0-9@._/-]+' | awk '{print $NF}'
-                    find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                    find "$DOTFILES" -maxdepth 3 -name 'brew_packages' | \
                         xargs grep -hv '^\s*#' | \
                         grep -E '[a-z_]+=\(' | \
                         grep -oE '\([^)]+\)' | tr -d '()' | tr ' ' '\n'
@@ -352,7 +433,7 @@ if [[ $# -gt 0 ]]; then
 
             # Collect declared casks
             mapfile -t declared_casks < <(
-                find "$DOTFILES" -maxdepth 2 -name 'brew_packages' | \
+                find "$DOTFILES" -maxdepth 3 -name 'brew_packages' | \
                     xargs grep -hv '^\s*#' | \
                     grep 'brew install --cask' | \
                     grep -oE 'brew install --cask [a-zA-Z0-9@._/-]+' | awk '{print $NF}' | \
@@ -480,7 +561,7 @@ if [[ "$EXPORT_ONLY" == true ]]; then
     if [[ "$VERBOSE" == true ]]; then
         brew bundle dump --file="$BREWFILE" --force --verbose
     else
-        brew bundle dump --file="$BREWFILE" --force
+        brew bundle dump --file="$BREWFILE" --force 2>/dev/null
     fi
     echo "✅ Brewfile generated at $BREWFILE"
     exit 0
@@ -491,6 +572,7 @@ fi
 
 # Check if Brewfile exists and --new flag is not set and --skip flag is not set
 if [[ -f "$BREWFILE" && "$USE_NEW" == false && "$SKIP_BUNDLE" == false ]]; then
+    sudo_keepalive
     echo "📦 Using existing Brewfile: $BREWFILE"
     echo "🔄 Installing packages from Brewfile..."
     if [[ "$VERBOSE" == true ]]; then
@@ -502,31 +584,56 @@ if [[ -f "$BREWFILE" && "$USE_NEW" == false && "$SKIP_BUNDLE" == false ]]; then
 fi
 
 # make sure we get the password early
-if ! sudo -v; then
-    echo "❌ sudo authentication failed or was cancelled"
-    exit 1
-fi
+sudo_keepalive
 
 # start with brew itself
-source "$DOTFILES/homebrew/brew_install.sh" 2>&1 || exit 1
+printf "  [ \033[00;34m..\033[0m ] Updating Homebrew..."
+tmplog=$(mktemp)
+source "$DOTFILES/homebrew/brew_install.sh" >"$tmplog" 2>&1 || {
+    printf "\r  [ \033[00;31mFAIL\033[0m ] Updating Homebrew\n"
+    cat "$tmplog"; rm -f "$tmplog"; exit 1
+}
+rm -f "$tmplog"
+printf "\r  [ \033[00;32m✓\033[0m  ] Homebrew up to date        \n"
+
+# Clean up stale Homebrew upgrade dirs before installing
+stale_dirs=$(find /opt/homebrew/Caskroom -maxdepth 2 -type d -name '*.upgrading' 2>/dev/null)
+if [[ -n "$stale_dirs" ]]; then
+    printf "  [ \033[00;33m!!\033[0m ] Cleaning stale Homebrew upgrade dirs...\n"
+    echo "$stale_dirs" | while read -r d; do
+        printf "  [ \033[00;33m..\033[0m ] Removing: %s\n" "$d"
+        rm -rf "$d"
+    done
+fi
 
 # now process all topical brew packages
-for src in $(find "$DOTFILES" -maxdepth 2 -name 'brew_packages')
+for src in $(find "$DOTFILES" -maxdepth 3 -name 'brew_packages')
 do
-    printf "  [ \033[00;34m..\033[0m ] Processing installer: $(basename $(dirname "$src"))\n"
+    topic=$(basename $(dirname "$src"))
+    printf "  [ \033[00;34m..\033[0m ] Processing installer: %s" "$topic"
+    tmplog=$(mktemp)
     if [[ "$VERBOSE" == true ]]; then
-        source "${src}" 2>&1 || exit 1
+        printf "\n"
+        source "${src}" 2>&1 || { printf "  [ \033[00;31mFAIL\033[0m ] Failed: %s\n" "$topic"; exit 1; }
     else
-        source "${src}" &>/dev/null || exit 1
+        source "${src}" >"$tmplog" 2>&1 || {
+            printf "\r  [ \033[00;31mFAIL\033[0m ] Error in %s:\n" "$topic"
+            cat "$tmplog"
+            rm -f "$tmplog"
+            exit 1
+        }
+        rm -f "$tmplog"
     fi
+    printf "\r  [ \033[00;32m✓\033[0m  ] Done: %-30s\n" "$topic"
 done
 
 # Finally, export the Brewfile
-printf "  [ \033[00;34m..\033[0m ] Exporting current Homebrew installations to Brewfile...\n"
+printf "  [ \033[00;34m..\033[0m ] Exporting Homebrew state to Brewfile..."
 if [[ "$VERBOSE" == true ]]; then
+    printf "\n"
     brew bundle dump --file="$BREWFILE" --force --verbose
 else
-    brew bundle dump --file="$BREWFILE" --force
+    brew bundle dump --file="$BREWFILE" --force 2>/dev/null
 fi
-echo "✅ Brewfile generated at $BREWFILE"
-echo "✅ All done!"
+printf "\r  [ \033[00;32m✓\033[0m  ] Brewfile saved to %s\n" "$BREWFILE"
+printf "  [ \033[00;32m✓\033[0m  ] All done!\n"

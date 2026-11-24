@@ -9,4 +9,7 @@ PATH=/usr/local/bin:$PATH
 
 brew install node || brew upgrade node
 
+# bun (JS runtime/packager) - declared here so 'dot orphans' stays clean
+brew install bun || brew upgrade bun
+
 export PATH=$TMPPATH

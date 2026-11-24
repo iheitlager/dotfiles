@@ -49,7 +49,7 @@ Multi-agent swarm for Claude Code:
 - `swarm-job` - Job queue management
 - `swarm-daemon` - Monitoring, event tracking, and analytics
 - `swarm-hook` - Claude Code hook adapter (auto-emits tool events)
-- See [docs/agent-system.md](docs/agent-system.md) for details
+- See [.openspec/agent-system.md](.openspec/agent-system.md) for details
 
 ## Topical Organization
 
@@ -60,10 +60,15 @@ Everything is organized by topic (vim, git, python, etc.). Each topic can have:
 | `bash_aliases` | Shell aliases (loaded by .bash_profile) |
 | `bash_env` | Environment variables |
 | `bash_completion` | Tab completions |
+| `bash_shortcuts` | Keyboard shortcuts (displayed by `shortcuts` command) |
 | `brew_packages` | Homebrew packages (run with `dot`) |
 | `install.sh` | Setup script (run with `dot install <topic>`) |
 | `*.symlink` | Symlinked to `$HOME` |
 | `config/` | Symlinked to `~/.config/<topic>/` |
+
+Topics can also be nested one level deep (`<group>/<topic>/`, e.g. `ai/opencode/`, `ai/vibe/`).
+They are discovered the same way; `config/` is named after the inner topic
+(`ai/opencode/config/` → `~/.config/opencode/`, `ai/vibe/config/` → `~/.config/vibe/`).
 
 ## XDG Base Directory
 
@@ -82,23 +87,24 @@ Use `xdg-info` to inspect XDG paths and app compliance.
 
 ```
 ~/.dotfiles/
+├── ai/             # AI tooling (opencode, vibe, test-ai rigs)
 ├── bash/           # Shell configuration
 ├── claude/         # Claude Code config, agents, skills
 ├── config/         # XDG configs (ghostty, bat, ripgrep, tmux)
-├── docker/         # Docker/Colima setup
+├── docker/         # Docker CLI setup (Podman primary, Colima fallback)
 ├── git/            # Git config and aliases
 ├── local/bin/      # Custom scripts (dot, launch-agents)
 ├── osx/            # macOS-specific settings
 ├── python/         # Python/uv configuration
 ├── tmux/           # tmux config with TPM plugins
-├── vim/            # Vim/Neovim configuration
+├── nvim/           # Neovim configuration
 └── vscode/         # VS Code settings
 ```
 
 ## Secrets
 
 Never commit secrets! Use `~/.config/secrets` (sourced by .bash_profile, excluded from git).
-Git credentials go in `~/.local/gitconfig`.
+Git credentials go in `~/.config/git/local`.
 
 ## Credits
 - Main inspiration: https://github.com/holman/dotfiles

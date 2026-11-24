@@ -1,7 +1,7 @@
 ---
 name: spec
-description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", "create proposal", "propose changes", mentions "openspec", or discusses system specifications and requirements documentation.
-version: 2.0.0
+description: Use when the user asks to "browse specs", "view specifications", "create a spec", "list specs", "edit spec", "validate spec", "format spec", "check spec", "show requirements", "spec to issues", "convert spec", "create proposal", "propose changes", mentions "openspec", or discusses system specifications and requirements documentation. Supports functional specs (001-099) and cross-cutting concern specs (900-999).
+version: 2.1.0
 ---
 
 # OpenSpec Management Skill
@@ -71,12 +71,63 @@ This distinction prevents confusion about what's current versus what's proposed.
 - [OpenSpec Repository](https://github.com/Fission-AI/OpenSpec)
 - [OpenSpec Getting Started](https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md)
 
+## Spec Numbering Scheme: Functional vs Concern Specs
+
+Specs are organized into **two ranges** by type:
+
+### Functional Specs (001–099)
+
+Describe **what the system does** — bounded services, modules, and features.
+
+```
+001  system-overview      Vision, goals, architecture
+002  infrastructure       Launch, schedule, shared state
+003  services             IB Gateway, CLI
+004  trading-core         Two-factor control, trade log
+005  agents               4 agents + prompt system
+006  operations           KPI metrics, paper/live transition
+007  server               Trading Engine, REST API, TUI
+008  execution            Order lifecycle, IB submission
+009  kelly                Position sizing, portfolio constraints
+011  ticker-vector        Source-tagged price subscriptions
+012  ib-bridge            ZMQ service, market data, orders
+013  ib-gateway           IBConnectionManager interface
+```
+
+### Concern Specs (900–999)
+
+Describe **cross-cutting quality attributes** — how the system does it, applied across all functional specs.
+
+```
+900  configuration        XDG layout, TOML config, service discovery, validation
+901  observability        Logging, health checks, tracing, version/config log
+902  security             Secrets management, API keys, auth, permissions
+903  resilience           Error handling, circuit breakers, reconnection policy
+904  performance          Latency budgets, throughput, resource limits
+905  testing              Strategy, coverage targets, test categories
+```
+
+### Key Distinction
+
+- A **functional spec** says "IB Bridge handles market data subscriptions"
+- A **concern spec** says "All services MUST log structured JSON on startup"
+- An **ADR** explains *why* a specific choice was made (e.g., "why TOML over YAML")
+
+Concern specs set **cross-cutting policy**; functional specs apply it to their specific service. For example, 903-resilience says "all services MUST reconnect within 30s", and 012-ib-bridge details *how* ib-bridge does it.
+
+### Numbering Rules
+
+- **001–099**: Functional specs (next available in sequence)
+- **100–899**: Reserved for future use
+- **900–999**: Concern specs (cross-cutting, non-functional)
+- When creating a spec, first determine if it's functional or a concern, then pick the correct range
+
 ## When to Use This Skill
 
 Invoke this skill when the user wants to:
 - **Browse specs**: View existing specifications interactively
 - **List specs**: See available specifications and their status
-- **Create specs**: Generate new specification files
+- **Create specs**: Generate new specification files (functional or concern)
 - **Edit specs**: Modify existing specifications
 - **Validate specs**: Check if specs follow the proper structure
 - **Format specs**: Reformat specs to match expected template
@@ -121,9 +172,15 @@ OpenSpec uses a structured directory layout:
 ```
 .openspec/
 ├── specs/                          # Main specs (current truth)
-│   ├── 001-dotfiles-core/spec.md
-│   ├── 002-dotfiles-caching/spec.md
-│   └── 003-shortcuts-system/spec.md
+│   ├── 001-system-overview/spec.md   # Functional specs (001-099)
+│   ├── 002-infrastructure/spec.md
+│   ├── 012-ib-bridge/spec.md
+│   ├── 900-configuration/spec.md     # Concern specs (900-999)
+│   ├── 901-observability/spec.md
+│   └── 902-security/spec.md
+├── adr/                            # Architectural Decision Records
+│   ├── index.md                    # Summary table of all ADRs
+│   └── 0001-<decision-name>.md    # Individual ADRs (zero-padded)
 ├── changes/                        # Delta specs (proposed changes)
 │   ├── 001-feature-proposal/
 │   │   ├── proposal.md             # Intent, scope, approach
@@ -165,18 +222,30 @@ Ask the user:
 
 ### Step 2: Determine Directory Number
 
-Check existing specs to find the next number:
+First, decide if this is a **functional spec** or a **concern spec**:
+
+- **Functional** (what a service/module does): use range **001–099**
+- **Concern** (cross-cutting quality attribute): use range **900–999**
+
+Then check existing specs to find the next number in that range:
 
 ```bash
-ls ~/.dotfiles/.openspec/specs/
+ls .openspec/specs/
 ```
 
-Use the next sequential number (e.g., if last is `003-`, use `004-`).
+Examples:
+- Next functional spec after `013-` → `014-`
+- First concern spec → `900-`
+- Next concern spec after `901-` → `902-`
 
 ### Step 3: Create Directory and File
 
 ```bash
-mkdir -p ~/.dotfiles/.openspec/specs/004-system-name
+# Functional spec
+mkdir -p .openspec/specs/014-system-name
+
+# Concern spec
+mkdir -p .openspec/specs/900-configuration
 ```
 
 ### Step 4: Generate Spec File
@@ -226,6 +295,8 @@ The system MUST [clear statement of requirement].
 - THEN [expected outcome]
 - AND [additional outcomes]
 
+**Tests**: `tests/unit/test_feature.py::test_happy_path`
+
 #### Scenario: [Edge Case]
 
 - GIVEN [different precondition]
@@ -269,6 +340,75 @@ When the user wants to edit a spec:
 3. **Make targeted edits**: Use Edit tool for specific changes
 4. **Maintain structure**: Keep RFC 2119 keywords and scenario format
 5. **Update version**: If requirements change significantly, bump version
+
+## Traceability Model (ADR-0019)
+
+OpenSpec follows the **traceability metamodel** defined in ADR-0019. Understanding this model is essential for writing well-structured specs.
+
+### Entity Domains
+
+Specs contain entities organized into three domains:
+
+| Domain | Entities | Role |
+|--------|----------|------|
+| **Intent** | Spec, Requirement, ADR | Normative commitments — what the system MUST/SHOULD/MAY do |
+| **Bridge** | Scenario | Translates requirements into testable behaviors |
+| **Evidence** | TestFunction | Proves that scenarios hold |
+
+### Scenario as Bridge Entity
+
+A Scenario is NOT just an example — it is the **specification of evidence**. It bridges Intent and Evidence:
+
+```
+Requirement -[CONTAINS]-> Scenario -[TESTED_BY]-> TestFunction
+```
+
+A requirement is proven when **each of its Scenarios** has a TESTED_BY edge, not merely when "some test exists." A requirement without scenarios cannot reach FULLY PROVEN status.
+
+### Traceability Edges and Confidence
+
+| Edge | Direction | Confidence | Meaning |
+|------|-----------|------------|---------|
+| `IMPLEMENTED_BY` | Requirement → Code | 0.7 (file path) / 0.8 (function) | "This code realizes the requirement" |
+| `ADDRESSED_BY` | Requirement → ADR | 0.9 | "This ADR documents the design rationale" |
+| `TESTED_BY` | Scenario → TestFunction | 0.9 (declared) | "This test validates the scenario" |
+
+File-level `**Implementation**:` references are Level 1 (declared, confidence 0.7). Function-level references (`src/path/file.py::function_name`) are Level 2 (resolved, confidence 0.8) — stronger evidence because they target specific code.
+
+### Declaring Test Traceability per Scenario
+
+Use `**Tests**:` lines within scenarios to declare which tests validate that scenario:
+
+```markdown
+#### Scenario: Generate FQN for top-level function
+
+- GIVEN a Python file containing a top-level function
+- WHEN the system generates an FQN
+- THEN it MUST produce a unique, deterministic identifier
+
+**Tests**: `tests/unit/core/test_fqn.py::test_generate_fqn_top_level`
+```
+
+This creates a `TESTED_BY` edge from the Scenario to the TestFunction. Multiple test references can be comma-separated:
+
+```markdown
+**Tests**: `tests/unit/test_a.py::test_one`, `tests/unit/test_a.py::test_two`
+```
+
+Scenarios without `**Tests**:` lines are untested gaps — they can be filled later by structural or semantic inference.
+
+### Proof States (per Requirement)
+
+| State | Condition | Gap Type |
+|-------|-----------|----------|
+| **UNPROVEN** | No implementation, no tested scenarios | `missing_implementation` + `missing_test` |
+| **PARTIALLY PROVEN** | Has implementation but some scenarios lack tests | `missing_test` |
+| **UNTETHERED** | All scenarios tested but no implementation declared | `missing_implementation` |
+| **FULLY PROVEN** | Implementation exists AND every scenario has TESTED_BY | None |
+
+Requirements without scenarios cannot be FULLY PROVEN — they surface as `missing_scenarios` gaps.
+
+---
 
 ## Linking Requirements to Implementation Code
 
@@ -477,22 +617,33 @@ The system MUST authenticate users via OAuth.
 - THEN grant access to protected resources
 ```
 
-**After:**
+**After (with ADR-0019 traceability):**
 ```markdown
 ### Requirement: User Authentication
 
 The system MUST authenticate users via OAuth.
 
-**Implementation:**
-- `src/auth/oauth.py::OAuthHandler` (lines 45-120) - OAuth flow implementation
-- `src/auth/session.py::create_session()` (lines 23-35) - Session creation
-- `src/middleware/auth.py::require_auth` (lines 10-18) - Auth middleware decorator
+**Implementation:** `src/auth/oauth.py`, `src/auth/session.py`, ADR-0012
 
 #### Scenario: Successful Login
 - GIVEN a valid OAuth token
 - WHEN user attempts login
 - THEN grant access to protected resources
+
+**Tests**: `tests/unit/test_oauth.py::test_successful_login`
+
+#### Scenario: Expired Token
+- GIVEN an expired OAuth token
+- WHEN user attempts login
+- THEN return 401 Unauthorized
+
+**Tests**: `tests/unit/test_oauth.py::test_expired_token`
 ```
+
+This creates:
+- `IMPLEMENTED_BY` edges from the requirement to `src/auth/oauth.py` and `src/auth/session.py` (confidence 0.7)
+- `ADDRESSED_BY` edge from the requirement to ADR-0012 (confidence 0.9)
+- `TESTED_BY` edges from each scenario to the named test functions (confidence 0.9)
 
 **And at end of spec:**
 ```markdown
@@ -640,6 +791,14 @@ Run through this checklist and report findings:
 ✅ Uses RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
 ✅ Has References section (recommended)
 ✅ Has license/copyright info (recommended)
+
+--- ADR-0019 Traceability Checks (recommended) ---
+✅ MUST requirements have **Implementation**: references
+✅ MUST requirements have **Tests**: per scenario (or gap is documented)
+✅ Scenarios have GIVEN/WHEN/THEN structure (parseable)
+✅ ADR references use ADR-NNNN format (4-digit, for ADDRESSED_BY edges)
+✅ Implementation paths use `src/...` format (for IMPLEMENTED_BY edges)
+✅ Test references use `tests/path/file.py::test_name` format (for TESTED_BY edges)
 ```
 
 ### Validation Example
@@ -705,11 +864,12 @@ When the user asks to format a spec, restructure it to match the template.
 6. Current Implementation (optional)
 7. Testing Requirements (optional)
 8. Dependencies (optional)
-9. Non-Functional Requirements (optional)
-10. References
-11. Internal Documentation
-12. License/Copyright
+9. References
+10. Internal Documentation
+11. License/Copyright
 ```
+
+**Note**: Non-functional / cross-cutting requirements belong in **concern specs** (900-range), not as a section within functional specs. If a functional spec needs to reference a cross-cutting policy, link to the concern spec instead of duplicating the requirement.
 
 **Note**: For delta specs in `.openspec/changes/`, use lifecycle markers: `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`
 

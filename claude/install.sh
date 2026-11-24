@@ -2,6 +2,9 @@
 # Copyright 2026 Ilja Heitlager
 # SPDX-License-Identifier: Apache-2.0
 
+# Install or update Claude CLI
+curl -fsSL https://claude.ai/install.sh | bash
+
 # Setup XDG compliant Claude config directory and symlinks
 mkdir -p "$HOME/.claude"
 
@@ -11,12 +14,9 @@ mkdir -p "$XDG_CONFIG_HOME/claude"  2>/dev/null
 ln -sf "$XDG_CONFIG_HOME/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 ln -sf "$XDG_CONFIG_HOME/claude/settings.json" "$HOME/.claude/settings.json"
 ln -sf "$XDG_CONFIG_HOME/claude/statusline.sh" "$HOME/.claude/statusline.sh"
-ln -sf "$XDG_CONFIG_HOME/claude/statusline-powerline.sh" "$HOME/.claude/statusline-powerline.sh"
 
 # Symlink all directories found in config
 for dir in "$XDG_CONFIG_HOME/claude"/*/; do
     [ -d "$dir" ] && ln -sfn "$dir" "$HOME/.claude/$(basename "$dir")"
 done
 
-# make this smarter
-ln -sf /opt/homebrew/bin/claude ~/.local/bin/claude

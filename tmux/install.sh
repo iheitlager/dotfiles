@@ -6,6 +6,9 @@
 
 TPM_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/plugins/tpm"
 
+# Ensure XDG state dir exists (socket + internal server logs land here via TMUX_TMPDIR)
+mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/tmux"
+
 # Install TPM (Tmux Plugin Manager)
 if [ ! -d "$TPM_DIR" ]; then
     echo "  Installing TPM (Tmux Plugin Manager)..."

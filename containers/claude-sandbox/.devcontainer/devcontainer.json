@@ -4,46 +4,27 @@
   "context": "..",
 
   "mounts": [
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.config/claude,target=/home/agent/.config/claude,type=bind",
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.cache/uv,target=/home/agent/.cache/uv,type=bind"
+    "source=${localEnv:HOME}/.claude/settings.docker.json,target=/root/.claude/settings.json,type=bind,readonly",
+    "source=${localEnv:HOME}/.claude/CLAUDE.md,target=/root/.claude/CLAUDE.md,type=bind,readonly"
   ],
 
   "containerEnv": {
-    "DEVCONTAINER": "true",
-    "ANTHROPIC_DISABLE_AUTO_UPDATE": "1",
-    "ENABLE_FIREWALL": "0"
+    "IS_SANDBOX": "1",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
 
-  "remoteUser": "agent",
-  "workspaceFolder": "/workspace",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind",
+  "remoteUser": "root",
+  "workspaceFolder": "/workspaces",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
 
   "customizations": {
     "vscode": {
       "settings": {
         "terminal.integrated.shell.linux": "/bin/bash",
-        "terminal.integrated.defaultProfile.linux": "bash",
-        "python.defaultInterpreterPath": "/usr/local/bin/python",
-        "python.formatting.provider": "none",
-        "editor.formatOnSave": false
-      },
-      "extensions": [
-        "ms-python.python",
-        "ms-python.vscode-pylance",
-        "charliermarsh.ruff"
-      ]
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
     }
   },
 
-  "postCreateCommand": "echo '✓ Claude Sandbox container ready. Run: claude'",
-
-  "features": {},
-
-  "forwardPorts": [],
-
-  "portsAttributes": {},
-
-  "onCreateCommand": {
-    "welcome": "echo 'Welcome to Claude Sandbox! Type \"claude\" to start.'"
-  }
+  "postCreateCommand": "echo '✓ Claude Sandbox ready. Run: claude'"
 }

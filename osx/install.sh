@@ -19,6 +19,54 @@ if [ ! -d ~/tmp ]; then
 fi
 
 ###########################################################################
+# XDG compatibility symlinks (tools without env-var support)
+# See .openspec/architecture/decisions/001-home-root-folder-policy.md
+###########################################################################
+link_xdg() {  # link_xdg <root-name> <xdg-target>
+    local link="$HOME/$1" target="$2"
+    mkdir -p "$(dirname "$target")"
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+        [ -e "$target" ] || mv "$link" "$target"
+    fi
+    ln -sfn "$target" "$link"
+}
+link_xdg .duckdb         "$XDG_DATA_HOME/duckdb"
+link_xdg .cdk            "$XDG_CACHE_HOME/cdk"
+link_xdg .cups           "$XDG_CONFIG_HOME/cups"
+link_xdg .sigstore       "$XDG_CONFIG_HOME/sigstore"
+link_xdg .duckdb_history "$XDG_STATE_HOME/duckdb/history"
+# .bundle intentionally not symlinked: BUNDLE_USER_* env vars (ruby/bash_env)
+# point bundler at XDG dirs directly
+# .column-rs_history intentionally not symlinked: column-rs is configured
+# to use $XDG_STATE_HOME/column-rs/history directly
+
+###########################################################################
+# Power Management
+###########################################################################
+echo "  Configuring power management for profile: ${MACHINE_PROFILE:-laptop}..."
+if [ "${MACHINE_PROFILE:-laptop}" = "workstation" ]; then
+  # Always-on server (Mac mini)
+  sudo pmset -a sleep 0             # Never sleep
+  sudo pmset -a disksleep 0         # Never spin down disks
+  sudo pmset -a displaysleep 15     # Display off after 15 min
+  sudo pmset -a standby 0           # Disable standby mode
+  sudo pmset -a networkoversleep 0  # Keep network active during sleep
+  sudo pmset -a powernap 1          # Power Nap on (background tasks, backups)
+  sudo pmset -a womp 1              # Wake on magic packet (Wake-on-LAN)
+  sudo pmset -a autorestart 1       # Auto-restart after power failure
+else
+  # Laptop defaults
+  sudo pmset -a sleep 30            # Sleep after 30 min inactivity
+  sudo pmset -a disksleep 10        # Spin down disks after 10 min
+  sudo pmset -a displaysleep 10     # Display off after 10 min
+  sudo pmset -a standby 1           # Enable standby
+  sudo pmset -a networkoversleep 0  # Keep network active during sleep
+  sudo pmset -a powernap 1          # Power Nap on
+  sudo pmset -a womp 0              # No wake on LAN
+  sudo pmset -a autorestart 0       # No auto-restart after power failure
+fi
+
+###########################################################################
 # Macbook
 ############################################################################
 # http://osxdaily.com/2007/03/14/how-to-completely-disable-dashboard/

@@ -8,8 +8,8 @@
 # Exit if not running interactively
 [[ $- != *i* ]] && return
 
-# Ensure XDG and HISTFILE are set for non-login shells (e.g., subshells, scripts)
-# This prevents ~/.bash_history from being created
+# Ensure essential vars are set for non-login shells (e.g., subshells, tmux windows)
+export DOTFILES="${DOTFILES:-$HOME/.dotfiles}"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 export HISTFILE="${HISTFILE:-$XDG_STATE_HOME/bash/history}"
 mkdir -p "$(dirname "$HISTFILE")" 2>/dev/null
@@ -31,8 +31,8 @@ fi
 set -o noclobber        # Prevent overwriting files with >
 set -o ignoreeof        # Prevent Ctrl+D from logging out
 
-# Tab complete for sudo
-complete -cf sudo
+# Tab complete for sudo (inherit completions of the command after sudo)
+complete -o default -o bashdefault sudo
 
 # Cache helpers (defined here too for non-login interactive shells)
 if ! declare -f _dotfiles_cached_eval &>/dev/null; then
@@ -40,9 +40,10 @@ if ! declare -f _dotfiles_cached_eval &>/dev/null; then
         local tool="$1"
         shift
         local cmd="$*"
-        local bin cache
+        local bin cache cache_key
         bin="$(command -v "$tool" 2>/dev/null)" || return 0
-        cache="$XDG_CACHE_HOME/dotfiles/eval_${tool}.sh"
+        cache_key="${cmd//[^a-zA-Z0-9]/_}"
+        cache="$XDG_CACHE_HOME/dotfiles/eval_${tool}_${cache_key}.sh"
         if [[ ! -f "$cache" ]] || [[ "$bin" -nt "$cache" ]]; then
             eval "$cmd" >| "$cache" 2>/dev/null
         fi
@@ -55,11 +56,22 @@ if ! declare -f _dotfiles_cached_source &>/dev/null; then
         local cache="$XDG_CACHE_HOME/dotfiles/${type}.sh"
         mkdir -p "$XDG_CACHE_HOME/dotfiles"
         
-        # Regenerate cache if missing or dotfiles dir is newer
+        # Regenerate cache if missing, dotfiles dir is newer, or any source file is newer
+        local _needs_regen=false
         if [[ ! -f "$cache" ]] || [[ "$DOTFILES" -nt "$cache" ]]; then
-            # Concatenate all module files with origin comments
+            _needs_regen=true
+        else
+            for _f in $DOTFILES/*/"$type" $DOTFILES/*/*/"$type"; do
+                if [[ -f "$_f" ]] && [[ "$_f" -nt "$cache" ]]; then
+                    _needs_regen=true
+                    break
+                fi
+            done
+        fi
+        if [[ "$_needs_regen" == true ]]; then
+            # Concatenate all module files with origin comments (top-level and nested topics)
             : >| "$cache"  # Truncate/create (>| overrides noclobber)
-            for f in $DOTFILES/*/"$type"; do
+            for f in $DOTFILES/*/"$type" $DOTFILES/*/*/"$type"; do
                 if [[ -f "$f" ]]; then
                     printf '\n# >>> %s\n' "${f#$DOTFILES/}" >> "$cache"
                     cat "$f" >> "$cache"
@@ -90,9 +102,6 @@ if [ -n "${GHOSTTY_RESOURCES_DIR}" ]; then
     builtin source "${GHOSTTY_RESOURCES_DIR}/shell-integration/bash/ghostty.bash"
 fi
 
-# Prompt configuration
-REMOTE_PROMPT="\e[0;31m[\u@\h \W]\$ \e[m "
-
 # Cache for Python version (avoid spawning Python on every prompt)
 _cached_venv=""
 _cached_py_version=""
@@ -121,13 +130,14 @@ update_prompt() {
         [[ -f "$git_root/uv.lock" ]] && venv_info="⚡$venv_info"
     fi
     
-    # Python version - only recalculate when venv changes
+    # Python version - read from pyvenv.cfg (no subprocess), fallback to python --version
     if [[ "$VIRTUAL_ENV" != "$_cached_venv" ]]; then
         _cached_venv="$VIRTUAL_ENV"
-        if command -v python &> /dev/null; then
-            _cached_py_version=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
-        else
-            _cached_py_version=""
+        _cached_py_version=""
+        if [[ -f "$VIRTUAL_ENV/pyvenv.cfg" ]]; then
+            _cached_py_version=$(grep '^version_info' "$VIRTUAL_ENV/pyvenv.cfg" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        elif command -v python &> /dev/null; then
+            _cached_py_version=$(python --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
         fi
     fi
     [[ -n "$_cached_py_version" ]] && python_info="${BLUE}🐍 py${_cached_py_version}${RESET} "
@@ -158,12 +168,18 @@ update_prompt() {
         fi
     fi
     
+    # SSH host indicator (shown when connected via SSH)
+    local host_info=""
+    if [[ -n "$SSH_CLIENT" || -n "$SSH_TTY" ]]; then
+        host_info="${RED}[ssh:\h]${RESET} "
+    fi
+
     # Build the first line
-    local first_line="${venv_info}${python_info}"
+    local first_line="${host_info}${venv_info}${python_info}"
     if [[ -n "$git_prompt" ]]; then
         first_line="${first_line}\[${git_prompt}\]"
     fi
-    
+
     # Only show first line if there's content
     if [[ -n "$first_line" ]]; then
         PS1="${first_line}\n${CYAN}\w>${RESET} "
@@ -174,9 +190,8 @@ update_prompt() {
     # Tell terminal the current directory (OSC 7) for new tab/window behavior
     printf '\e]7;file://%s%s\e\\' "${HOSTNAME}" "${PWD// /%20}"
     
-    # Share history across terminals: append new commands, then reload
-    history -a  # Append new lines to history file
-    history -n  # Read new lines from history file
+    # Write new commands to history file (session-isolated; no cross-session reload)
+    history -a
 }
 
 PROMPT_COMMAND="update_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"

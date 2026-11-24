@@ -103,11 +103,11 @@ For applications like Claude Code that don't fully support XDG conventions, we u
 
 ### Bootstrap: Dotfiles → XDG
 
-The `link_config_files()` function in [script/bootstrap](../script/bootstrap#L91-L100) links any `config/` directory inside a topic to `~/.config/<topic>/`:
+The `link_config_files()` function in [script/bootstrap](../script/bootstrap#L91-L100) links any `config/` directory inside a topic (top-level or nested) to `~/.config/<topic>/`:
 
 ```bash
 link_config_files () {
-  for src in $(find "$DOTFILES" -maxdepth 2 -type d -name 'config')
+  for src in $(find "$DOTFILES" -maxdepth 3 -type d -name 'config')
   do
     local topic=$(basename $(dirname "$src"))
     local dst="$HOME/.config/$topic"
@@ -118,8 +118,10 @@ link_config_files () {
 
 This creates:
 ```
-~/.config/claude/ → ~/.dotfiles/claude/config/
-~/.config/tmux/   → ~/.dotfiles/tmux/config/
+~/.config/claude/   → ~/.dotfiles/claude/config/
+~/.config/tmux/     → ~/.dotfiles/tmux/config/
+~/.config/opencode/ → ~/.dotfiles/ai/opencode/config/
+~/.config/vibe/     → ~/.dotfiles/ai/vibe/config/
 ```
 
 ### Topic Install: XDG → Application
@@ -139,6 +141,10 @@ ln -sfn ~/.config/claude/commands "$HOME/.claude/commands"
 ```
 
 > **Note**: `ln -sfn` is used for directories to replace existing symlinks correctly.
+
+Vibe ignores XDG and uses `~/.vibe` as its home: [ai/vibe/install.sh](../ai/vibe/install.sh)
+symlinks the whole `~/.vibe` directory to `ai/vibe/config/` (a dir-level link, so vibe's
+atomic config writes cannot break it). Runtime files written there are gitignored.
 
 ---
 

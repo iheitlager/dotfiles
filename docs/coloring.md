@@ -240,28 +240,19 @@ Configured in `~/.gitconfig`:
 
 ### Shell Integration
 
-```bash
-# History search with fzf (Ctrl+R replacement)
-_bash_history -s              # Interactive history selection
-_bash_history -s -g "git"     # Filter then select
+fzf shell integration is loaded via `eval "$(fzf --bash)"` which binds:
 
+| Keybinding | Action |
+|------------|--------|
+| `Ctrl+R` | History search (replaces default readline) |
+| `Ctrl+T` | File picker — pastes selected path at cursor |
+| `Alt+C` | Directory picker — cd into selection |
+
+```bash
 # File selection
 vim $(fzf)                    # Open file in vim
 cd $(fd -t d | fzf)           # cd to directory
-```
-
-### fzf Options Used
-
-```bash
-fzf \
-    --height=50% \
-    --layout=reverse \
-    --border \
-    --preview 'echo {}' \
-    --preview-window=up:3:wrap \
-    --header='Select command' \
-    --prompt='> ' \
-    --color='header:italic:underline'
+hg "git"                      # grep history for pattern
 ```
 
 ### Environment Configuration

@@ -447,7 +447,7 @@ This section provides project-specific links for tracking and traceability.
 ### Related Specifications
 
 - [001-dotfiles-core](../001-dotfiles-core/spec.md) - Core dotfiles system that uses caching
-- [003-shortcuts-system](../003-shortcuts-system/spec.md) - Shortcuts system that uses caching
+- [004-shortcuts-system](../004-shortcuts-system/spec.md) - Shortcuts system that uses caching
 
 ---
 
@@ -460,7 +460,7 @@ This section provides project-specific links for tracking and traceability.
 ## Internal Documentation
 
 - [Dotfiles System Core Specification](../001-dotfiles-core/spec.md) - Main dotfiles system
-- [Shortcuts System Specification](../003-shortcuts-system/spec.md) - Keyboard shortcuts (uses caching)
+- [Shortcuts System Specification](../004-shortcuts-system/spec.md) - Keyboard shortcuts (uses caching)
 
 ---
 

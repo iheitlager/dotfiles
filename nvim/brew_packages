@@ -7,5 +7,9 @@ PATH=/usr/local/bin:$PATH
 # only want the latest and greatest
 brew install neovim || brew upgrade neovim
 
+# Language servers for LSP
+brew install pyright || brew upgrade pyright
+brew install lua-language-server || brew upgrade lua-language-server
+brew install bash-language-server || brew upgrade bash-language-server
 
 export PATH=$TMPPATH

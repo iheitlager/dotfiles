@@ -1,238 +1,259 @@
-Review codebase, documentation, and issues to identify gaps and verify completeness.
+---
+model: sonnet
+---
+Review a pull request using specialized agents. In the workflow `/review → /pr → /fix → /merge`,
+this step generates the findings that get documented in the PR.
 
 ## Usage
 
 ```
-/review              Full project review
-/review code         Code quality and TODOs only
-/review docs         Documentation completeness only
-/review issues       GitHub issues health only
-/review <path>       Review specific file or directory
+/review              Review current branch's PR
+/review #123         Review specific PR by number
+/review #123 tests   Review only specific aspects
 ```
 
-## Agent Strategy
+**Aspects:** `code` `security` `tests` `docs` `types` `simplify` `all` (default)
 
-This skill delegates heavy scanning to agents, then synthesizes results interactively.
+---
 
+## Detect the Forge (all modes)
+
+```bash
+HOST=$(git remote get-url origin | sed -E 's#^[a-z+]+://##; s#^[^@/]*@##; s#[:/].*##')
+case "$HOST" in
+  github.com) FORGE=github ;;
+  *) glab auth status --hostname "$HOST" >/dev/null 2>&1 && FORGE=gitlab || FORGE=unknown ;;
+esac
+echo "$HOST → $FORGE"
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  /review                                                    │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Explore      │  │ Explore      │  │ Bash         │      │
-│  │ Agent        │  │ Agent        │  │ Agent        │      │
-│  │              │  │              │  │              │      │
-│  │ Code scan    │  │ Doc scan     │  │ GH issues    │      │
-│  │ TODOs, gaps  │  │ Stale docs   │  │ Stale/dupe   │      │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
-│         │                 │                 │               │
-│         └────────────┬────┴────────────────┘               │
-│                      ▼                                      │
-│              Synthesize Report                              │
-│              (main conversation)                            │
-│                      │                                      │
-│                      ▼                                      │
-│              Offer Actions                                  │
-│              (interactive)                                  │
-└─────────────────────────────────────────────────────────────┘
-```
+
+- `github` → use `gh` as written below. `gitlab` → translate with the table. `unknown` → stop and ask.
+- GitLab behind a network allow-list returns **HTTP 403 with an HTML page** ("Access to Gitlab
+  is not allowed from your IP-address"). Stop and ask the user to connect the VPN.
+- On GitLab, issues are `#N` and merge requests are `!N`; say "MR", not "PR".
+
+| GitHub (`gh`) | GitLab (`glab`) |
+|---|---|
+| `gh issue list [--search S]` | `glab issue list [--search S]` |
+| `gh issue view N [--json ...]` | `glab issue view N [-F json] [--comments]` |
+| `gh issue create --title T --body B` | `glab issue create --title T --description B` |
+| `gh issue close N -c MSG` | `glab issue note N -m MSG && glab issue close N` |
+| `gh pr view [N] --json ...` | `glab mr view [N] -F json` |
+| `gh pr diff [N]` | `glab mr diff [N] --raw` |
+| `gh pr create --title T --body B` | `glab mr create --title T --description B` |
+| `gh pr comment N --body B` | `glab mr note create N -m B` |
+
+---
 
 ## Process
 
-### 1. Spawn Agents (parallel)
+### 1. Identify PR
 
-Launch these agents in parallel to gather data:
+```bash
+# Current branch
+gh pr view --json number,title,body,files,commits
 
-**Agent 1: Code Quality Scan**
+# Or specific PR
+gh pr view 123 --json number,title,body,files,commits
+
+# Get the diff
+gh pr diff $PR
 ```
-Task tool:
-  subagent_type: Explore
+
+### 2. Fetch Linked Issues
+
+Extract issue references from the PR body (`Closes #N`, `Fixes #N`, `Resolves #N`, `#N`) and fetch each:
+
+```bash
+# Extract issue numbers from PR body (covers common keywords + bare #N)
+echo "$BODY" | grep -oE '([Cc]loses?|[Ff]ixes?|[Rr]esolves?|[Rr]elated to)?\s*#[0-9]+' | grep -oE '[0-9]+'
+
+# Fetch each linked issue
+gh issue view $ISSUE_NUMBER --json number,title,body,labels,comments
+```
+
+Build a **Requirements context** block from all linked issues:
+
+```
+Requirements (from linked issues):
+─────────────────────────────────
+Issue #42: Add OAuth login support
+  Labels: enhancement, auth
+  Description: <issue body>
+  Comments (acceptance criteria, decisions): <relevant comments>
+
+Issue #51: Fix token refresh on expiry
+  ...
+```
+
+If no issues are linked, note "No linked issues found" and proceed.
+
+### 3. Load Project Conventions
+
+Read `CLAUDE.md` (or `.dotfiles/claude/config/CLAUDE.md`) and include in every agent prompt:
+
+```
+Project conventions (apply what's relevant to this project's language):
+- Python: ruff (linting), pyright (types), pytest (>80% coverage), uv, isort, type hints required
+- Rust: clippy -D warnings, rustfmt, cargo test, cargo check
+- All: ADRs in .openspec/adr/, specs in .openspec/specs/
+- All: Conventional commits (feat/fix/chore/refactor/docs)
+- All: No markdown files unless explicitly requested
+```
+
+### 4. Determine Applicable Agents
+
+**If an aspect was given on the command line** (`code`, `security`, `tests`, `docs`, `types`, `simplify`),
+launch only the matching agent below and skip the table entirely:
+
+| Aspect | Agent |
+|--------|-------|
+| `code` | `code-reviewer` |
+| `security` | `security-reviewer` |
+| `tests` | `test-writer` |
+| `docs` | `docs-generator` |
+| `types` | `type-design-analyzer` |
+| `simplify` | `refactor-helper` |
+
+**Otherwise** (no aspect, or `all`), select based on changed files and diff content:
+
+| Condition | Agent |
+|-----------|-------|
+| Always | `code-reviewer` — bugs, logic errors, project conventions, missing error handling |
+| Always | `security-reviewer` — OWASP, injection, secrets, silent failures, auth |
+| Test files changed OR logic-heavy diff | `test-writer` — coverage gaps, missing edge cases, test quality |
+| Docstrings/comments added or modified | `docs-generator` — comment accuracy, docstring rot, outdated docs |
+| Type annotations added or modified | `type-design-analyzer` — invariants, encapsulation, type correctness |
+| Diff > 150 lines | `refactor-helper` — code smells, simplification, duplication |
+
+Run all applicable agents in parallel.
+
+### 5. Launch Agents
+
+Pass each agent the PR diff, context, and project conventions. **Everything the agent needs is in
+this prompt** — it must not spend time re-deriving it:
+
+```
+Agent tool:
+  subagent_type: code-reviewer   (or other applicable agent)
   prompt: |
-    Scan the codebase for incomplete work and code quality issues:
+    Review PR #$PR: $TITLE
 
-    1. Find all TODO, FIXME, HACK, XXX comments
-    2. Find empty function bodies (pass, ..., NotImplementedError)
-    3. Find commented-out code blocks (3+ consecutive commented lines)
-    4. Find bare except clauses or empty catch blocks
-    5. Find unused imports
+    Constraints:
+    - The diff below is complete and final — do NOT run `gh pr diff`, `gh pr view`, or any other
+      `gh` command to re-fetch it.
+    - Do NOT run tests, builds, linters, or install dependencies. Do NOT explore the repo beyond
+      what's needed to understand the lines actually changed (e.g. checking a call site or an
+      imported type). This is a read-only review of the diff below, not a build/test pass.
+    - Stay within a few minutes of work. If you find yourself running a Bash command other than
+      Read/Grep-style lookups against files already in the diff, stop and review what you have.
 
-    For each finding, report:
-    - File path and line number
-    - The marker or issue type
-    - Surrounding context (1 line before/after)
+    Project conventions (apply what's relevant to this project's language):
+    - Python: ruff, pyright, pytest (>80% coverage), uv, isort, type hints required
+    - Rust: clippy -D warnings, rustfmt, cargo test, cargo check
+    - All: Conventional commits; no gratuitous markdown files
+    - All: ADRs document architectural decisions (.openspec/adr/)
 
-    Group by severity: errors > warnings > notes
+    Requirements (from linked issues):
+    $REQUIREMENTS_CONTEXT
+
+    PR Description:
+    $BODY
+
+    Files changed:
+    $FILE_LIST
+
+    Diff:
+    $DIFF
+
+    Report findings with file:line references, severity (critical/warning/suggestion),
+    and a concrete suggested fix for each issue.
+    Also flag any requirements from the linked issues that appear unaddressed or incomplete.
+    Focus only on the changed code, not the entire codebase.
 ```
 
-**Agent 2: Test Coverage Scan**
-```
-Task tool:
-  subagent_type: Explore
-  prompt: |
-    Analyze test coverage gaps:
+### 6. Aggregate & Present
 
-    1. List all source modules in src/
-    2. List all test files in tests/
-    3. Identify modules without corresponding test files
-    4. Find skipped tests (@skip, pytest.mark.skip)
-    5. Find tests with TODO markers
-
-    Report:
-    - Modules missing tests
-    - Skipped test count and reasons
-    - Test files with TODOs
-```
-
-**Agent 3: Documentation Scan**
-```
-Task tool:
-  subagent_type: Explore
-  prompt: |
-    Check documentation freshness:
-
-    1. Compare README features list with actual exports
-    2. Check if CHANGELOG has entries for recent commits
-    3. Find broken internal links in markdown files
-    4. Identify public functions without docstrings
-
-    Report discrepancies with file:line references.
-```
-
-**Agent 4: GitHub Issues Health** (if reviewing issues)
-```
-Task tool:
-  subagent_type: Bash
-  prompt: |
-    Analyze GitHub issues health:
-
-    1. Run: gh issue list --state open --json number,title,labels,updatedAt,assignees
-    2. Identify stale issues (no update in 30+ days)
-    3. Look for potential duplicates (similar titles)
-    4. Cross-reference with recent closed PRs to find potentially fixed issues
-
-    Output a structured summary.
-```
-
-### 2. Synthesize Results
-
-Once agents return, combine their findings into a unified report:
-
-- Deduplicate findings
-- Prioritize by severity
-- Group related items
-- Calculate summary statistics
-
-### 3. Present Report
-
-Show the consolidated report (see Output Format below).
-
-### 4. Offer Actions (Interactive)
-
-Ask user which actions to take:
-- Create issues for gaps?
-- Close stale issues?
-- Queue work for swarm?
-
-## Output Format
+Combine agent results into a unified report, deduplicating overlapping findings:
 
 ```
-Project Review: <project-name>
+PR Review: #123 feat(auth): add OAuth support
 ═══════════════════════════════════════════════════════════════
 
-Code Quality
+Critical (0)
 ────────────────────────────────────────────────────────────────
-✗ 5 TODOs found
-  - src/api.py:42 — TODO: add rate limiting
-  - src/api.py:87 — FIXME: handle timeout
-  - src/db.py:15 — TODO: add connection pooling
-  ...
-✓ No HACK/XXX markers
-✗ 2 empty function bodies
-  - src/cache.py:23 — invalidate() is empty
+None
 
-Test Coverage
+Warnings (2)
 ────────────────────────────────────────────────────────────────
-✗ 3 modules without tests
-  - src/validators.py
-  - src/middleware.py
-  - src/cache.py
-✓ No skipped tests
+[security-reviewer] src/auth/oauth.py:78
+  Token stored in plain text in session.
+  Fix: Encrypt sensitive session data before storage.
 
-Documentation
+[code-reviewer] src/auth/oauth.py:45
+  Missing error handling for token refresh failure.
+  Fix: Wrap in try/except, raise AuthError on failure.
+
+Suggestions (3)
 ────────────────────────────────────────────────────────────────
-✓ README up to date
-✗ API docs missing for 2 public functions
-  - src/api.py:create_session()
-  - src/api.py:refresh_token()
+[type-design-analyzer] src/auth/oauth.py:23
+  Return type is `Optional[str]` but None is never returned.
+  Fix: Change to `-> str`.
 
-GitHub Issues
+[test-writer] tests/test_oauth.py
+  Missing test for token expiry edge case.
+
+[refactor-helper] src/auth/oauth.py:12
+  Magic string "oauth_callback" repeated 3 times — extract as constant.
+
+Unaddressed Requirements (1)
 ────────────────────────────────────────────────────────────────
-✓ 12 open issues
-✗ 3 stale issues (>30 days)
-  - #8: Add dark mode (45 days)
-  - #5: Performance optimization (62 days)
-  - #3: Mobile support (78 days)
-✗ 1 potentially fixed issue
-  - #11: Login bug — similar fix merged in PR #24
+[#42] Token refresh on expiry — issue mentions handling 401 responses,
+  no code path found for this in the diff.
 
-Summary
+Strengths
 ────────────────────────────────────────────────────────────────
-Issues to create: 3
-  → "Add rate limiting to API" (from TODO in src/api.py:42)
-  → "Add tests for validators module"
-  → "Document create_session() and refresh_token()"
+✓ Good separation of concerns
+✓ Comprehensive happy-path tests
+✓ Clear commit messages
 
-Issues to close: 1
-  → #11: Login bug (appears fixed)
-
-Issues to ping: 3
-  → #8, #5, #3: Stale, need triage
+Summary: 0 critical, 2 warnings, 3 suggestions, 1 unaddressed requirement
 ```
 
-## Actions
+### 7. Document Findings in the PR (automatic)
 
-After review, offer to:
+After presenting the report, **always** post findings as a PR comment without asking:
 
-1. **Create issues** for discovered gaps
-   ```bash
-   gh issue create --title "Add rate limiting" --body "Found TODO at src/api.py:42"
-   ```
+```bash
+gh pr comment $PR --body "$(cat <<'EOF'
+## Review Findings
 
-2. **Comment on stale issues** asking for status
-   ```bash
-   gh issue comment 8 --body "Is this still needed? No activity in 45 days."
-   ```
+### Critical (N)
+...
 
-3. **Close fixed issues** with explanation
-   ```bash
-   gh issue close 11 --comment "Fixed in PR #24"
-   ```
+### Warnings (N)
+...
 
-4. **Queue work** for swarm execution
-   ```bash
-   swarm-job new "Add missing tests for validators" -c simple -p medium
-   ```
+### Suggestions (N)
+...
 
-## Philosophy
+### Unaddressed Requirements (N)
+...
 
-A codebase is never "done" — but it can be **coherent**:
-- Every TODO has a tracking issue
-- Every issue is actionable or closed
-- Every feature is documented and tested
-- Every gap is acknowledged
+### Strengths
+...
 
-`/review` surfaces the gaps. You decide what to do about them.
+---
+🤖 *Analysis by Claude*
+EOF
+)"
+```
 
-## Prompt
+If the PR doesn't exist yet (no open PR for the branch), skip this step and note that findings
+will be documented when `/pr` is run.
 
-Review this code for bugs, security issues, and improvements. Be concise and actionable.
-
-Focus on:
-- Logic errors or potential bugs
-- Security vulnerabilities (injection, XSS, secrets)
-- Missing error handling
-- Type issues
-- Performance concerns
-- Code clarity
-
-Format: List issues by severity (critical/warning/suggestion) with line references where applicable.
+After posting, confirm:
+```
+✓ Findings posted to PR #123
+Next: /fix — address the findings
+```

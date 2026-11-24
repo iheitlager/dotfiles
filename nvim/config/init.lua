@@ -126,6 +126,14 @@ vim.api.nvim_create_autocmd('FileType', {
   end,
 })
 
+-- Enable treesitter highlighting for filetypes not auto-detected
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = { 'ebnf', 'mvl', 'turtle', 'song' },
+  callback = function()
+    vim.treesitter.start()
+  end,
+})
+
 -- Bootstrap lazy.nvim plugin manager
 local lazypath = vim.fn.stdpath('data') .. '/lazy/lazy.nvim'
 if not vim.loop.fs_stat(lazypath) then
@@ -181,23 +189,29 @@ require('lazy').setup({
   -- Treesitter for better syntax highlighting
   {
     'nvim-treesitter/nvim-treesitter',
-    branch = 'master',  -- Use stable master branch with old API and YAML support
+    branch = 'main',
     lazy = false,
     build = ':TSUpdate',
     config = function()
-      require('nvim-treesitter.configs').setup({
-        ensure_installed = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown' },
-        sync_install = false,
+      require('nvim-treesitter').setup({
+        ensure_install = { 'lua', 'vim', 'vimdoc', 'bash', 'python', 'javascript', 'typescript', 'json', 'yaml', 'markdown', 'markdown_inline', 'ebnf', 'turtle' },
         auto_install = true,
-        highlight = {
-          enable = true,
-          additional_vim_regex_highlighting = false,
-        },
-        indent = { enable = true },
       })
-      -- Enable treesitter-based folding
+      -- Link .ebnf files to the ebnf treesitter parser
+      vim.filetype.add({ extension = { ebnf = 'ebnf' } })
+      -- Link .ttl files to the turtle treesitter parser (Turtle RDF syntax)
+      vim.filetype.add({ extension = { ttl = 'turtle' } })
+      -- Link .song files to algo-synth's local tree-sitter grammar
+      vim.filetype.add({ extension = { song = 'song' } })
+      vim.api.nvim_create_autocmd('User', { pattern = 'TSUpdate', callback = function()
+        require('nvim-treesitter.parsers').song = {
+          install_info = { path = vim.fn.expand('~/wc/algo-synth/syntax/tree-sitter-song'), queries = 'queries' },
+        }
+      end })
+      -- Enable treesitter-based folding (foldlevel=99 keeps all folds open by default)
       vim.opt.foldmethod = 'expr'
-      vim.opt.foldexpr = 'nvim_treesitter#foldexpr()'
+      vim.opt.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+      vim.opt.foldlevel = 99
     end,
   },
 
@@ -223,6 +237,9 @@ require('lazy').setup({
     end,
   },
 
+  -- LSP (provides server configs for vim.lsp.config)
+  { 'neovim/nvim-lspconfig', lazy = true },
+
   -- Git signs in gutter
   {
     'lewis6991/gitsigns.nvim',
@@ -245,8 +262,11 @@ require('lazy').setup({
   -- Surround (like vim-surround)
   { 'kylechui/nvim-surround', event = 'VeryLazy', config = true },
 
-  -- Comment toggling
-  { 'numToStr/Comment.nvim', config = true },
+  -- Comment toggling (gcc = line, gc = visual; Ctrl+/ mirrors CMD+/ convention)
+  { 'numToStr/Comment.nvim', config = true, keys = {
+    { '<C-/>', 'gcc', mode = 'n', remap = true, desc = 'Toggle comment' },
+    { '<C-/>', 'gc',  mode = 'v', remap = true, desc = 'Toggle comment' },
+  }},
 
   -- Autopairs
   { 'windwp/nvim-autopairs', event = 'InsertEnter', config = true },
@@ -267,6 +287,43 @@ require('lazy').setup({
   -- lazy.nvim options
   checker = { enabled = false },  -- Don't auto-check for updates
 })
+
+-- LSP configuration (nvim 0.11+ native API)
+-- Keybindings: set once when any LSP attaches
+vim.api.nvim_create_autocmd('LspAttach', {
+  callback = function(ev)
+    local map = function(keys, func, desc)
+      vim.keymap.set('n', keys, func, { buffer = ev.buf, desc = 'LSP: ' .. desc })
+    end
+    map('gd', vim.lsp.buf.definition, 'Go to definition')
+    map('gr', vim.lsp.buf.references, 'References')
+    map('gI', vim.lsp.buf.implementation, 'Go to implementation')
+    map('K', vim.lsp.buf.hover, 'Hover documentation')
+    map('<leader>rn', vim.lsp.buf.rename, 'Rename symbol')
+    map('<leader>ca', vim.lsp.buf.code_action, 'Code action')
+    map('<leader>D', vim.lsp.buf.type_definition, 'Type definition')
+    map('gD', vim.lsp.buf.declaration, 'Go to declaration')
+  end,
+})
+
+-- Server configs
+vim.lsp.config('pyright', {})
+
+vim.lsp.config('lua_ls', {
+  settings = {
+    Lua = {
+      runtime = { version = 'LuaJIT' },
+      diagnostics = { globals = { 'vim' } },
+      workspace = { library = vim.api.nvim_get_runtime_file('', true), checkThirdParty = false },
+      telemetry = { enable = false },
+    },
+  },
+})
+
+vim.lsp.config('bashls', {})
+
+-- Enable servers
+vim.lsp.enable({ 'pyright', 'lua_ls', 'bashls' })
 
 -- Claude AI integration (uses ~/.dotfiles/local/bin/ai)
 local claude = {}
@@ -338,3 +395,13 @@ keymap('v', '<leader>ae', function() claude.show('Explain this code concisely') 
 keymap('v', '<leader>af', function() claude.replace('Fix this code. Return only the fixed code, no explanation.') end, { desc = 'Fix' })
 keymap('v', '<leader>as', function() claude.replace('Simplify this code. Return only the code, no explanation.') end, { desc = 'Simplify' })
 keymap('v', '<leader>ad', function() claude.show('Add documentation/comments to this code') end, { desc = 'Document' })
+
+-- SheerPower 4GL syntax (loaded from repo)
+vim.opt.runtimepath:prepend(vim.fn.expand('~/wc/sheerpower-worktree/agent-1/etc/nvim'))
+
+
+-- BEGIN nvim-mvl
+-- MVL language support — installed via make install-nvim
+vim.opt.runtimepath:prepend("/Users/iheitlager/.local/share/nvim/site/pack/nvim-mvl/start/nvim-mvl")
+require("mvl").setup()
+-- END nvim-mvl

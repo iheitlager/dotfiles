@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Copyright 2026 Ilja Heitlager
+# SPDX-License-Identifier: Apache-2.0
+
+# Vibe - XDG compliant: VIBE_HOME points at ~/.config/vibe, which script/bootstrap
+# symlinks to ai/vibe/config (runtime files there are gitignored). No ~/.vibe at root.
+export VIBE_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/vibe"

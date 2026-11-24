@@ -35,6 +35,6 @@ What other options did we consider and why did we not choose them?
 
 
 ## Decisions
-- Store all ADR in `./docs/adr`
+- Store all ADR in `./.openspec/adr`
 - All ADR records have the filename `DDDD-topic-name.md`
-- Index of all ADR is kept in `./docs/adr/index.md`
+- Index of all ADR is kept in `./.openspec/adr/index.md`

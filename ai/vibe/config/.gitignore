@@ -1,0 +1,11 @@
+# ~/.vibe is symlinked to this directory (VIBE_HOME). Only config.toml and
+# versionable items (skills/, agents/, prompts/, hooks.toml) are tracked;
+# everything vibe writes at runtime stays local.
+.env
+logs/
+vibehistory
+cache.toml
+trusted_folders.toml
+*_cache.json
+*.lock
+ui_startup_config.json

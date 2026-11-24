@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# claude-cleanup: find and remove runaway Claude task output files in /private/tmp
+# Usage: claude-cleanup [-n] [-t SIZE] [-k]
+#   -n        dry run (show what would be deleted)
+#   -t SIZE   threshold in MB (default: 100)
+#   -k        kill processes writing to large files
+
+set -euo pipefail
+
+DRY_RUN=0
+KILL_PROCS=0
+THRESHOLD_MB=100
+
+while getopts "nkt:" opt; do
+  case $opt in
+    n) DRY_RUN=1 ;;
+    k) KILL_PROCS=1 ;;
+    t) THRESHOLD_MB=$OPTARG ;;
+    *) echo "Usage: $0 [-n] [-t SIZE_MB] [-k]" >&2; exit 1 ;;
+  esac
+done
+
+CLAUDE_TMP=$(ls -d /private/tmp/claude-* 2>/dev/null | head -1)
+if [[ -z "$CLAUDE_TMP" ]]; then
+  echo "No Claude tmp directory found in /private/tmp"
+  exit 0
+fi
+
+echo "Scanning $CLAUDE_TMP (threshold: ${THRESHOLD_MB}MB) ..."
+echo ""
+
+FOUND=0
+
+while IFS= read -r -d '' file; do
+  size_bytes=$(stat -f%z "$file" 2>/dev/null || echo 0)
+  size_mb=$((size_bytes / 1024 / 1024))
+
+  if (( size_mb >= THRESHOLD_MB )); then
+    FOUND=1
+    size_human=$(du -sh "$file" 2>/dev/null | cut -f1)
+    echo "  [${size_human}] $file"
+
+    if (( KILL_PROCS )); then
+      pids=$(lsof "$file" 2>/dev/null | awk 'NR>1 {print $2}' | sort -u)
+      if [[ -n "$pids" ]]; then
+        for pid in $pids; do
+          cmd=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
+          echo "    -> killing PID $pid ($cmd)"
+          if (( !DRY_RUN )); then
+            kill "$pid" 2>/dev/null || true
+          fi
+        done
+      fi
+    fi
+
+    if (( DRY_RUN )); then
+      echo "    -> would delete (dry run)"
+    else
+      rm -f "$file"
+      echo "    -> deleted"
+    fi
+  fi
+done < <(find "$CLAUDE_TMP" -name "*.output" -type f -print0 2>/dev/null)
+
+if (( FOUND == 0 )); then
+  echo "  Nothing above ${THRESHOLD_MB}MB found."
+fi
+
+echo ""
+df -h /System/Volumes/Data | awk 'NR==1 || /Data/'

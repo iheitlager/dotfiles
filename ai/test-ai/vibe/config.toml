@@ -1,0 +1,3 @@
+# Test rig defaults: auto-approve every tool call.
+# Only for disposable test folders created by test-ai -- see ai/test-ai/ in dotfiles.
+default_agent = "auto-approve"

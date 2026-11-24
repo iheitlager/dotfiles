@@ -6,3 +6,4 @@
 _dotfiles_cached_eval uv uv generate-shell-completion bash
 complete -o "nospace" -W "python" killall;
 _dotfiles_cached_eval pip3 pip3 completion --bash
+_dotfiles_cached_eval mise mise completion bash
