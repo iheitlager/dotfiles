@@ -269,9 +269,6 @@ launch-agents workspace         Simple workspace (claude + shell)
 Paths:
     Worktrees       $WORKTREE_ROOT/agent-N/
     Shared state    $SHARED_CONTEXT/
-
-Documentation:
-    See ~/.dotfiles/docs/agent-system.md for detailed architecture and usage.
 EOF
 }
 

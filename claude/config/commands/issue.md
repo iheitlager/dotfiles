@@ -178,7 +178,6 @@ For when you want a thorough, templated issue with clarifying questions.
 
 After any operation, show available actions:
 - `/take #123` - Start working on an issue
-- `/take #123 queue` - Load issue to swarm queue
 - `/issue` - Refresh the list
 
 ---

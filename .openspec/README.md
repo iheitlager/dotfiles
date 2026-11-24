@@ -25,7 +25,6 @@ OpenSpec follows these core principles:
 ├── README.md                    # This file
 ├── architecture/                # C4 architecture models (YAML + markdown)
 ├── changes/                     # Delta specs (proposals)
-├── agent-system.md              # Agent swarm system guide
 ├── grounded-c4.md               # Grounded C4 design doc
 ├── openspec-commands.md         # OpenSpec CLI reference
 └── specs/                       # All specifications
@@ -35,7 +34,6 @@ OpenSpec follows these core principles:
     ├── 004-shortcuts-system/
     ├── 005-openspec-specification/
     ├── 006-aliases-system/
-    ├── 007-agent-swarm-system/
     ├── 008-hyperlinks-system/
     ├── 009-grounded-c4-architecture/
     └── 010-launch-agents/
@@ -227,7 +225,6 @@ spec
 | 004 | [Shortcuts System](specs/004-shortcuts-system/spec.md) | Implemented | Dynamic keyboard shortcuts discovery |
 | 005 | [OpenSpec Format](specs/005-openspec-specification/spec.md) | Implemented | Specification format, validation, traceability |
 | 006 | [Aliases System](specs/006-aliases-system/spec.md) | Implemented | Dynamic shell aliases with smart caching |
-| 007 | [Agent Swarm](specs/007-agent-swarm-system/spec.md) | Implemented | Multi-agent coordination with worktree isolation |
 | 008 | [Hyperlinks](specs/008-hyperlinks-system/spec.md) | Implemented | Terminal hyperlink integration |
 | 009 | [Grounded C4](specs/009-grounded-c4-architecture/spec.md) | Implemented | C4 architecture modeling from code |
 | 010 | [Launch Agents](specs/010-launch-agents/spec.md) | Implemented | tmux swarm session management |
@@ -236,7 +233,6 @@ spec
 
 | Document | Location | Purpose |
 |----------|----------|---------|
-| [Agent System Guide](agent-system.md) | `.openspec/` | Architecture and usage for agent swarm |
 | [Grounded C4 Design](grounded-c4.md) | `.openspec/` | Design doc for C4 architecture tooling |
 | [OpenSpec Commands](openspec-commands.md) | `.openspec/` | CLI reference for `spec` command |
 | [Architecture Models](architecture/) | `.openspec/architecture/` | YAML C4 models (landscape, resources, sequences) |
@@ -336,7 +332,6 @@ The system prompt includes architecture references:
 For understanding the dotfiles system architecture:
 - **Core system spec**: `~/.dotfiles/.openspec/specs/001-dotfiles-core/spec.md`
 - **Brew management**: `~/.dotfiles/.openspec/specs/003-brew-management/spec.md`
-- **Agent swarm**: `~/.dotfiles/.openspec/specs/007-agent-swarm-system/spec.md`
 - **XDG integration**: `~/.dotfiles/docs/xdg_setup.md`
 ```
 
@@ -384,7 +379,6 @@ Dotfiles Caching System Specification      1.0.0     Implemented   4
 Keyboard Shortcuts System Specification    1.0.0     Implemented   8
 OpenSpec Specification Format              1.0.0     Implemented   13
 Aliases Documentation System               1.0.0     Implemented   7
-Agent Swarm System Specification           1.0.0     Implemented   15
 
 Total Requirements: 56
 ```

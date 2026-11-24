@@ -50,7 +50,6 @@ openspec list
 │ 003-shortcuts-system       │ Impl   │ 1.0.0   │  8   │
 │ 004-openspec-specification │ Impl   │ 1.0.0   │ 13   │
 │ 005-aliases-system         │ Impl   │ 1.0.0   │  7   │
-│ 006-agent-swarm-system     │ Impl   │ 1.0.0   │ 15   │
 ╰────────────────────────────┴────────┴─────────┴──────╯
 
 # Verbose
@@ -63,7 +62,6 @@ openspec list -v
 │ 003-shortcuts-system       │ Impl   │ 1.0.0   │  8   │ Ilja Heitlager │ 2026-02-07 │ 18.5 KB  │ Productivity │
 │ 004-openspec-specification │ Impl   │ 1.0.0   │ 13   │ Ilja Heitlager │ 2026-02-08 │ 28.1 KB  │ Specification│
 │ 005-aliases-system         │ Impl   │ 1.0.0   │  7   │ Ilja Heitlager │ 2026-02-09 │ 15.3 KB  │ Productivity │
-│ 006-agent-swarm-system     │ Impl   │ 1.0.0   │ 15   │ Ilja Heitlager │ 2026-02-10 │ 32.7 KB  │ Tooling      │
 ╰────────────────────────────┴────────┴─────────┴──────┴────────────────┴────────────┴──────────┴──────────────╯
 
 # JSON
@@ -304,11 +302,6 @@ Per-Spec Breakdown
     Scenarios:         17 (2.4 per req)
     Completeness:     100%
 
-  006-agent-swarm-system
-    Requirements:      15 (MUST: 15)
-    Scenarios:         53 (3.5 per req)
-    Completeness:     100%
-
 Quality Metrics (Individual)
 ─────────────────────────────────────────
   Scenario Coverage:     98.2% (55/56 reqs have scenarios)
@@ -355,17 +348,6 @@ openspec stats --json
         "MAY": 0
       },
       "completeness_percent": 100.0
-    },
-    {
-      "id": "006-agent-swarm-system",
-      "requirements": 15,
-      "scenarios": 53,
-      "requirement_distribution": {
-        "MUST": 15,
-        "SHOULD": 0,
-        "MAY": 0
-      },
-      "completeness_percent": 100.0
     }
   ]
 }
@@ -409,7 +391,6 @@ openspec coverage
 │ 003-shortcuts-system       │ Impl   │  0   │   0   │   1    │    1     │  11   │
 │ 004-openspec-specification │ Impl   │  0   │   0   │   3    │    1     │  12   │
 │ 005-aliases-system         │ Impl   │  0   │   0   │   2    │    1     │   8   │
-│ 006-agent-swarm-system     │ Impl   │  0   │   0   │   4    │    1     │  12   │
 ╰────────────────────────────┴────────┴──────┴───────┴────────┴──────────┴───────╯
 
 Coverage Summary:
@@ -432,7 +413,6 @@ openspec coverage -v
 │ 003-shortcuts-system       │ Impl   │  0   │   0   │   1    │    1     │  11   │
 │ 004-openspec-specification │ Impl   │  0   │   0   │   3    │    1     │  12   │
 │ 005-aliases-system         │ Impl   │  0   │   0   │   2    │    1     │   8   │
-│ 006-agent-swarm-system     │ Impl   │  0   │   0   │   4    │    1     │  12   │
 ╰────────────────────────────┴────────┴──────┴───────┴────────┴──────────┴───────╯
 
 Detailed Coverage - 001-dotfiles-core (9 requirements):
@@ -487,7 +467,6 @@ openspec coverage --strict
 │ 003-shortcuts-system       │ Impl   │  0   │   0   │   1    │    1     │  11   │
 │ 004-openspec-specification │ Impl   │  0   │   0   │   3    │    1     │  12   │
 │ 005-aliases-system         │ Impl   │  0   │   0   │   2    │    1     │   8   │
-│ 006-agent-swarm-system     │ Impl   │  0   │   0   │   4    │    1     │  12   │
 ╰────────────────────────────┴────────┴──────┴───────┴────────┴──────────┴───────╯
 
 STRICT MODE: Only checking MUST requirements (48/56 total)

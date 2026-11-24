@@ -44,12 +44,8 @@ dot                             # Install/upgrade packages
 - **vim** - Classic config with Vundle
 
 ### Agent System
-Multi-agent swarm for Claude Code:
-- `launch-agents` - Start/manage agent swarms
-- `swarm-job` - Job queue management
-- `swarm-daemon` - Monitoring, event tracking, and analytics
-- `swarm-hook` - Claude Code hook adapter (auto-emits tool events)
-- See [.openspec/agent-system.md](.openspec/agent-system.md) for details
+Multi-agent sessions for Claude Code:
+- `launch-agents` - Start/manage agent sessions
 
 ## Topical Organization
 
