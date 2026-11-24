@@ -15,12 +15,11 @@ Work coordination follows the established three-layer model:
 | Layer | Term | Tool | Scope | Persistence | Purpose |
 |-------|------|------|-------|-------------|---------|
 | **External** | Issue | GitHub Issues | All work | Permanent | Tracking, tracing, history |
-| **Coordination** | Job | Swarm Queue | Current session | Ephemeral | Cross-agent coordination |
 | **Execution** | Task | Claude Code | Single agent | In-memory | Personal scratchpad |
 
 **External Coordination:** GitHub Issues and PRs are the source of truth for what needs to be done. Teams coordinate through issue assignment, PR reviews, and discussion threads.
 
-**Internal Coordination:** Worktrees provide isolation for parallel agent work within the container. The swarm job queue enables agents to claim and coordinate work without conflicts.
+**Internal Coordination:** Worktrees provide isolation for parallel agent work within the container.
 
 ### XDG Compliance
 
@@ -129,13 +128,6 @@ Container filesystem:
 │   ├── bin/
 │   ├── share/
 │   ├── state/
-│   │   └── agent-context/           # Swarm state (per-project)
-│   │       └── FRANK/
-│   │           ├── jobs/
-│   │           │   ├── pending/
-│   │           │   ├── active/
-│   │           │   └── done/
-│   │           └── events.log
 │   └── cache/
 └── .cache/
 ```
@@ -724,7 +716,6 @@ iptables -A OUTPUT -j DROP
 ### Workspace Isolation
 
 - Each user's worktrees are isolated by naming convention
-- Swarm job claiming is atomic (flock-based)
 - GitHub branch protection prevents direct pushes
 
 ## Configuration Files
@@ -743,14 +734,6 @@ iptables -A OUTPUT -j DROP
       "Bash(go:*)"
     ],
     "deny": []
-  },
-  "hooks": {
-    "SessionStart": [
-      {"command": "swarm-hook register"}
-    ],
-    "PostToolUse": [
-      {"command": "swarm-hook hook"}
-    ]
   }
 }
 ```
@@ -765,7 +748,7 @@ You are part of a collaborative agent team working on multiple projects.
 
 ## Coordination
 - Use GitHub Issues for tracking work (`gh issue list`, `gh issue view`)
-- Use `/take #N` to claim issues and create swarm jobs
+- Use `/take #N` to claim issues
 - Use `/pr` to create pull requests when work is complete
 - Use `/merge` to merge approved PRs and signal other agents
 
@@ -788,7 +771,6 @@ This container setup integrates with the existing agent system:
 | Component | Container Location | Host Location |
 |-----------|-------------------|---------------|
 | Team Settings | `/workspace/team-settings` → `~/.claude` | `~/wc/team-workspace/team-settings` |
-| Swarm State | `~/.local/state/agent-context/` | In-container only |
 | Job Queue | `~/.local/state/agent-context/{project}/jobs/` | In-container only |
 | Events Log | `~/.local/state/agent-context/{project}/events.log` | In-container only |
 | Worktrees | `/workspace/worktrees/{project}/{user}-a.{n}/` | `~/wc/team-workspace/worktrees/` |
@@ -802,7 +784,7 @@ The Claude Team Container provides:
 3. **Multi-repo** workspace mounted from host macOS
 4. **Multi-language** support (Python/UV, Go, Rust, TypeScript, JavaScript)
 5. **GitHub-based** external coordination (Issues, PRs)
-6. **Worktree-based** internal coordination (swarm jobs, agent isolation)
+6. **Worktree-based** internal coordination (agent isolation)
 7. **User-specific** agent naming (`{user}-a.{n}`)
 8. **Multiple start modes** (workstation, agent, shell)
 9. **Firewall support** for security

@@ -493,8 +493,7 @@ The system MUST provide comprehensive status information about the dotfiles inst
 │   ├── bat/
 │   ├── ghostty/
 │   ├── pip/
-│   ├── ripgrep/
-│   └── swarm-daemon/
+│   └── ripgrep/
 ├── containers/             # Container tools
 │   └── bash_aliases
 ├── docker/                 # Docker CLI setup (Podman primary, Colima fallback)
@@ -549,7 +548,6 @@ The system MUST provide comprehensive status information about the dotfiles inst
 │   ├── bash_aliases
 │   └── brew_packages
 ├── docs/                   # Documentation
-│   ├── agent-system.md
 │   ├── coloring.md
 │   └── xdg_setup.md
 ├── script/                 # Setup scripts

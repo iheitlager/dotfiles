@@ -1,6 +1,6 @@
 # Claude Code Commands
 
-Slash commands for software engineering workflows. These work in both single-agent and multi-agent (swarm) modes.
+Slash commands for software engineering workflows. These work in both single-agent and multi-agent modes.
 
 ## Quick Reference
 
@@ -12,7 +12,6 @@ Slash commands for software engineering workflows. These work in both single-age
 | `/plan` | Design implementation | docs/plans/*.md |
 | `/plan adr` | Architectural decision | docs/adr/*.md |
 | `/spike` | Experimental exploration | tests/spikes/* |
-| `/swarm` | Manage job queue | Queue operations |
 | `/check` | Run code quality checks | Lint report |
 | `/changelog` | Generate CHANGELOG entries | CHANGELOG.md |
 | `/version` | Validate release readiness | Sync check |
@@ -44,8 +43,6 @@ Slash commands for software engineering workflows. These work in both single-age
 ┌─────────────────────────────────────────────────────────────┐
 │                      EXECUTION                              │
 │  /take #N         Implement issue directly                  │
-│  /take #N queue   Load issue to swarm queue                 │
-│  /swarm           Manage swarm job queue                    │
 └─────────────────────────────────┬───────────────────────────┘
                                   │
                                   ▼
@@ -117,13 +114,10 @@ Take ownership of an issue and implement it.
 
 ```
 /take #123           Direct: implement yourself
-/take #123 queue     Queue: load to swarm for agents to claim
 /take                Show suggested issues to take
 ```
 
 **Direct mode:** Research → Plan → Implement → PR
-
-**Queue mode:** Creates swarm job(s) with priority and complexity mapping from issue labels.
 
 ---
 
@@ -164,21 +158,6 @@ Experimental exploration to validate an approach.
 **Output:** `tests/spikes/<NNN>_<topic>/` with prototype code and findings.
 
 Spikes are throwaway — learnings get captured, code may be discarded.
-
----
-
-### /swarm
-
-Manage the swarm job queue.
-
-```
-/swarm               Show queue overview + pending jobs
-/swarm active        Show jobs currently being worked on
-/swarm done          Show recently completed jobs
-/swarm create <title> Create new job for the swarm
-```
-
-See also: `swarm-job` CLI and `swarm-daemon` for monitoring.
 
 ---
 
@@ -348,18 +327,6 @@ Clean up merged git branches.
 - Never deletes main, master, develop, or current branch
 - Asks for confirmation before deletion
 
-## Single-Agent vs Multi-Agent
-
-| Mode | Commands | Notes |
-|------|----------|-------|
-| Single | All except `/swarm` | `/take` implements directly |
-| Swarm | All | `/take queue` loads work for agents |
-
-In swarm mode, the job queue coordinates work:
-```
-/take #123 queue  →  swarm-job claim  →  work  →  swarm-job complete
-```
-
 ## Agent Delegation
 
 Some skills delegate heavy work to specialized agents while keeping decisions interactive:
@@ -419,7 +386,6 @@ Commands are markdown files in `~/.claude/commands/`:
 ├── purge.md
 ├── review.md
 ├── spike.md
-├── swarm.md
 ├── take.md
 └── version.md
 ```
