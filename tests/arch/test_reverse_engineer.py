@@ -3,9 +3,9 @@
 import pytest
 from pathlib import Path
 
-from local.lib.arch.reverse_engineer import ReverseEngineer
-from local.lib.arch.extractors.bash import BashExtractor
-from local.lib.arch.extractors.docker import DockerExtractor
+from arch.reverse_engineer import ReverseEngineer
+from arch.extractors.bash import BashExtractor
+from arch.extractors.docker import DockerExtractor
 
 
 class TestBashExtractor:
@@ -120,7 +120,7 @@ class TestReverseEngineer:
         reverser = ReverseEngineer()
 
         # Create duplicate resources
-        from local.lib.arch.model import Resource
+        from arch.model import Resource
         r1 = Resource(id="test", name="Test", type="bash-script")
         r2 = Resource(id="test", name="Test 2", type="bash-script")
         r3 = Resource(id="other", name="Other", type="bash-script")
